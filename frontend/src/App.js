@@ -272,6 +272,23 @@ const AppRouter = () => {
         </ProtectedRoute>
       } />
       
+      {/* Shared Routes */}
+      <Route path="/vendor-profile/:vendorId" element={
+        <ProtectedRoute>
+          <VendorProfileView />
+        </ProtectedRoute>
+      } />
+      <Route path="/chat" element={
+        <ProtectedRoute>
+          <ChatPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/chat/:conversationId" element={
+        <ProtectedRoute>
+          <ChatPage />
+        </ProtectedRoute>
+      } />
+      
       {/* Admin Routes */}
       <Route path="/admin/dashboard" element={
         <ProtectedRoute allowedRoles={["admin"]}>
