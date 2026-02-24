@@ -1,0 +1,473 @@
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { useAuth, api } from "../App";
+import DashboardLayout from "../components/layout/DashboardLayout";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Textarea } from "../components/ui/textarea";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
+import { toast } from "sonner";
+import { 
+  FileText, Package, Star, MapPin, Loader2, 
+  CheckCircle2, Send, DollarSign, Clock, ArrowLeft,
+  Building2, Cpu, Wrench, AlertCircle
+} from "lucide-react";
+
+const RFQDetail = () => {
+  const { rfqId } = useParams();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [rfq, setRfq] = useState(null);
+  const [quotes, setQuotes] = useState([]);
+  const [drawings, setDrawings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
+  const [submittingQuote, setSubmittingQuote] = useState(false);
+
+  const [quoteForm, setQuoteForm] = useState({
+    price: "",
+    lead_time_days: "",
+    notes: ""
+  });
+
+  useEffect(() => {
+    fetchRFQData();
+  }, [rfqId]);
+
+  const fetchRFQData = async () => {
+    try {
+      const [rfqRes, quotesRes, drawingsRes] = await Promise.all([
+        api.get(`/rfqs/${rfqId}`),
+        api.get(`/quotes/rfq/${rfqId}`),
+        api.get(`/rfqs/${rfqId}/drawings`)
+      ]);
+      setRfq(rfqRes.data);
+      setQuotes(quotesRes.data);
+      setDrawings(drawingsRes.data);
+    } catch (error) {
+      toast.error("Failed to load RFQ details");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const submitQuote = async () => {
+    if (!quoteForm.price || !quoteForm.lead_time_days) {
+      toast.error("Please fill in price and lead time");
+      return;
+    }
+
+    setSubmittingQuote(true);
+    try {
+      await api.post("/quotes", {
+        rfq_id: rfqId,
+        price: parseFloat(quoteForm.price),
+        lead_time_days: parseInt(quoteForm.lead_time_days),
+        notes: quoteForm.notes
+      });
+      toast.success("Quote submitted successfully");
+      setQuoteDialogOpen(false);
+      fetchRFQData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to submit quote");
+    } finally {
+      setSubmittingQuote(false);
+    }
+  };
+
+  const acceptQuote = async (quoteId) => {
+    try {
+      const response = await api.post(`/quotes/${quoteId}/accept`);
+      toast.success("Quote accepted! Order created.");
+      navigate(`/orders/${response.data.order_id}`);
+    } catch (error) {
+      toast.error("Failed to accept quote");
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    const statusMap = {
+      draft: "status-draft",
+      submitted: "status-submitted",
+      analyzing: "status-analyzing",
+      matching: "status-matching",
+      quoted: "status-quoted",
+      po_issued: "status-po_issued",
+      in_production: "status-in_production",
+      completed: "status-completed",
+      cancelled: "status-cancelled",
+      pending: "status-pending",
+      accepted: "status-completed",
+      rejected: "status-cancelled"
+    };
+    return statusMap[status] || "status-draft";
+  };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-orange-600" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!rfq) {
+    return (
+      <DashboardLayout>
+        <div className="text-center py-12">
+          <AlertCircle className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+          <p className="text-slate-500">RFQ not found</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  const isVendor = user?.role === "vendor";
+  const isBuyer = user?.role === "buyer";
+
+  return (
+    <DashboardLayout>
+      <div className="space-y-6" data-testid="rfq-detail-page">
+        {/* Back Button & Header */}
+        <div className="flex items-center justify-between">
+          <Button 
+            variant="ghost" 
+            onClick={() => navigate(-1)}
+            className="text-slate-600"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" /> Back
+          </Button>
+          <span className={`status-badge ${getStatusBadge(rfq.status)}`}>
+            {rfq.status.replace("_", " ")}
+          </span>
+        </div>
+
+        {/* RFQ Info */}
+        <Card className="border-slate-200">
+          <CardHeader>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="font-heading text-2xl">{rfq.title}</CardTitle>
+                <p className="text-slate-500 mt-1">RFQ #{rfq.rfq_id.slice(-8)}</p>
+              </div>
+              {isVendor && rfq.status === "matching" && (
+                <Dialog open={quoteDialogOpen} onOpenChange={setQuoteDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-orange-600 hover:bg-orange-700" data-testid="submit-quote-btn">
+                      <Send className="w-4 h-4 mr-2" /> Submit Quote
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Submit Your Quote</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 mt-4">
+                      <div>
+                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Price (USD) *
+                        </Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={quoteForm.price}
+                          onChange={(e) => setQuoteForm(prev => ({ ...prev, price: e.target.value }))}
+                          placeholder="0.00"
+                          className="mt-1"
+                          data-testid="quote-price-input"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Lead Time (Days) *
+                        </Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={quoteForm.lead_time_days}
+                          onChange={(e) => setQuoteForm(prev => ({ ...prev, lead_time_days: e.target.value }))}
+                          placeholder="10"
+                          className="mt-1"
+                          data-testid="quote-leadtime-input"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Notes
+                        </Label>
+                        <Textarea
+                          value={quoteForm.notes}
+                          onChange={(e) => setQuoteForm(prev => ({ ...prev, notes: e.target.value }))}
+                          placeholder="Additional details about your quote..."
+                          className="mt-1"
+                          data-testid="quote-notes-input"
+                        />
+                      </div>
+                      <Button
+                        onClick={submitQuote}
+                        disabled={submittingQuote}
+                        className="w-full bg-orange-600 hover:bg-orange-700"
+                        data-testid="confirm-quote-btn"
+                      >
+                        {submittingQuote ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <>Submit Quote</>
+                        )}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {rfq.description && (
+              <p className="text-slate-600 mb-6">{rfq.description}</p>
+            )}
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Material</p>
+                <p className="text-slate-900 font-medium mt-1">{rfq.material_type}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Quantity</p>
+                <p className="text-slate-900 font-medium mt-1">{rfq.quantity} units</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Tolerance</p>
+                <p className="text-slate-900 font-medium mt-1">±{rfq.tolerance} mm</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Surface Finish</p>
+                <p className="text-slate-900 font-medium mt-1">{rfq.surface_finish || "Not specified"}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* AI Analysis */}
+        {rfq.ai_analysis && (
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <Cpu className="w-5 h-5 text-orange-600" /> AI Analysis Results
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {rfq.ai_analysis.overall_dimensions && (
+                  <div className="p-4 bg-slate-50 rounded-lg">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                      Overall Dimensions
+                    </p>
+                    <p className="font-mono text-sm">
+                      {rfq.ai_analysis.overall_dimensions.length || "?"} x{" "}
+                      {rfq.ai_analysis.overall_dimensions.width || "?"} x{" "}
+                      {rfq.ai_analysis.overall_dimensions.height || "?"} mm
+                    </p>
+                  </div>
+                )}
+                
+                {rfq.ai_analysis.recommended_processes && (
+                  <div className="p-4 bg-slate-50 rounded-lg">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                      Recommended Processes
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {rfq.ai_analysis.recommended_processes.map((process, i) => (
+                        <span key={i} className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
+                          {process}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {rfq.ai_analysis.complexity_score && (
+                  <div className="p-4 bg-slate-50 rounded-lg">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                      Complexity Score
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <div className="score-indicator flex-1">
+                        <div 
+                          className="score-indicator-fill" 
+                          style={{ width: `${rfq.ai_analysis.complexity_score * 10}%` }}
+                        />
+                      </div>
+                      <span className="font-bold text-slate-900">{rfq.ai_analysis.complexity_score}/10</span>
+                    </div>
+                  </div>
+                )}
+
+                {rfq.ai_analysis.estimated_machining_time_hours && (
+                  <div className="p-4 bg-slate-50 rounded-lg">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                      Est. Machining Time
+                    </p>
+                    <p className="font-medium text-slate-900">
+                      {rfq.ai_analysis.estimated_machining_time_hours} hours
+                    </p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Drawings */}
+        {drawings.length > 0 && (
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle className="font-heading text-lg">Uploaded Drawings</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {drawings.map((drawing) => (
+                  <div 
+                    key={drawing.drawing_id}
+                    className="p-4 bg-slate-50 rounded-lg border border-slate-200"
+                  >
+                    <FileText className="w-8 h-8 text-slate-400 mb-2" />
+                    <p className="text-sm font-medium text-slate-900 truncate">{drawing.filename}</p>
+                    <p className="text-xs text-slate-500">
+                      {(drawing.file_size / 1024).toFixed(1)} KB
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Matched Vendors (Buyer View) */}
+        {isBuyer && rfq.matched_vendors?.length > 0 && (
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle className="font-heading text-lg">Matched Vendors</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {rfq.matched_vendors.map((vendor, i) => (
+                  <div 
+                    key={vendor.vendor_id}
+                    className="p-4 bg-slate-50 rounded-lg border border-slate-200"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-4">
+                        <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center">
+                          <Building2 className="w-6 h-6 text-slate-500" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-slate-900">{vendor.company_name}</p>
+                          <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
+                            <span className="flex items-center gap-1">
+                              <MapPin className="w-4 h-4" /> {vendor.location}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Star className="w-4 h-4 text-amber-500" /> {vendor.rating?.toFixed(1)}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {vendor.matching_machines?.map((machine, j) => (
+                              <span key={j} className="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded">
+                                {machine}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-2xl font-bold text-orange-600">{vendor.suitability_score}</div>
+                        <div className="text-xs text-slate-500 uppercase">Match Score</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Quotes */}
+        {quotes.length > 0 && (
+          <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle className="font-heading text-lg">
+                {isBuyer ? "Received Quotes" : "Quote Status"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {quotes.map((quote) => (
+                  <div 
+                    key={quote.quote_id}
+                    className={`p-4 rounded-lg border ${
+                      quote.is_selected 
+                        ? "bg-green-50 border-green-200" 
+                        : "bg-slate-50 border-slate-200"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-slate-200 rounded-lg flex items-center justify-center">
+                            <Building2 className="w-5 h-5 text-slate-500" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-slate-900">
+                              {quote.vendor_name || "Vendor"}
+                            </p>
+                            {quote.vendor_rating > 0 && (
+                              <span className="flex items-center gap-1 text-sm text-slate-500">
+                                <Star className="w-4 h-4 text-amber-500" /> {quote.vendor_rating?.toFixed(1)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {quote.notes && (
+                          <p className="text-sm text-slate-500 mt-2">{quote.notes}</p>
+                        )}
+                      </div>
+                      <div className="text-right">
+                        <div className="flex items-center gap-1 text-2xl font-bold text-slate-900">
+                          <DollarSign className="w-5 h-5" />
+                          {quote.price?.toFixed(2)}
+                        </div>
+                        <div className="flex items-center gap-1 text-sm text-slate-500 mt-1">
+                          <Clock className="w-4 h-4" /> {quote.lead_time_days} days
+                        </div>
+                        <span className={`status-badge mt-2 ${getStatusBadge(quote.status)}`}>
+                          {quote.status}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    {isBuyer && quote.status === "pending" && (
+                      <div className="mt-4 pt-4 border-t border-slate-200">
+                        <Button
+                          onClick={() => acceptQuote(quote.quote_id)}
+                          className="bg-green-600 hover:bg-green-700"
+                          data-testid={`accept-quote-${quote.quote_id}`}
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-2" /> Accept Quote
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </DashboardLayout>
+  );
+};
+
+export default RFQDetail;
