@@ -547,6 +547,223 @@ async def get_vendor_by_id(vendor_id: str):
         raise HTTPException(status_code=404, detail="Vendor not found")
     return vendor
 
+@api_router.get("/vendors/{vendor_id}/full")
+async def get_vendor_full_profile(vendor_id: str, user: dict = Depends(get_current_user)):
+    """Get full vendor profile including machines and stats"""
+    vendor = await db.vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    # Get vendor's machines
+    machines = await db.machines.find({"vendor_id": vendor_id, "is_active": True}, {"_id": 0}).to_list(50)
+    
+    # Get vendor's completed jobs count
+    completed_orders = await db.orders.count_documents({"vendor_id": vendor_id, "status": "completed"})
+    
+    # Get vendor's quotes stats
+    total_quotes = await db.quotes.count_documents({"vendor_id": vendor_id})
+    accepted_quotes = await db.quotes.count_documents({"vendor_id": vendor_id, "status": "accepted"})
+    
+    # Get user contact info
+    vendor_user = await db.users.find_one({"user_id": vendor["user_id"]}, {"_id": 0, "email": 1, "name": 1})
+    
+    return {
+        **vendor,
+        "machines": machines,
+        "stats": {
+            "completed_orders": completed_orders,
+            "total_quotes": total_quotes,
+            "accepted_quotes": accepted_quotes,
+            "acceptance_rate": round((accepted_quotes / total_quotes * 100) if total_quotes > 0 else 0, 1)
+        },
+        "contact": {
+            "email": vendor_user.get("email") if vendor_user else None,
+            "name": vendor_user.get("name") if vendor_user else None,
+            "phone": vendor.get("phone"),
+            "website": vendor.get("website")
+        }
+    }
+
+# ============== CHAT/MESSAGING ROUTES ==============
+
+class MessageCreate(BaseModel):
+    receiver_id: str
+    rfq_id: Optional[str] = None
+    content: str
+
+@api_router.post("/messages")
+async def send_message(message: MessageCreate, user: dict = Depends(get_current_user)):
+    """Send a message to another user"""
+    message_id = f"msg_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Create conversation ID (sorted user IDs for consistency)
+    participants = sorted([user["user_id"], message.receiver_id])
+    conversation_id = f"conv_{participants[0]}_{participants[1]}"
+    if message.rfq_id:
+        conversation_id += f"_{message.rfq_id}"
+    
+    message_doc = {
+        "message_id": message_id,
+        "conversation_id": conversation_id,
+        "sender_id": user["user_id"],
+        "sender_name": user.get("name", "Unknown"),
+        "sender_role": user.get("role", "buyer"),
+        "receiver_id": message.receiver_id,
+        "rfq_id": message.rfq_id,
+        "content": message.content,
+        "read": False,
+        "created_at": now
+    }
+    
+    await db.messages.insert_one(message_doc)
+    
+    # Update or create conversation
+    await db.conversations.update_one(
+        {"conversation_id": conversation_id},
+        {
+            "$set": {
+                "conversation_id": conversation_id,
+                "participants": participants,
+                "rfq_id": message.rfq_id,
+                "last_message": message.content[:100],
+                "last_message_at": now,
+                "updated_at": now
+            },
+            "$setOnInsert": {
+                "created_at": now
+            }
+        },
+        upsert=True
+    )
+    
+    return {"message_id": message_id, "conversation_id": conversation_id}
+
+@api_router.get("/messages/conversations")
+async def get_conversations(user: dict = Depends(get_current_user)):
+    """Get all conversations for current user"""
+    conversations = await db.conversations.find(
+        {"participants": user["user_id"]},
+        {"_id": 0}
+    ).sort("last_message_at", -1).to_list(50)
+    
+    # Enrich with other participant info
+    for conv in conversations:
+        other_user_id = [p for p in conv["participants"] if p != user["user_id"]][0]
+        other_user = await db.users.find_one({"user_id": other_user_id}, {"_id": 0, "name": 1, "role": 1})
+        
+        # Get vendor info if vendor
+        if other_user and other_user.get("role") == "vendor":
+            vendor = await db.vendors.find_one({"user_id": other_user_id}, {"_id": 0, "company_name": 1})
+            conv["other_party"] = {
+                "user_id": other_user_id,
+                "name": vendor.get("company_name") if vendor else other_user.get("name"),
+                "role": "vendor"
+            }
+        else:
+            conv["other_party"] = {
+                "user_id": other_user_id,
+                "name": other_user.get("name") if other_user else "Unknown",
+                "role": other_user.get("role") if other_user else "buyer"
+            }
+        
+        # Get unread count
+        unread = await db.messages.count_documents({
+            "conversation_id": conv["conversation_id"],
+            "receiver_id": user["user_id"],
+            "read": False
+        })
+        conv["unread_count"] = unread
+        
+        # Get RFQ title if linked
+        if conv.get("rfq_id"):
+            rfq = await db.rfqs.find_one({"rfq_id": conv["rfq_id"]}, {"_id": 0, "title": 1})
+            conv["rfq_title"] = rfq.get("title") if rfq else None
+    
+    return conversations
+
+@api_router.get("/messages/conversation/{conversation_id}")
+async def get_conversation_messages(conversation_id: str, user: dict = Depends(get_current_user)):
+    """Get messages in a conversation"""
+    # Verify user is participant
+    conv = await db.conversations.find_one(
+        {"conversation_id": conversation_id, "participants": user["user_id"]},
+        {"_id": 0}
+    )
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    
+    messages = await db.messages.find(
+        {"conversation_id": conversation_id},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(200)
+    
+    # Mark messages as read
+    await db.messages.update_many(
+        {"conversation_id": conversation_id, "receiver_id": user["user_id"], "read": False},
+        {"$set": {"read": True}}
+    )
+    
+    return {"conversation": conv, "messages": messages}
+
+@api_router.get("/messages/with/{other_user_id}")
+async def get_or_create_conversation(other_user_id: str, rfq_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    """Get or start a conversation with another user"""
+    participants = sorted([user["user_id"], other_user_id])
+    conversation_id = f"conv_{participants[0]}_{participants[1]}"
+    if rfq_id:
+        conversation_id += f"_{rfq_id}"
+    
+    conv = await db.conversations.find_one({"conversation_id": conversation_id}, {"_id": 0})
+    
+    if not conv:
+        # Create new conversation
+        now = datetime.now(timezone.utc).isoformat()
+        conv = {
+            "conversation_id": conversation_id,
+            "participants": participants,
+            "rfq_id": rfq_id,
+            "last_message": None,
+            "last_message_at": now,
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.conversations.insert_one(conv)
+        del conv["_id"]
+    
+    # Get other party info
+    other_user = await db.users.find_one({"user_id": other_user_id}, {"_id": 0, "name": 1, "role": 1})
+    if other_user and other_user.get("role") == "vendor":
+        vendor = await db.vendors.find_one({"user_id": other_user_id}, {"_id": 0, "company_name": 1})
+        conv["other_party"] = {
+            "user_id": other_user_id,
+            "name": vendor.get("company_name") if vendor else other_user.get("name"),
+            "role": "vendor"
+        }
+    else:
+        conv["other_party"] = {
+            "user_id": other_user_id,
+            "name": other_user.get("name") if other_user else "Unknown",
+            "role": other_user.get("role") if other_user else "buyer"
+        }
+    
+    # Get messages
+    messages = await db.messages.find(
+        {"conversation_id": conversation_id},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(200)
+    
+    return {"conversation": conv, "messages": messages}
+
+@api_router.get("/messages/unread-count")
+async def get_unread_count(user: dict = Depends(get_current_user)):
+    """Get total unread message count"""
+    count = await db.messages.count_documents({
+        "receiver_id": user["user_id"],
+        "read": False
+    })
+    return {"unread_count": count}
+
 # ============== MACHINE ROUTES ==============
 
 @api_router.post("/machines", response_model=Machine)
