@@ -786,7 +786,7 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             - Quantity: {rfq['quantity']}
             
             Please provide a detailed analysis in the JSON format specified.""",
-            image_contents=[image_content]
+            file_contents=[image_content]
         )
         
         response = await chat.send_message(user_message)
