@@ -1099,44 +1099,6 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     return {"matched_vendors": matched_vendors, "total_matches": len(matched_vendors)}
-            if dims.get("length") and machine.get("max_x"):
-                if dims["length"] <= machine["max_x"]:
-                    score += 5
-            
-            if tolerance_capable or materials_match:
-                matching_machines.append(f"{machine['machine_type']} - {machine['brand']} {machine['model']}")
-        
-        if matching_machines:
-            # Add vendor experience bonus
-            score += min(vendor.get("total_jobs", 0) / 10, 15)
-            score += vendor.get("rating", 0) * 3
-            
-            matched_vendors.append({
-                "vendor_id": vendor["vendor_id"],
-                "company_name": vendor["company_name"],
-                "suitability_score": min(int(score), 100),
-                "matching_machines": matching_machines[:3],
-                "materials_match": materials_match,
-                "tolerance_capable": tolerance_capable,
-                "location": f"{vendor.get('city', '')}, {vendor.get('country', '')}",
-                "rating": vendor.get("rating", 0),
-                "total_jobs": vendor.get("total_jobs", 0)
-            })
-    
-    # Sort by score
-    matched_vendors.sort(key=lambda x: x["suitability_score"], reverse=True)
-    matched_vendors = matched_vendors[:10]  # Top 10
-    
-    await db.rfqs.update_one(
-        {"rfq_id": rfq_id},
-        {"$set": {
-            "matched_vendors": matched_vendors,
-            "status": RFQStatus.MATCHING,
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }}
-    )
-    
-    return {"matched_vendors": matched_vendors, "total_matches": len(matched_vendors)}
 
 @api_router.post("/rfqs/{rfq_id}/submit")
 async def submit_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
