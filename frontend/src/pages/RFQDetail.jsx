@@ -586,7 +586,7 @@ const RFQDetail = () => {
                           <Eye className="w-4 h-4 mr-1" /> View Profile
                         </Button>
                       </Link>
-                      <Link to={`/chat?with=${vendor.vendor_id.replace('vendor_', 'user_vendor_')}&rfq=${rfqId}`}>
+                      <Link to={`/chat?with=${vendor.user_id}&rfq=${rfqId}`}>
                         <Button variant="outline" size="sm" data-testid={`chat-vendor-${vendor.vendor_id}`}>
                           <MessageSquare className="w-4 h-4 mr-1" /> Chat
                         </Button>

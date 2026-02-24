@@ -1331,6 +1331,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             
             matched_vendors.append({
                 "vendor_id": vendor["vendor_id"],
+                "user_id": vendor["user_id"],  # Include user_id for chat functionality
                 "company_name": vendor["company_name"],
                 "suitability_score": final_score,
                 "matching_machines": [m["name"] for m in matching_machines[:3]],
