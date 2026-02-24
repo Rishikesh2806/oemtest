@@ -578,6 +578,20 @@ const RFQDetail = () => {
                         </div>
                       </div>
                     </div>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200">
+                      <Link to={`/vendor-profile/${vendor.vendor_id}`}>
+                        <Button variant="outline" size="sm" data-testid={`view-profile-${vendor.vendor_id}`}>
+                          <Eye className="w-4 h-4 mr-1" /> View Profile
+                        </Button>
+                      </Link>
+                      <Link to={`/chat?with=${vendor.vendor_id.replace('vendor_', 'user_vendor_')}&rfq=${rfqId}`}>
+                        <Button variant="outline" size="sm" data-testid={`chat-vendor-${vendor.vendor_id}`}>
+                          <MessageSquare className="w-4 h-4 mr-1" /> Chat
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 ))}
               </div>
