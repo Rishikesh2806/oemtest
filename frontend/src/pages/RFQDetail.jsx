@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { 
   FileText, Package, Star, MapPin, Loader2, 
   CheckCircle2, Send, DollarSign, Clock, ArrowLeft,
-  Building2, Cpu, Wrench, AlertCircle
+  Building2, Cpu, Wrench, AlertCircle, Target
 } from "lucide-react";
 
 const RFQDetail = () => {
