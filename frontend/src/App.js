@@ -13,9 +13,11 @@ import AdminDashboard from "./pages/AdminDashboard";
 import CreateRFQ from "./pages/CreateRFQ";
 import RFQDetail from "./pages/RFQDetail";
 import VendorProfile from "./pages/VendorProfile";
+import VendorProfileView from "./pages/VendorProfileView";
 import MachineManagement from "./pages/MachineManagement";
 import OrderDetail from "./pages/OrderDetail";
 import QuotesList from "./pages/QuotesList";
+import ChatPage from "./pages/ChatPage";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
