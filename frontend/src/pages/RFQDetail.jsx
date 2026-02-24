@@ -455,42 +455,127 @@ const RFQDetail = () => {
         {isBuyer && rfq.matched_vendors?.length > 0 && (
           <Card className="border-slate-200">
             <CardHeader>
-              <CardTitle className="font-heading text-lg">Matched Vendors</CardTitle>
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <Target className="w-5 h-5 text-orange-600" /> Matched Vendors Based on Drawing Analysis
+              </CardTitle>
+              <p className="text-sm text-slate-500 mt-1">
+                Vendors ranked by machine capability, material compatibility, and tolerance requirements
+              </p>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {rfq.matched_vendors.map((vendor, i) => (
                   <div 
                     key={vendor.vendor_id}
-                    className="p-4 bg-slate-50 rounded-lg border border-slate-200"
+                    className={`p-5 rounded-lg border-2 transition-all ${
+                      i === 0 ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-200"
+                    }`}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 bg-slate-200 rounded-lg flex items-center justify-center">
-                          <Building2 className="w-6 h-6 text-slate-500" />
+                        <div className={`w-14 h-14 rounded-lg flex items-center justify-center ${
+                          i === 0 ? "bg-orange-600 text-white" : "bg-slate-200 text-slate-500"
+                        }`}>
+                          {i === 0 ? (
+                            <span className="font-bold text-lg">TOP</span>
+                          ) : (
+                            <Building2 className="w-6 h-6" />
+                          )}
                         </div>
-                        <div>
-                          <p className="font-medium text-slate-900">{vendor.company_name}</p>
-                          <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
+                        <div className="flex-1">
+                          <p className="font-semibold text-lg text-slate-900">{vendor.company_name}</p>
+                          <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
                             <span className="flex items-center gap-1">
                               <MapPin className="w-4 h-4" /> {vendor.location}
                             </span>
                             <span className="flex items-center gap-1">
                               <Star className="w-4 h-4 text-amber-500" /> {vendor.rating?.toFixed(1)}
                             </span>
+                            <span>{vendor.total_jobs} jobs completed</span>
                           </div>
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {vendor.matching_machines?.map((machine, j) => (
-                              <span key={j} className="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded">
-                                {machine}
+                          
+                          {/* Capability Badges */}
+                          <div className="flex flex-wrap gap-2 mt-3">
+                            {vendor.tolerance_capable && (
+                              <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                                <CheckCircle2 className="w-3 h-3" /> Tolerance Capable
                               </span>
-                            ))}
+                            )}
+                            {vendor.materials_match && (
+                              <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                                <CheckCircle2 className="w-3 h-3" /> Material Match
+                              </span>
+                            )}
+                            {vendor.dimension_capable && (
+                              <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                                <CheckCircle2 className="w-3 h-3" /> Size Compatible
+                              </span>
+                            )}
                           </div>
+
+                          {/* Process Matches */}
+                          {vendor.process_matches?.length > 0 && (
+                            <div className="mt-3">
+                              <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                                Matched Processes
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {vendor.process_matches.map((process, j) => (
+                                  <span key={j} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                    {process}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Matching Machines */}
+                          <div className="mt-3">
+                            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                              Matching Machines
+                            </p>
+                            <div className="flex flex-wrap gap-1">
+                              {vendor.matching_machines?.map((machine, j) => (
+                                <span key={j} className="text-xs bg-slate-200 text-slate-700 px-2 py-1 rounded font-mono">
+                                  {machine}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Certifications */}
+                          {vendor.certifications?.length > 0 && (
+                            <div className="mt-3">
+                              <div className="flex flex-wrap gap-1">
+                                {vendor.certifications.map((cert, j) => (
+                                  <span key={j} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                                    {cert}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
-                      <div className="text-right">
-                        <div className="text-2xl font-bold text-orange-600">{vendor.suitability_score}</div>
-                        <div className="text-xs text-slate-500 uppercase">Match Score</div>
+                      
+                      {/* Match Score */}
+                      <div className="text-right ml-4">
+                        <div className={`text-3xl font-bold ${
+                          vendor.suitability_score >= 80 ? "text-green-600" : 
+                          vendor.suitability_score >= 60 ? "text-orange-600" : "text-slate-600"
+                        }`}>
+                          {vendor.suitability_score}%
+                        </div>
+                        <div className="text-xs text-slate-500 uppercase font-medium">Match Score</div>
+                        <div className="w-24 h-2 bg-slate-200 rounded-full mt-2 overflow-hidden">
+                          <div 
+                            className={`h-full rounded-full ${
+                              vendor.suitability_score >= 80 ? "bg-green-500" : 
+                              vendor.suitability_score >= 60 ? "bg-orange-500" : "bg-slate-400"
+                            }`}
+                            style={{ width: `${vendor.suitability_score}%` }}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
