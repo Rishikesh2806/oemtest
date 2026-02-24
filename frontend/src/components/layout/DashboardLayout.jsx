@@ -71,7 +71,8 @@ const DashboardLayout = ({ children }) => {
   const navItems = getNavItems();
 
   const NavLink = ({ item }) => {
-    const isActive = location.pathname === item.path;
+    const isActive = location.pathname === item.path || 
+      (item.path === "/chat" && location.pathname.startsWith("/chat"));
     return (
       <Link
         to={item.path}
@@ -84,7 +85,12 @@ const DashboardLayout = ({ children }) => {
         data-testid={`nav-${item.label.toLowerCase().replace(" ", "-")}`}
       >
         <item.icon className="w-5 h-5" />
-        <span className="font-medium">{item.label}</span>
+        <span className="font-medium flex-1">{item.label}</span>
+        {item.badge > 0 && (
+          <span className="px-2 py-0.5 text-xs font-bold bg-red-500 text-white rounded-full">
+            {item.badge > 99 ? "99+" : item.badge}
+          </span>
+        )}
       </Link>
     );
   };
