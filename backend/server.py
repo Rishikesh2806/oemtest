@@ -725,9 +725,39 @@ async def get_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Drawing not found")
     return drawing
 
+def convert_pdf_to_image_base64(pdf_base64: str) -> str:
+    """Convert PDF to image for AI analysis"""
+    import fitz  # PyMuPDF
+    from PIL import Image
+    import io
+    
+    # Decode PDF
+    pdf_bytes = base64.b64decode(pdf_base64)
+    
+    # Open PDF with PyMuPDF
+    pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
+    
+    # Get first page
+    page = pdf_document[0]
+    
+    # Render page to image (high resolution for better OCR)
+    mat = fitz.Matrix(2.0, 2.0)  # 2x zoom for better quality
+    pix = page.get_pixmap(matrix=mat)
+    
+    # Convert to PIL Image
+    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+    
+    # Convert to base64
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG", quality=95)
+    img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    
+    pdf_document.close()
+    return img_base64
+
 @api_router.post("/rfqs/{rfq_id}/analyze")
 async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_user)):
-    """Use AI to analyze the uploaded drawings"""
+    """Use AI to analyze the uploaded drawings (supports PDF, PNG, JPG)"""
     from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
     
     rfq = await db.rfqs.find_one({"rfq_id": rfq_id, "buyer_id": user["user_id"]}, {"_id": 0})
@@ -753,31 +783,49 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
         if not api_key:
             raise HTTPException(status_code=500, detail="AI service not configured")
         
+        # Convert PDF to image if needed
+        file_data = drawing["file_data"]
+        file_type = drawing.get("file_type", "").lower()
+        filename = drawing.get("filename", "").lower()
+        
+        if "pdf" in file_type or filename.endswith(".pdf"):
+            logger.info(f"Converting PDF to image for analysis: {filename}")
+            try:
+                file_data = convert_pdf_to_image_base64(file_data)
+            except Exception as pdf_err:
+                logger.error(f"PDF conversion error: {pdf_err}")
+                raise HTTPException(status_code=400, detail=f"Failed to process PDF: {str(pdf_err)}")
+        
         chat = LlmChat(
             api_key=api_key,
             session_id=f"analysis_{rfq_id}_{uuid.uuid4().hex[:8]}",
             system_message="""You are an expert manufacturing engineer analyzing engineering drawings. 
+            CAREFULLY examine every detail in the drawing including dimension callouts, tolerances, notes, and title blocks.
+            
             Extract and provide the following information in JSON format:
             {
                 "overall_dimensions": {"length": float, "width": float, "height": float, "unit": "mm"},
                 "critical_tolerances": [{"feature": string, "tolerance": float, "unit": "mm"}],
-                "holes": [{"diameter": float, "depth": float, "quantity": int}],
+                "holes": [{"diameter": float, "depth": float or null for THRU, "quantity": int}],
                 "threads": [{"type": string, "size": string, "quantity": int}],
                 "material_specs": string or null,
                 "surface_finish": string or null,
-                "recommended_processes": [string],
+                "recommended_processes": [string] - BE SPECIFIC based on features seen,
                 "complexity_score": int (1-10),
                 "estimated_machining_time_hours": float,
-                "special_requirements": [string]
+                "special_requirements": [string],
+                "max_dimension_mm": float - the largest dimension for machine envelope matching
             }
-            If you cannot determine a value, use null. Be precise with measurements."""
+            
+            IMPORTANT: Read ALL dimension callouts carefully. Look at the title block for material specs.
+            For recommended_processes, list SPECIFIC operations needed (e.g., "5-axis milling for complex contour", "Wire EDM for tight slots")."""
         ).with_model("openai", "gpt-5.2")
         
         # Create image content for vision analysis
-        image_content = ImageContent(image_base64=drawing["file_data"])
+        image_content = ImageContent(image_base64=file_data)
         
         user_message = UserMessage(
-            text=f"""Analyze this engineering drawing and extract manufacturing specifications.
+            text=f"""CAREFULLY analyze this engineering drawing and extract ALL manufacturing specifications.
             
             RFQ Context:
             - Title: {rfq['title']}
