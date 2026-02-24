@@ -1133,13 +1133,14 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         demo_matches = [
             {
                 "vendor_id": "demo_vendor_1",
+                "user_id": "demo_user_1",
                 "company_name": "Precision CNC Works",
                 "suitability_score": 92,
                 "matching_machines": ["CNC Milling Center", "5-Axis VMC"],
                 "materials_match": True,
                 "tolerance_capable": True,
                 "dimension_capable": True,
-                "process_match": ["CNC Milling", "5-Axis Machining"],
+                "process_matches": ["CNC Milling", "5-Axis Machining"],
                 "location": "Mumbai, India",
                 "rating": 4.8,
                 "total_jobs": 156
