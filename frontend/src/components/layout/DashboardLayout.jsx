@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "../../App";
+import { useAuth, api } from "../../App";
 import { Button } from "../ui/button";
 import { 
   Factory, LayoutDashboard, FileText, Package, Settings, 
   LogOut, Menu, X, Wrench, Building2, Users, DollarSign,
-  ChevronDown, Bell
+  ChevronDown, Bell, MessageSquare
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -20,6 +20,22 @@ const DashboardLayout = ({ children }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000); // Poll every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchUnreadCount = async () => {
+    try {
+      const response = await api.get("/messages/unread-count");
+      setUnreadCount(response.data.unread_count);
+    } catch (e) {
+      // Ignore errors
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -29,6 +45,7 @@ const DashboardLayout = ({ children }) => {
   const buyerNavItems = [
     { path: "/buyer/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { path: "/buyer/rfq/new", label: "New RFQ", icon: FileText },
+    { path: "/chat", label: "Messages", icon: MessageSquare, badge: unreadCount },
   ];
 
   const vendorNavItems = [
@@ -36,6 +53,7 @@ const DashboardLayout = ({ children }) => {
     { path: "/vendor/profile", label: "Company Profile", icon: Building2 },
     { path: "/vendor/machines", label: "Machines", icon: Wrench },
     { path: "/vendor/quotes", label: "My Quotes", icon: DollarSign },
+    { path: "/chat", label: "Messages", icon: MessageSquare, badge: unreadCount },
   ];
 
   const adminNavItems = [
