@@ -258,64 +258,170 @@ const RFQDetail = () => {
                 <Cpu className="w-5 h-5 text-orange-600" /> AI Analysis Results
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {rfq.ai_analysis.overall_dimensions && (
-                  <div className="p-4 bg-slate-50 rounded-lg">
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                      Overall Dimensions
-                    </p>
-                    <p className="font-mono text-sm">
-                      {rfq.ai_analysis.overall_dimensions.length || "?"} x{" "}
-                      {rfq.ai_analysis.overall_dimensions.width || "?"} x{" "}
-                      {rfq.ai_analysis.overall_dimensions.height || "?"} mm
-                    </p>
+            <CardContent className="space-y-6">
+              {/* Dimensions & Metrics Row */}
+              <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Overall Dimensions */}
+                <div className="p-4 bg-slate-50 rounded-lg">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                    Overall Dimensions
+                  </p>
+                  {rfq.ai_analysis.overall_dimensions && (
+                    rfq.ai_analysis.overall_dimensions.length || rfq.ai_analysis.overall_dimensions.width
+                  ) ? (
+                    <div className="space-y-1">
+                      {rfq.ai_analysis.overall_dimensions.length && (
+                        <p className="font-mono text-sm">Length: <span className="font-bold text-slate-900">{rfq.ai_analysis.overall_dimensions.length} mm</span></p>
+                      )}
+                      {rfq.ai_analysis.overall_dimensions.width && (
+                        <p className="font-mono text-sm">Width: <span className="font-bold text-slate-900">{rfq.ai_analysis.overall_dimensions.width} mm</span></p>
+                      )}
+                      {rfq.ai_analysis.overall_dimensions.height && (
+                        <p className="font-mono text-sm">Height: <span className="font-bold text-slate-900">{rfq.ai_analysis.overall_dimensions.height} mm</span></p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-500">See drawing for dimensions</p>
+                  )}
+                </div>
+
+                {/* Material Spec */}
+                <div className="p-4 bg-slate-50 rounded-lg">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                    Material Detected
+                  </p>
+                  <p className="font-medium text-slate-900">
+                    {rfq.ai_analysis.material_specs || rfq.material_type || "Not specified"}
+                  </p>
+                </div>
+
+                {/* Complexity Score */}
+                <div className="p-4 bg-slate-50 rounded-lg">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                    Complexity Score
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <div className="score-indicator flex-1">
+                      <div 
+                        className="score-indicator-fill" 
+                        style={{ width: `${(rfq.ai_analysis.complexity_score || 5) * 10}%` }}
+                      />
+                    </div>
+                    <span className="font-bold text-slate-900">{rfq.ai_analysis.complexity_score || 5}/10</span>
                   </div>
-                )}
-                
-                {rfq.ai_analysis.recommended_processes && (
+                </div>
+
+                {/* Machining Time */}
+                <div className="p-4 bg-slate-50 rounded-lg">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                    Est. Machining Time
+                  </p>
+                  <p className="font-medium text-slate-900 text-lg">
+                    {rfq.ai_analysis.estimated_machining_time_hours || 2} hours
+                  </p>
+                </div>
+              </div>
+
+              {/* Recommended Processes - Full Width */}
+              {rfq.ai_analysis.recommended_processes && rfq.ai_analysis.recommended_processes.length > 0 && (
+                <div className="p-4 bg-orange-50 rounded-lg border border-orange-100">
+                  <p className="text-xs font-bold uppercase tracking-wider text-orange-700 mb-3">
+                    Recommended Manufacturing Processes
+                  </p>
+                  <div className="space-y-2">
+                    {rfq.ai_analysis.recommended_processes.map((process, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-orange-600 mt-0.5">✓</span>
+                        <span className="text-sm text-slate-700">{process}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Features Grid */}
+              <div className="grid md:grid-cols-2 gap-4">
+                {/* Holes */}
+                {rfq.ai_analysis.holes && rfq.ai_analysis.holes.length > 0 && (
                   <div className="p-4 bg-slate-50 rounded-lg">
                     <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                      Recommended Processes
+                      Hole Features
                     </p>
-                    <div className="flex flex-wrap gap-1">
-                      {rfq.ai_analysis.recommended_processes.map((process, i) => (
-                        <span key={i} className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
-                          {process}
-                        </span>
+                    <div className="space-y-1">
+                      {rfq.ai_analysis.holes.map((hole, i) => (
+                        <p key={i} className="text-sm">
+                          <span className="font-mono font-medium">Ø{hole.diameter}mm</span>
+                          <span className="text-slate-500"> × {hole.quantity || 1} pcs</span>
+                          {hole.depth && <span className="text-slate-500"> (Depth: {hole.depth}mm)</span>}
+                          {!hole.depth && <span className="text-slate-500"> (THRU)</span>}
+                        </p>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {rfq.ai_analysis.complexity_score && (
+                {/* Threads */}
+                {rfq.ai_analysis.threads && rfq.ai_analysis.threads.length > 0 && (
                   <div className="p-4 bg-slate-50 rounded-lg">
                     <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                      Complexity Score
+                      Thread Specifications
                     </p>
-                    <div className="flex items-center gap-2">
-                      <div className="score-indicator flex-1">
-                        <div 
-                          className="score-indicator-fill" 
-                          style={{ width: `${rfq.ai_analysis.complexity_score * 10}%` }}
-                        />
-                      </div>
-                      <span className="font-bold text-slate-900">{rfq.ai_analysis.complexity_score}/10</span>
+                    <div className="space-y-1">
+                      {rfq.ai_analysis.threads.map((thread, i) => (
+                        <p key={i} className="text-sm">
+                          <span className="font-mono font-medium">{thread.size}</span>
+                          <span className="text-slate-500"> × {thread.quantity || 1} pcs</span>
+                          {thread.type && <span className="text-slate-500"> ({thread.type})</span>}
+                        </p>
+                      ))}
                     </div>
                   </div>
                 )}
 
-                {rfq.ai_analysis.estimated_machining_time_hours && (
+                {/* Tolerances */}
+                {rfq.ai_analysis.critical_tolerances && rfq.ai_analysis.critical_tolerances.length > 0 && (
                   <div className="p-4 bg-slate-50 rounded-lg">
                     <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                      Est. Machining Time
+                      Critical Tolerances
                     </p>
-                    <p className="font-medium text-slate-900">
-                      {rfq.ai_analysis.estimated_machining_time_hours} hours
+                    <div className="space-y-1">
+                      {rfq.ai_analysis.critical_tolerances.map((tol, i) => (
+                        <p key={i} className="text-sm">
+                          <span className="font-medium">±{tol.tolerance} {tol.unit || 'mm'}</span>
+                          {tol.feature && <span className="text-slate-500"> - {tol.feature}</span>}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Surface Finish */}
+                {rfq.ai_analysis.surface_finish && (
+                  <div className="p-4 bg-slate-50 rounded-lg">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
+                      Surface Finish
                     </p>
+                    <p className="font-medium text-slate-900">{rfq.ai_analysis.surface_finish}</p>
                   </div>
                 )}
               </div>
+
+              {/* Special Requirements */}
+              {rfq.ai_analysis.special_requirements && rfq.ai_analysis.special_requirements.length > 0 && (
+                <div className="p-4 bg-amber-50 rounded-lg border border-amber-100">
+                  <p className="text-xs font-bold uppercase tracking-wider text-amber-700 mb-2">
+                    Special Requirements
+                  </p>
+                  <ul className="space-y-1">
+                    {rfq.ai_analysis.special_requirements.map((req, i) => (
+                      <li key={i} className="text-sm text-slate-700 flex items-start gap-2">
+                        <span className="text-amber-600">!</span>
+                        {req}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
