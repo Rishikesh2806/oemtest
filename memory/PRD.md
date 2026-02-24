@@ -24,8 +24,9 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Quote submission and comparison
 - Order management with payment processing
 - Vendor profile and machine capability management
+- Buyer-vendor messaging system
 
-## What's Been Implemented (Jan 2026)
+## What's Been Implemented (Feb 2026)
 
 ### Backend (FastAPI)
 - ✅ User authentication (JWT + Google OAuth)
@@ -33,12 +34,20 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - ✅ RFQ CRUD operations
 - ✅ Drawing upload with base64 storage
 - ✅ AI drawing analysis (GPT-5.2 Vision)
-- ✅ Vendor matching algorithm
+- ✅ Vendor matching algorithm (with user_id for chat)
 - ✅ Quote management
 - ✅ Order creation and tracking
 - ✅ Stripe payment integration
 - ✅ Admin vendor approval system
 - ✅ Dashboard statistics APIs
+- ✅ **Messaging/Chat APIs (NEW)**
+  - POST /api/messages - Send message
+  - GET /api/messages/conversations - List all conversations
+  - GET /api/messages/conversation/{id} - Get conversation messages
+  - GET /api/messages/with/{user_id} - Get or create conversation
+  - GET /api/messages/unread-count - Get unread count
+- ✅ **Vendor Full Profile API (NEW)**
+  - GET /api/vendors/{vendor_id}/full - Full vendor profile with machines, stats, contact
 
 ### Frontend (React)
 - ✅ Landing page with hero, features, how-it-works
@@ -53,11 +62,15 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - ✅ Quote submission for vendors
 - ✅ Order detail with payment & tracking
 - ✅ Admin dashboard for approvals
+- ✅ **VendorProfileView page (NEW)** - View vendor details, machines, stats, contact
+- ✅ **ChatPage (NEW)** - Messaging between buyers and vendors
+- ✅ **RFQ Detail - View Profile & Chat buttons (NEW)**
 
 ### Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders
 - payment_transactions
+- **messages, conversations (NEW)**
 
 ## Prioritized Backlog
 
@@ -67,7 +80,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - [ ] File download for drawings
 
 ### P1 - High Priority
-- [ ] Chat between buyer & vendor
+- ✅ Chat between buyer & vendor (DONE)
 - [ ] Capacity calendar for vendors
 - [ ] Revenue analytics charts
 - [ ] Multi-file drawing upload
@@ -86,9 +99,13 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - [ ] Multi-currency support
 - [ ] Mobile app version
 
+## Test Credentials
+- **Admin**: admin@offoadex.com / admin123
+- **Test Buyer**: Can register via UI
+- **Test Vendor**: Can register via UI
+
 ## Next Tasks
 1. Add email notifications (SendGrid/Resend)
 2. Seed demo vendor data with real machine specs
-3. Implement buyer-vendor chat
-4. Add analytics charts to dashboards
-5. Enhance AI analysis with more drawing formats
+3. Add analytics charts to dashboards
+4. Enhance AI analysis with more drawing formats
