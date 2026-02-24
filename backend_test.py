@@ -7,7 +7,7 @@ import json
 
 class OffoadexAPITester:
     def __init__(self):
-        self.base_url = "https://quote-engine-17.preview.emergentagent.com/api"
+        self.base_url = "https://vendor-matching-demo.preview.emergentagent.com/api"
         self.session = requests.Session()
         self.session.headers.update({'Content-Type': 'application/json'})
         self.token = None
