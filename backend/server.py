@@ -974,40 +974,111 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         if not machines:
             continue
         
-        # Scoring criteria (total 100 points)
-        score = 0
+        # Track capabilities across all machines
         matching_machines = []
         tolerance_capable = False
         materials_match = False
         dimension_capable = False
         process_matches = []
+        has_suitable_machine = False
         
         for machine in machines:
-            machine_score = 0
+            machine_type_lower = machine.get("machine_type", "").lower()
             machine_name = f"{machine['machine_type']} - {machine['brand']} {machine['model']}"
+            machine_score = 0
+            machine_process_match = False
             
-            # 1. TOLERANCE CHECK (25 points)
+            # CRITICAL: First check if machine type matches required processes
+            # Welding machines should NOT match milling/turning jobs
+            is_welding_machine = "weld" in machine_type_lower
+            is_cnc_machine = any(k in machine_type_lower for k in ["cnc", "mill", "vmc", "hmc", "turn", "lathe", "drill", "edm", "grind"])
+            
+            # Check if this machine can perform ANY of the recommended processes
+            for process in recommended_processes:
+                process_lower = process.lower()
+                
+                # Milling processes
+                if any(keyword in process_lower for keyword in ["milling", "mill", "face", "pocket", "profile", "slot"]):
+                    if any(k in machine_type_lower for k in ["mill", "vmc", "hmc", "5-axis", "5 axis", "cnc"]) and not is_welding_machine:
+                        machine_process_match = True
+                        if "5-axis" in machine_type_lower or "5 axis" in machine_type_lower:
+                            machine_score += 30
+                            process_matches.append("5-Axis Milling")
+                        else:
+                            machine_score += 25
+                            process_matches.append("CNC Milling")
+                        break
+                
+                # Turning processes
+                elif any(keyword in process_lower for keyword in ["turn", "lathe", "bore", "ream", "facing"]):
+                    if any(k in machine_type_lower for k in ["turn", "lathe"]) and not is_welding_machine:
+                        machine_process_match = True
+                        machine_score += 25
+                        process_matches.append("CNC Turning")
+                        break
+                
+                # Drilling/Tapping
+                elif any(keyword in process_lower for keyword in ["drill", "tap", "thread", "hole"]):
+                    if is_cnc_machine and not is_welding_machine:
+                        machine_process_match = True
+                        machine_score += 15
+                        process_matches.append("Drilling/Tapping")
+                        break
+                
+                # Grinding
+                elif any(keyword in process_lower for keyword in ["grind", "surface finish"]):
+                    if "grind" in machine_type_lower and not is_welding_machine:
+                        machine_process_match = True
+                        machine_score += 20
+                        process_matches.append("Grinding")
+                        break
+                
+                # EDM
+                elif any(keyword in process_lower for keyword in ["edm", "wire cut", "spark"]):
+                    if "edm" in machine_type_lower:
+                        machine_process_match = True
+                        machine_score += 20
+                        process_matches.append("EDM")
+                        break
+                
+                # Welding - only for welding jobs
+                elif any(keyword in process_lower for keyword in ["weld", "fabricat", "join"]):
+                    if is_welding_machine:
+                        machine_process_match = True
+                        machine_score += 25
+                        process_matches.append("Welding")
+                        break
+            
+            # SKIP this machine if it doesn't match any required process
+            if not machine_process_match:
+                continue
+            
+            has_suitable_machine = True
+            
+            # Additional scoring for suitable machines only
+            
+            # TOLERANCE CHECK (+20 points)
             machine_tolerance = machine.get("tolerance_capability", 1.0)
             if machine_tolerance <= required_tolerance:
                 tolerance_capable = True
-                machine_score += 25
+                machine_score += 20
             
-            # 2. MATERIAL CHECK (20 points)
+            # MATERIAL CHECK (+15 points)
             machine_materials = [m.lower() for m in machine.get("materials_supported", [])]
-            if required_material:
-                for mat in machine_materials:
-                    if required_material in mat or mat in required_material:
-                        materials_match = True
-                        machine_score += 20
-                        break
-            if ai_material and not materials_match:
-                for mat in machine_materials:
-                    if ai_material in mat or mat in ai_material:
-                        materials_match = True
-                        machine_score += 20
-                        break
+            material_matched = False
+            check_materials = [required_material, ai_material] if ai_material else [required_material]
+            for check_mat in check_materials:
+                if check_mat:
+                    for mat in machine_materials:
+                        if check_mat in mat or mat in check_mat:
+                            material_matched = True
+                            materials_match = True
+                            machine_score += 15
+                            break
+                if material_matched:
+                    break
             
-            # 3. DIMENSION/ENVELOPE CHECK (25 points)
+            # DIMENSION/ENVELOPE CHECK (+15 points)
             if max_dimension:
                 max_x = machine.get("max_x") or 0
                 max_y = machine.get("max_y") or 0
@@ -1017,56 +1088,28 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 
                 if machine_max >= max_dimension:
                     dimension_capable = True
-                    machine_score += 25
-                elif machine_max >= max_dimension * 0.8:
-                    # Partial match if within 80%
-                    dimension_capable = True
                     machine_score += 15
-            else:
-                # No dimension data, give partial credit
-                machine_score += 10
             
-            # 4. PROCESS MATCH (20 points)
-            machine_type_lower = machine.get("machine_type", "").lower()
-            for process in recommended_processes:
-                process_lower = process.lower()
-                if any(keyword in process_lower for keyword in ["milling", "mill"]) and any(k in machine_type_lower for k in ["mill", "vmc", "hmc", "cnc"]):
-                    if "5-axis" in machine_type_lower or "5 axis" in machine_type_lower:
-                        machine_score += 20
-                        process_matches.append("5-Axis Milling")
-                    else:
-                        machine_score += 15
-                        process_matches.append("CNC Milling")
-                    break
-                elif any(keyword in process_lower for keyword in ["turn", "lathe"]) and any(k in machine_type_lower for k in ["turn", "lathe"]):
-                    machine_score += 15
-                    process_matches.append("CNC Turning")
-                    break
-                elif any(keyword in process_lower for keyword in ["drill", "tap", "thread"]) and "cnc" in machine_type_lower:
-                    machine_score += 10
-                    process_matches.append("Drilling/Tapping")
-                    break
-            
-            # 5. VENDOR EXPERIENCE BONUS (10 points)
+            # EXPERIENCE BONUS (+10 points max)
             vendor_jobs = vendor.get("total_jobs", 0)
             vendor_rating = vendor.get("rating", 0)
             experience_score = min((vendor_jobs / 50) + (vendor_rating * 1.5), 10)
             machine_score += experience_score
             
-            if machine_score > 0:
-                matching_machines.append({
-                    "name": machine_name,
-                    "score": machine_score,
-                    "tolerance": machine_tolerance,
-                    "envelope": f"{machine.get('max_x', 0)}x{machine.get('max_y', 0)}x{machine.get('max_z', 0)}mm"
-                })
+            matching_machines.append({
+                "name": machine_name,
+                "score": machine_score,
+                "tolerance": machine_tolerance,
+                "envelope": f"{machine.get('max_x', 0)}x{machine.get('max_y', 0)}x{machine.get('max_z', 0)}mm"
+            })
         
-        if matching_machines:
-            # Sort machines by score and get top 3
+        # Only include vendor if they have at least one suitable machine
+        if has_suitable_machine and matching_machines:
+            # Sort machines by score
             matching_machines.sort(key=lambda x: x["score"], reverse=True)
             best_machine_score = matching_machines[0]["score"]
             
-            # Final score is weighted average
+            # Final score capped at 100
             final_score = min(int(best_machine_score), 100)
             
             matched_vendors.append({
