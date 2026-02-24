@@ -903,7 +903,7 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
 
 @api_router.post("/rfqs/{rfq_id}/match")
 async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
-    """Match RFQ with capable vendors based on machine capabilities"""
+    """Match RFQ with capable vendors based on AI-extracted drawing data and machine capabilities"""
     rfq = await db.rfqs.find_one({"rfq_id": rfq_id, "buyer_id": user["user_id"]}, {"_id": 0})
     if not rfq:
         raise HTTPException(status_code=404, detail="RFQ not found")
@@ -921,31 +921,11 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 "matching_machines": ["CNC Milling Center", "5-Axis VMC"],
                 "materials_match": True,
                 "tolerance_capable": True,
+                "dimension_capable": True,
+                "process_match": ["CNC Milling", "5-Axis Machining"],
                 "location": "Mumbai, India",
                 "rating": 4.8,
                 "total_jobs": 156
-            },
-            {
-                "vendor_id": "demo_vendor_2",
-                "company_name": "MetalTech Industries",
-                "suitability_score": 87,
-                "matching_machines": ["VMC 850", "CNC Lathe"],
-                "materials_match": True,
-                "tolerance_capable": True,
-                "location": "Pune, India",
-                "rating": 4.6,
-                "total_jobs": 89
-            },
-            {
-                "vendor_id": "demo_vendor_3",
-                "company_name": "Global Machining Solutions",
-                "suitability_score": 81,
-                "matching_machines": ["HMC 500", "Turn-Mill Center"],
-                "materials_match": True,
-                "tolerance_capable": True,
-                "location": "Chennai, India",
-                "rating": 4.5,
-                "total_jobs": 234
             }
         ]
         
@@ -960,9 +940,27 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         
         return {"matched_vendors": demo_matches, "total_matches": len(demo_matches)}
     
+    # Extract requirements from AI analysis
     ai_analysis = rfq.get("ai_analysis", {})
+    dims = ai_analysis.get("overall_dimensions", {})
+    recommended_processes = ai_analysis.get("recommended_processes", [])
+    
+    # Get max dimension from drawing for machine envelope check
+    max_dimension = ai_analysis.get("max_dimension_mm")
+    if not max_dimension:
+        # Calculate from dimensions
+        dim_values = [dims.get("length"), dims.get("width"), dims.get("height")]
+        dim_values = [d for d in dim_values if d]
+        max_dimension = max(dim_values) if dim_values else None
+    
     required_tolerance = rfq.get("tolerance", 0.1)
     required_material = rfq.get("material_type", "").lower()
+    
+    # Extract material from AI if available
+    ai_material = (ai_analysis.get("material_specs") or "").lower()
+    
+    logger.info(f"Matching RFQ {rfq_id}: dims={dims}, tolerance={required_tolerance}, material={required_material}, max_dim={max_dimension}")
+    logger.info(f"Recommended processes: {recommended_processes}")
     
     matched_vendors = []
     
@@ -976,26 +974,131 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         if not machines:
             continue
         
-        # Calculate suitability score
-        score = 50  # Base score
+        # Scoring criteria (total 100 points)
+        score = 0
         matching_machines = []
         tolerance_capable = False
         materials_match = False
+        dimension_capable = False
+        process_matches = []
         
         for machine in machines:
-            # Check tolerance capability
-            if machine.get("tolerance_capability", 1.0) <= required_tolerance:
+            machine_score = 0
+            machine_name = f"{machine['machine_type']} - {machine['brand']} {machine['model']}"
+            
+            # 1. TOLERANCE CHECK (25 points)
+            machine_tolerance = machine.get("tolerance_capability", 1.0)
+            if machine_tolerance <= required_tolerance:
                 tolerance_capable = True
-                score += 10
+                machine_score += 25
             
-            # Check material compatibility
+            # 2. MATERIAL CHECK (20 points)
             machine_materials = [m.lower() for m in machine.get("materials_supported", [])]
-            if required_material in machine_materials or not machine_materials:
-                materials_match = True
-                score += 10
+            if required_material:
+                for mat in machine_materials:
+                    if required_material in mat or mat in required_material:
+                        materials_match = True
+                        machine_score += 20
+                        break
+            if ai_material and not materials_match:
+                for mat in machine_materials:
+                    if ai_material in mat or mat in ai_material:
+                        materials_match = True
+                        machine_score += 20
+                        break
             
-            # Check dimensions if available
-            dims = ai_analysis.get("overall_dimensions", {})
+            # 3. DIMENSION/ENVELOPE CHECK (25 points)
+            if max_dimension:
+                max_x = machine.get("max_x") or 0
+                max_y = machine.get("max_y") or 0
+                max_z = machine.get("max_z") or 0
+                max_dia = machine.get("max_diameter") or 0
+                machine_max = max(max_x, max_y, max_z, max_dia)
+                
+                if machine_max >= max_dimension:
+                    dimension_capable = True
+                    machine_score += 25
+                elif machine_max >= max_dimension * 0.8:
+                    # Partial match if within 80%
+                    dimension_capable = True
+                    machine_score += 15
+            else:
+                # No dimension data, give partial credit
+                machine_score += 10
+            
+            # 4. PROCESS MATCH (20 points)
+            machine_type_lower = machine.get("machine_type", "").lower()
+            for process in recommended_processes:
+                process_lower = process.lower()
+                if any(keyword in process_lower for keyword in ["milling", "mill"]) and any(k in machine_type_lower for k in ["mill", "vmc", "hmc", "cnc"]):
+                    if "5-axis" in machine_type_lower or "5 axis" in machine_type_lower:
+                        machine_score += 20
+                        process_matches.append("5-Axis Milling")
+                    else:
+                        machine_score += 15
+                        process_matches.append("CNC Milling")
+                    break
+                elif any(keyword in process_lower for keyword in ["turn", "lathe"]) and any(k in machine_type_lower for k in ["turn", "lathe"]):
+                    machine_score += 15
+                    process_matches.append("CNC Turning")
+                    break
+                elif any(keyword in process_lower for keyword in ["drill", "tap", "thread"]) and "cnc" in machine_type_lower:
+                    machine_score += 10
+                    process_matches.append("Drilling/Tapping")
+                    break
+            
+            # 5. VENDOR EXPERIENCE BONUS (10 points)
+            vendor_jobs = vendor.get("total_jobs", 0)
+            vendor_rating = vendor.get("rating", 0)
+            experience_score = min((vendor_jobs / 50) + (vendor_rating * 1.5), 10)
+            machine_score += experience_score
+            
+            if machine_score > 0:
+                matching_machines.append({
+                    "name": machine_name,
+                    "score": machine_score,
+                    "tolerance": machine_tolerance,
+                    "envelope": f"{machine.get('max_x', 0)}x{machine.get('max_y', 0)}x{machine.get('max_z', 0)}mm"
+                })
+        
+        if matching_machines:
+            # Sort machines by score and get top 3
+            matching_machines.sort(key=lambda x: x["score"], reverse=True)
+            best_machine_score = matching_machines[0]["score"]
+            
+            # Final score is weighted average
+            final_score = min(int(best_machine_score), 100)
+            
+            matched_vendors.append({
+                "vendor_id": vendor["vendor_id"],
+                "company_name": vendor["company_name"],
+                "suitability_score": final_score,
+                "matching_machines": [m["name"] for m in matching_machines[:3]],
+                "machine_details": matching_machines[:3],
+                "materials_match": materials_match,
+                "tolerance_capable": tolerance_capable,
+                "dimension_capable": dimension_capable,
+                "process_matches": list(set(process_matches))[:3],
+                "location": f"{vendor.get('city', '')}, {vendor.get('country', '')}",
+                "rating": vendor.get("rating", 0),
+                "total_jobs": vendor.get("total_jobs", 0),
+                "certifications": vendor.get("certifications", [])[:3]
+            })
+    
+    # Sort by score
+    matched_vendors.sort(key=lambda x: x["suitability_score"], reverse=True)
+    matched_vendors = matched_vendors[:10]  # Top 10
+    
+    await db.rfqs.update_one(
+        {"rfq_id": rfq_id},
+        {"$set": {
+            "matched_vendors": matched_vendors,
+            "status": RFQStatus.MATCHING,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {"matched_vendors": matched_vendors, "total_matches": len(matched_vendors)}
             if dims.get("length") and machine.get("max_x"):
                 if dims["length"] <= machine["max_x"]:
                     score += 5
