@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth, api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import { Button } from "../components/ui/button";
@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { 
   FileText, Package, Star, MapPin, Loader2, 
   CheckCircle2, Send, DollarSign, Clock, ArrowLeft,
-  Building2, Cpu, Wrench, AlertCircle, Target
+  Building2, Cpu, Wrench, AlertCircle, Target, MessageSquare, Eye
 } from "lucide-react";
 
 const RFQDetail = () => {
