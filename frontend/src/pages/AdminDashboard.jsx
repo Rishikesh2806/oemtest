@@ -1150,29 +1150,306 @@ const NDAsTab = ({ ndas, users, vendors, loading, onRefresh, onCreateNDA, onUpda
 // ============== VENDORS TAB ==============
 const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdateVendor }) => {
   const [approvedFilter, setApprovedFilter] = useState("all");
-  const [editVendor, setEditVendor] = useState(null);
-  const [editForm, setEditForm] = useState({});
+  const [selectedVendor, setSelectedVendor] = useState(null);
+  const [vendorProfile, setVendorProfile] = useState(null);
+  const [machines, setMachines] = useState([]);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [editMachine, setEditMachine] = useState(null);
+  const [createMachineOpen, setCreateMachineOpen] = useState(false);
+  const [machineForm, setMachineForm] = useState({
+    name: "", machine_type: "", brand: "", model: "", 
+    tolerance: 0.01, max_x: 0, max_y: 0, max_z: 0,
+    max_diameter: 0, materials: []
+  });
+  const [profileForm, setProfileForm] = useState({});
   
   const filteredVendors = vendors.filter(v => {
     if (approvedFilter === "all") return true;
     return approvedFilter === "approved" ? v.is_approved : !v.is_approved;
   });
   
-  const handleEdit = (vendor) => {
-    setEditVendor(vendor);
-    setEditForm({ 
-      company_name: vendor.company_name, 
-      is_approved: vendor.is_approved,
-      rating: vendor.rating || 0,
-      description: vendor.description || ""
-    });
+  const loadVendorProfile = async (vendorId) => {
+    setProfileLoading(true);
+    try {
+      const res = await api.get(`/admin/vendors/${vendorId}/full`);
+      setVendorProfile(res.data.vendor);
+      setMachines(res.data.machines);
+      setProfileForm({
+        company_name: res.data.vendor.company_name || "",
+        description: res.data.vendor.description || "",
+        phone: res.data.vendor.phone || "",
+        website: res.data.vendor.website || "",
+        address: res.data.vendor.address || "",
+        city: res.data.vendor.city || "",
+        country: res.data.vendor.country || "",
+        certifications: res.data.vendor.certifications?.join(", ") || "",
+        industries: res.data.vendor.industries?.join(", ") || "",
+        rating: res.data.vendor.rating || 0,
+        is_approved: res.data.vendor.is_approved || false
+      });
+      setSelectedVendor(vendorId);
+    } catch (error) {
+      toast.error("Failed to load vendor profile");
+    } finally {
+      setProfileLoading(false);
+    }
   };
   
-  const handleSave = async () => {
-    await onUpdateVendor(editVendor.vendor_id, editForm);
-    setEditVendor(null);
+  const saveProfile = async () => {
+    try {
+      const data = {
+        ...profileForm,
+        certifications: profileForm.certifications?.split(",").map(s => s.trim()).filter(Boolean) || [],
+        industries: profileForm.industries?.split(",").map(s => s.trim()).filter(Boolean) || []
+      };
+      await api.put(`/admin/vendors/${selectedVendor}/profile`, data);
+      toast.success("Profile updated");
+      onRefresh();
+    } catch (error) {
+      toast.error("Failed to update profile");
+    }
+  };
+  
+  const saveMachine = async () => {
+    try {
+      const data = {
+        ...machineForm,
+        materials: typeof machineForm.materials === 'string' 
+          ? machineForm.materials.split(",").map(s => s.trim()).filter(Boolean)
+          : machineForm.materials
+      };
+      
+      if (editMachine) {
+        await api.put(`/admin/machines/${editMachine.machine_id}`, data);
+        toast.success("Machine updated");
+      } else {
+        await api.post("/admin/machines", { ...data, vendor_id: selectedVendor });
+        toast.success("Machine created");
+      }
+      setEditMachine(null);
+      setCreateMachineOpen(false);
+      setMachineForm({ name: "", machine_type: "", brand: "", model: "", tolerance: 0.01, max_x: 0, max_y: 0, max_z: 0, max_diameter: 0, materials: [] });
+      loadVendorProfile(selectedVendor);
+    } catch (error) {
+      toast.error("Failed to save machine");
+    }
+  };
+  
+  const deleteMachine = async (machineId) => {
+    if (!confirm("Are you sure you want to delete this machine?")) return;
+    try {
+      await api.delete(`/admin/machines/${machineId}`);
+      toast.success("Machine deleted");
+      loadVendorProfile(selectedVendor);
+    } catch (error) {
+      toast.error("Failed to delete machine");
+    }
+  };
+  
+  const openEditMachine = (machine) => {
+    setEditMachine(machine);
+    setMachineForm({
+      name: machine.name || "",
+      machine_type: machine.machine_type || "",
+      brand: machine.brand || "",
+      model: machine.model || "",
+      tolerance: machine.tolerance || 0.01,
+      max_x: machine.max_x || 0,
+      max_y: machine.max_y || 0,
+      max_z: machine.max_z || 0,
+      max_diameter: machine.max_diameter || 0,
+      materials: machine.materials?.join(", ") || ""
+    });
   };
 
+  // Vendor Profile Detail View
+  if (selectedVendor && vendorProfile) {
+    return (
+      <div className="space-y-6">
+        {/* Back Button */}
+        <Button variant="outline" size="sm" onClick={() => setSelectedVendor(null)}>
+          <ChevronRight className="w-4 h-4 rotate-180 mr-1" /> Back to Vendors
+        </Button>
+        
+        {/* Profile Card */}
+        <Card className="border-slate-200">
+          <CardHeader>
+            <CardTitle className="font-heading flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-orange-600" />
+              {vendorProfile.company_name} - Profile Management
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Company Name</Label>
+                <Input value={profileForm.company_name} onChange={(e) => setProfileForm(p => ({...p, company_name: e.target.value}))} />
+              </div>
+              <div>
+                <Label>Phone</Label>
+                <Input value={profileForm.phone} onChange={(e) => setProfileForm(p => ({...p, phone: e.target.value}))} />
+              </div>
+              <div>
+                <Label>Website</Label>
+                <Input value={profileForm.website} onChange={(e) => setProfileForm(p => ({...p, website: e.target.value}))} />
+              </div>
+              <div>
+                <Label>Rating (0-5)</Label>
+                <Input type="number" step="0.1" min="0" max="5" value={profileForm.rating} onChange={(e) => setProfileForm(p => ({...p, rating: parseFloat(e.target.value)}))} />
+              </div>
+              <div>
+                <Label>City</Label>
+                <Input value={profileForm.city} onChange={(e) => setProfileForm(p => ({...p, city: e.target.value}))} />
+              </div>
+              <div>
+                <Label>Country</Label>
+                <Input value={profileForm.country} onChange={(e) => setProfileForm(p => ({...p, country: e.target.value}))} />
+              </div>
+              <div className="md:col-span-2">
+                <Label>Address</Label>
+                <Input value={profileForm.address} onChange={(e) => setProfileForm(p => ({...p, address: e.target.value}))} />
+              </div>
+              <div className="md:col-span-2">
+                <Label>Description</Label>
+                <Textarea value={profileForm.description} onChange={(e) => setProfileForm(p => ({...p, description: e.target.value}))} />
+              </div>
+              <div>
+                <Label>Certifications (comma-separated)</Label>
+                <Input value={profileForm.certifications} onChange={(e) => setProfileForm(p => ({...p, certifications: e.target.value}))} placeholder="ISO 9001, AS9100, IATF 16949" />
+              </div>
+              <div>
+                <Label>Industries (comma-separated)</Label>
+                <Input value={profileForm.industries} onChange={(e) => setProfileForm(p => ({...p, industries: e.target.value}))} placeholder="Automotive, Aerospace, Medical" />
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="vendor-approved" checked={profileForm.is_approved} onChange={(e) => setProfileForm(p => ({...p, is_approved: e.target.checked}))} className="rounded" />
+                <Label htmlFor="vendor-approved">Approved</Label>
+              </div>
+            </div>
+            <Button onClick={saveProfile} className="mt-4 bg-orange-600 hover:bg-orange-700">
+              Save Profile Changes
+            </Button>
+          </CardContent>
+        </Card>
+        
+        {/* Machines Card */}
+        <Card className="border-slate-200">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="font-heading flex items-center gap-2">
+              <Wrench className="w-5 h-5 text-orange-600" />
+              Machines ({machines.length})
+            </CardTitle>
+            <Button size="sm" className="bg-orange-600 hover:bg-orange-700" onClick={() => { setCreateMachineOpen(true); setEditMachine(null); setMachineForm({ name: "", machine_type: "", brand: "", model: "", tolerance: 0.01, max_x: 0, max_y: 0, max_z: 0, max_diameter: 0, materials: [] }); }}>
+              <Plus className="w-4 h-4 mr-1" /> Add Machine
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {machines.length > 0 ? (
+              <div className="space-y-3">
+                {machines.map((machine) => (
+                  <div key={machine.machine_id} className="p-4 bg-slate-50 rounded-lg border flex items-center justify-between" data-testid={`machine-${machine.machine_id}`}>
+                    <div className="flex-1">
+                      <p className="font-medium text-slate-900">{machine.name}</p>
+                      <p className="text-sm text-slate-500">{machine.machine_type} • {machine.brand} {machine.model}</p>
+                      <div className="flex gap-4 mt-2 text-xs text-slate-500">
+                        <span>Tolerance: ±{machine.tolerance}mm</span>
+                        <span>Envelope: {machine.max_x}x{machine.max_y}x{machine.max_z}mm</span>
+                        {machine.materials?.length > 0 && <span>Materials: {machine.materials.slice(0, 3).join(", ")}</span>}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => openEditMachine(machine)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50" onClick={() => deleteMachine(machine.machine_id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center py-8 text-slate-500">No machines registered for this vendor</p>
+            )}
+          </CardContent>
+        </Card>
+        
+        {/* Machine Edit/Create Dialog */}
+        <Dialog open={!!editMachine || createMachineOpen} onOpenChange={() => { setEditMachine(null); setCreateMachineOpen(false); }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>{editMachine ? "Edit Machine" : "Add New Machine"}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4 max-h-[60vh] overflow-y-auto">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label>Machine Name</Label>
+                  <Input value={machineForm.name} onChange={(e) => setMachineForm(m => ({...m, name: e.target.value}))} placeholder="e.g. Haas VF-2SS" />
+                </div>
+                <div>
+                  <Label>Machine Type</Label>
+                  <Select value={machineForm.machine_type} onValueChange={(v) => setMachineForm(m => ({...m, machine_type: v}))}>
+                    <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CNC Milling">CNC Milling</SelectItem>
+                      <SelectItem value="CNC Turning">CNC Turning</SelectItem>
+                      <SelectItem value="5-Axis VMC">5-Axis VMC</SelectItem>
+                      <SelectItem value="CNC Lathe">CNC Lathe</SelectItem>
+                      <SelectItem value="Wire EDM">Wire EDM</SelectItem>
+                      <SelectItem value="Surface Grinding">Surface Grinding</SelectItem>
+                      <SelectItem value="Cylindrical Grinding">Cylindrical Grinding</SelectItem>
+                      <SelectItem value="MIG Welding">MIG Welding</SelectItem>
+                      <SelectItem value="TIG Welding">TIG Welding</SelectItem>
+                      <SelectItem value="Laser Cutting">Laser Cutting</SelectItem>
+                      <SelectItem value="Plasma Cutting">Plasma Cutting</SelectItem>
+                      <SelectItem value="3D Printing">3D Printing</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Brand</Label>
+                  <Input value={machineForm.brand} onChange={(e) => setMachineForm(m => ({...m, brand: e.target.value}))} placeholder="e.g. Haas, DMG Mori" />
+                </div>
+                <div>
+                  <Label>Model</Label>
+                  <Input value={machineForm.model} onChange={(e) => setMachineForm(m => ({...m, model: e.target.value}))} placeholder="e.g. VF-2SS" />
+                </div>
+                <div>
+                  <Label>Tolerance (mm)</Label>
+                  <Input type="number" step="0.001" value={machineForm.tolerance} onChange={(e) => setMachineForm(m => ({...m, tolerance: parseFloat(e.target.value)}))} />
+                </div>
+                <div>
+                  <Label>Max X (mm)</Label>
+                  <Input type="number" value={machineForm.max_x} onChange={(e) => setMachineForm(m => ({...m, max_x: parseInt(e.target.value)}))} />
+                </div>
+                <div>
+                  <Label>Max Y (mm)</Label>
+                  <Input type="number" value={machineForm.max_y} onChange={(e) => setMachineForm(m => ({...m, max_y: parseInt(e.target.value)}))} />
+                </div>
+                <div>
+                  <Label>Max Z (mm)</Label>
+                  <Input type="number" value={machineForm.max_z} onChange={(e) => setMachineForm(m => ({...m, max_z: parseInt(e.target.value)}))} />
+                </div>
+                <div>
+                  <Label>Max Diameter (mm)</Label>
+                  <Input type="number" value={machineForm.max_diameter} onChange={(e) => setMachineForm(m => ({...m, max_diameter: parseInt(e.target.value)}))} />
+                </div>
+                <div className="col-span-2">
+                  <Label>Materials (comma-separated)</Label>
+                  <Input value={machineForm.materials} onChange={(e) => setMachineForm(m => ({...m, materials: e.target.value}))} placeholder="Aluminum, Steel, Stainless Steel, Titanium" />
+                </div>
+              </div>
+              <Button onClick={saveMachine} className="w-full bg-orange-600 hover:bg-orange-700">
+                {editMachine ? "Update Machine" : "Create Machine"}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
+  // Vendors List View
   return (
     <div className="space-y-4">
       {/* Filters */}
@@ -1232,29 +1509,19 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
                   </td>
                   <td className="p-4 text-right">
                     <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => loadVendorProfile(vendor.vendor_id)} title="Manage Profile & Machines">
+                        <Eye className="w-4 h-4" />
+                      </Button>
                       {!vendor.is_approved && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="text-green-600 hover:bg-green-50"
-                          onClick={() => onApprove(vendor.vendor_id)}
-                        >
+                        <Button variant="ghost" size="sm" className="text-green-600 hover:bg-green-50" onClick={() => onApprove(vendor.vendor_id)}>
                           <CheckCircle2 className="w-4 h-4" />
                         </Button>
                       )}
                       {vendor.is_approved && (
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="text-amber-600 hover:bg-amber-50"
-                          onClick={() => onReject(vendor.vendor_id)}
-                        >
+                        <Button variant="ghost" size="sm" className="text-amber-600 hover:bg-amber-50" onClick={() => onReject(vendor.vendor_id)}>
                           <XCircle className="w-4 h-4" />
                         </Button>
                       )}
-                      <Button variant="ghost" size="sm" onClick={() => handleEdit(vendor)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
                     </div>
                   </td>
                 </tr>
@@ -1266,55 +1533,6 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
           )}
         </CardContent>
       </Card>
-      
-      {/* Edit Dialog */}
-      <Dialog open={!!editVendor} onOpenChange={() => setEditVendor(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Vendor</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div>
-              <Label>Company Name</Label>
-              <Input
-                value={editForm.company_name}
-                onChange={(e) => setEditForm(prev => ({ ...prev, company_name: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>Rating (0-5)</Label>
-              <Input
-                type="number"
-                step="0.1"
-                min="0"
-                max="5"
-                value={editForm.rating}
-                onChange={(e) => setEditForm(prev => ({ ...prev, rating: parseFloat(e.target.value) }))}
-              />
-            </div>
-            <div>
-              <Label>Description</Label>
-              <Textarea
-                value={editForm.description}
-                onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="approved"
-                checked={editForm.is_approved}
-                onChange={(e) => setEditForm(prev => ({ ...prev, is_approved: e.target.checked }))}
-                className="rounded"
-              />
-              <Label htmlFor="approved">Approved</Label>
-            </div>
-            <Button onClick={handleSave} className="w-full bg-orange-600 hover:bg-orange-700">
-              Save Changes
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
