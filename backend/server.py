@@ -1614,6 +1614,21 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
         {"$set": {"status": RFQStatus.QUOTED, "updated_at": now.isoformat()}}
     )
     
+    # Send email notification to buyer
+    app_url = os.environ.get("APP_URL", "https://vendor-matching-demo.preview.emergentagent.com")
+    buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
+    if buyer and buyer.get("email"):
+        email_data = {
+            "buyer_name": buyer.get("name", "Buyer"),
+            "rfq_title": rfq.get("title", "Your RFQ"),
+            "vendor_name": vendor.get("company_name", "Vendor"),
+            "price": f"{quote.price:.2f}",
+            "lead_time": quote.lead_time_days,
+            "app_url": f"{app_url}/rfq/{quote.rfq_id}"
+        }
+        subject, html = get_email_template("quote_received", email_data)
+        asyncio.create_task(send_email_async(buyer["email"], subject, html))
+    
     return Quote(**quote_doc)
 
 @api_router.get("/quotes/rfq/{rfq_id}")
