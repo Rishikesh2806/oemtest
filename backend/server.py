@@ -41,6 +41,186 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# ============== EMAIL SERVICE ==============
+
+# Initialize Resend
+resend.api_key = os.environ.get("RESEND_API_KEY")
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+
+async def send_email_async(to_email: str, subject: str, html_content: str):
+    """Send email asynchronously using Resend"""
+    if not resend.api_key:
+        logger.warning("RESEND_API_KEY not configured, skipping email")
+        return None
+    
+    try:
+        params = {
+            "from": SENDER_EMAIL,
+            "to": [to_email],
+            "subject": subject,
+            "html": html_content
+        }
+        result = await asyncio.to_thread(resend.Emails.send, params)
+        logger.info(f"Email sent to {to_email}: {result.get('id')}")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to send email to {to_email}: {str(e)}")
+        return None
+
+def get_email_template(template_type: str, data: dict) -> tuple:
+    """Get email subject and HTML content for various notification types"""
+    
+    templates = {
+        "vendor_matched": {
+            "subject": f"New RFQ Match: {data.get('rfq_title', 'New Opportunity')}",
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">New RFQ Match!</h1>
+                </div>
+                <div style="padding: 30px; background: #f8fafc;">
+                    <p style="font-size: 16px; color: #334155;">Hello {data.get('vendor_name', 'Vendor')},</p>
+                    <p style="font-size: 16px; color: #334155;">You've been matched to a new RFQ based on your machine capabilities!</p>
+                    
+                    <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #f97316;">
+                        <h3 style="color: #1e293b; margin-top: 0;">{data.get('rfq_title', 'RFQ')}</h3>
+                        <p style="color: #64748b; margin: 5px 0;"><strong>Material:</strong> {data.get('material', 'N/A')}</p>
+                        <p style="color: #64748b; margin: 5px 0;"><strong>Quantity:</strong> {data.get('quantity', 'N/A')}</p>
+                        <p style="color: #64748b; margin: 5px 0;"><strong>Buyer:</strong> {data.get('buyer_name', 'N/A')}</p>
+                        <p style="color: #64748b; margin: 5px 0;"><strong>Your Match Score:</strong> {data.get('match_score', 'N/A')}%</p>
+                    </div>
+                    
+                    <p style="font-size: 16px; color: #334155;">Log in to Offoadex to view details and submit your quote.</p>
+                    
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="{data.get('app_url', '#')}" style="background: #f97316; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">View RFQ</a>
+                    </div>
+                </div>
+                <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
+                    <p>Offoadex - AI-Powered Manufacturing Marketplace</p>
+                </div>
+            </div>
+            """
+        },
+        "quote_received": {
+            "subject": f"New Quote Received for {data.get('rfq_title', 'Your RFQ')}",
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">New Quote Received!</h1>
+                </div>
+                <div style="padding: 30px; background: #f8fafc;">
+                    <p style="font-size: 16px; color: #334155;">Hello {data.get('buyer_name', 'Buyer')},</p>
+                    <p style="font-size: 16px; color: #334155;">A vendor has submitted a quote for your RFQ.</p>
+                    
+                    <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #22c55e;">
+                        <h3 style="color: #1e293b; margin-top: 0;">{data.get('rfq_title', 'RFQ')}</h3>
+                        <p style="color: #64748b; margin: 5px 0;"><strong>Vendor:</strong> {data.get('vendor_name', 'N/A')}</p>
+                        <p style="color: #22c55e; font-size: 24px; margin: 15px 0;"><strong>${data.get('price', '0.00')}</strong></p>
+                        <p style="color: #64748b; margin: 5px 0;"><strong>Lead Time:</strong> {data.get('lead_time', 'N/A')} days</p>
+                    </div>
+                    
+                    <p style="font-size: 16px; color: #334155;">Log in to review and compare quotes.</p>
+                    
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="{data.get('app_url', '#')}" style="background: #f97316; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">View Quotes</a>
+                    </div>
+                </div>
+                <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
+                    <p>Offoadex - AI-Powered Manufacturing Marketplace</p>
+                </div>
+            </div>
+            """
+        },
+        "quote_accepted": {
+            "subject": f"Congratulations! Your Quote Was Accepted",
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">Quote Accepted!</h1>
+                </div>
+                <div style="padding: 30px; background: #f8fafc;">
+                    <p style="font-size: 16px; color: #334155;">Hello {data.get('vendor_name', 'Vendor')},</p>
+                    <p style="font-size: 16px; color: #334155;">Great news! Your quote has been accepted.</p>
+                    
+                    <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #22c55e;">
+                        <h3 style="color: #1e293b; margin-top: 0;">{data.get('rfq_title', 'RFQ')}</h3>
+                        <p style="color: #64748b; margin: 5px 0;"><strong>Buyer:</strong> {data.get('buyer_name', 'N/A')}</p>
+                        <p style="color: #22c55e; font-size: 24px; margin: 15px 0;"><strong>${data.get('price', '0.00')}</strong></p>
+                        <p style="color: #64748b; margin: 5px 0;"><strong>Order ID:</strong> {data.get('order_id', 'N/A')}</p>
+                    </div>
+                    
+                    <p style="font-size: 16px; color: #334155;">Please log in to view the purchase order details and begin production.</p>
+                    
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="{data.get('app_url', '#')}" style="background: #22c55e; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">View Order</a>
+                    </div>
+                </div>
+                <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
+                    <p>Offoadex - AI-Powered Manufacturing Marketplace</p>
+                </div>
+            </div>
+            """
+        },
+        "order_status_update": {
+            "subject": f"Order Update: {data.get('order_id', 'Your Order')} - {data.get('status', 'Updated')}",
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">Order Update</h1>
+                </div>
+                <div style="padding: 30px; background: #f8fafc;">
+                    <p style="font-size: 16px; color: #334155;">Hello {data.get('recipient_name', 'User')},</p>
+                    <p style="font-size: 16px; color: #334155;">Your order status has been updated.</p>
+                    
+                    <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #3b82f6;">
+                        <h3 style="color: #1e293b; margin-top: 0;">Order #{data.get('order_id', 'N/A')}</h3>
+                        <p style="color: #64748b; margin: 5px 0;"><strong>RFQ:</strong> {data.get('rfq_title', 'N/A')}</p>
+                        <p style="color: #3b82f6; font-size: 18px; margin: 15px 0;"><strong>Status: {data.get('status', 'N/A').replace('_', ' ').title()}</strong></p>
+                        {f"<p style='color: #64748b; margin: 5px 0;'><strong>Note:</strong> {data.get('note', '')}</p>" if data.get('note') else ''}
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="{data.get('app_url', '#')}" style="background: #3b82f6; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">View Order</a>
+                    </div>
+                </div>
+                <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
+                    <p>Offoadex - AI-Powered Manufacturing Marketplace</p>
+                </div>
+            </div>
+            """
+        },
+        "new_message": {
+            "subject": f"New Message from {data.get('sender_name', 'Someone')}",
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); padding: 30px; text-align: center;">
+                    <h1 style="color: white; margin: 0;">New Message</h1>
+                </div>
+                <div style="padding: 30px; background: #f8fafc;">
+                    <p style="font-size: 16px; color: #334155;">Hello {data.get('recipient_name', 'User')},</p>
+                    <p style="font-size: 16px; color: #334155;">You have a new message on Offoadex.</p>
+                    
+                    <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #8b5cf6;">
+                        <p style="color: #64748b; margin: 0 0 10px 0;"><strong>From:</strong> {data.get('sender_name', 'N/A')}</p>
+                        <p style="color: #1e293b; font-style: italic;">"{data.get('message_preview', '')[:200]}..."</p>
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="{data.get('app_url', '#')}" style="background: #8b5cf6; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">View Message</a>
+                    </div>
+                </div>
+                <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
+                    <p>Offoadex - AI-Powered Manufacturing Marketplace</p>
+                </div>
+            </div>
+            """
+        }
+    }
+    
+    template = templates.get(template_type, {})
+    return template.get("subject", "Offoadex Notification"), template.get("html", "<p>Notification</p>")
+
 # ============== MODELS ==============
 
 class UserRole:
