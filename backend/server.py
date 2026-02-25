@@ -1712,8 +1712,565 @@ async def get_admin_stats(user: dict = Depends(get_current_user)):
         "approved_vendors": approved_vendors,
         "pending_vendors": total_vendors - approved_vendors,
         "total_rfqs": total_rfqs,
-        "total_orders": total_orders
+        "total_orders": total_orders,
+        "total_quotes": await db.quotes.count_documents({}),
+        "total_ndas": await db.ndas.count_documents({})
     }
+
+# ============== ADMIN - USER MANAGEMENT ==============
+
+@api_router.get("/admin/users")
+async def admin_list_users(user: dict = Depends(get_current_user), role: Optional[str] = None, search: Optional[str] = None):
+    """List all users with optional filtering"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    query = {}
+    if role:
+        query["role"] = role
+    if search:
+        query["$or"] = [
+            {"email": {"$regex": search, "$options": "i"}},
+            {"name": {"$regex": search, "$options": "i"}}
+        ]
+    
+    users = await db.users.find(query, {"_id": 0, "password_hash": 0}).to_list(200)
+    return users
+
+@api_router.get("/admin/users/{user_id}")
+async def admin_get_user(user_id: str, user: dict = Depends(get_current_user)):
+    """Get user details"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Get related vendor profile if exists
+    vendor = await db.vendors.find_one({"user_id": user_id}, {"_id": 0})
+    
+    return {**target_user, "vendor_profile": vendor}
+
+@api_router.put("/admin/users/{user_id}")
+async def admin_update_user(user_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Update user details"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    body = await request.json()
+    allowed_fields = ["name", "role", "company_name"]
+    update_data = {k: v for k, v in body.items() if k in allowed_fields}
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    
+    result = await db.users.update_one({"user_id": user_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"message": "User updated successfully"}
+
+@api_router.delete("/admin/users/{user_id}")
+async def admin_delete_user(user_id: str, user: dict = Depends(get_current_user)):
+    """Delete a user and associated data"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Prevent self-deletion
+    if user_id == user["user_id"]:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Delete associated data
+    await db.vendors.delete_many({"user_id": user_id})
+    await db.machines.delete_many({"vendor_id": {"$regex": user_id}})
+    await db.user_sessions.delete_many({"user_id": user_id})
+    await db.users.delete_one({"user_id": user_id})
+    
+    return {"message": "User deleted successfully"}
+
+# ============== ADMIN - RFQ MANAGEMENT ==============
+
+@api_router.get("/admin/rfqs")
+async def admin_list_rfqs(user: dict = Depends(get_current_user), status: Optional[str] = None, search: Optional[str] = None):
+    """List all RFQs with optional filtering"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    query = {}
+    if status:
+        query["status"] = status
+    if search:
+        query["$or"] = [
+            {"title": {"$regex": search, "$options": "i"}},
+            {"rfq_id": {"$regex": search, "$options": "i"}}
+        ]
+    
+    rfqs = await db.rfqs.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    
+    # Enrich with buyer info
+    for rfq in rfqs:
+        buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "email": 1})
+        rfq["buyer_info"] = buyer
+    
+    return rfqs
+
+@api_router.get("/admin/rfqs/{rfq_id}")
+async def admin_get_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
+    """Get RFQ details with all related data"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Get related data
+    buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "email": 1})
+    drawings = await db.drawings.find({"rfq_id": rfq_id}, {"_id": 0, "file_data": 0}).to_list(20)
+    quotes = await db.quotes.find({"rfq_id": rfq_id}, {"_id": 0}).to_list(50)
+    
+    # Enrich quotes with vendor info
+    for quote in quotes:
+        vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0, "company_name": 1})
+        quote["vendor_info"] = vendor
+    
+    return {
+        **rfq,
+        "buyer_info": buyer,
+        "drawings": drawings,
+        "quotes": quotes
+    }
+
+@api_router.put("/admin/rfqs/{rfq_id}")
+async def admin_update_rfq(rfq_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Update RFQ details"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    body = await request.json()
+    allowed_fields = ["title", "description", "material_type", "quantity", "tolerance", "surface_finish", "status", "deadline"]
+    update_data = {k: v for k, v in body.items() if k in allowed_fields}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    result = await db.rfqs.update_one({"rfq_id": rfq_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    return {"message": "RFQ updated successfully"}
+
+@api_router.delete("/admin/rfqs/{rfq_id}")
+async def admin_delete_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
+    """Delete an RFQ and associated data"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Delete associated data
+    await db.drawings.delete_many({"rfq_id": rfq_id})
+    await db.quotes.delete_many({"rfq_id": rfq_id})
+    await db.rfqs.delete_one({"rfq_id": rfq_id})
+    
+    return {"message": "RFQ deleted successfully"}
+
+# ============== ADMIN - QUOTE MANAGEMENT ==============
+
+@api_router.get("/admin/quotes")
+async def admin_list_quotes(user: dict = Depends(get_current_user), status: Optional[str] = None):
+    """List all quotes"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    query = {}
+    if status:
+        query["status"] = status
+    
+    quotes = await db.quotes.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    
+    # Enrich with RFQ and vendor info
+    for quote in quotes:
+        rfq = await db.rfqs.find_one({"rfq_id": quote["rfq_id"]}, {"_id": 0, "title": 1})
+        vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0, "company_name": 1})
+        quote["rfq_info"] = rfq
+        quote["vendor_info"] = vendor
+    
+    return quotes
+
+@api_router.put("/admin/quotes/{quote_id}")
+async def admin_update_quote(quote_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Update quote details"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    body = await request.json()
+    allowed_fields = ["price", "lead_time_days", "status", "notes"]
+    update_data = {k: v for k, v in body.items() if k in allowed_fields}
+    
+    result = await db.quotes.update_one({"quote_id": quote_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    
+    return {"message": "Quote updated successfully"}
+
+@api_router.delete("/admin/quotes/{quote_id}")
+async def admin_delete_quote(quote_id: str, user: dict = Depends(get_current_user)):
+    """Delete a quote"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = await db.quotes.delete_one({"quote_id": quote_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    
+    return {"message": "Quote deleted successfully"}
+
+# ============== ADMIN - ORDER MANAGEMENT ==============
+
+@api_router.get("/admin/orders")
+async def admin_list_orders(user: dict = Depends(get_current_user), status: Optional[str] = None):
+    """List all orders"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    query = {}
+    if status:
+        query["status"] = status
+    
+    orders = await db.orders.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    
+    # Enrich with buyer and vendor info
+    for order in orders:
+        buyer = await db.users.find_one({"user_id": order["buyer_id"]}, {"_id": 0, "name": 1, "email": 1})
+        vendor = await db.vendors.find_one({"vendor_id": order["vendor_id"]}, {"_id": 0, "company_name": 1})
+        rfq = await db.rfqs.find_one({"rfq_id": order["rfq_id"]}, {"_id": 0, "title": 1})
+        order["buyer_info"] = buyer
+        order["vendor_info"] = vendor
+        order["rfq_info"] = rfq
+    
+    return orders
+
+@api_router.put("/admin/orders/{order_id}")
+async def admin_update_order(order_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Update order details"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    body = await request.json()
+    allowed_fields = ["status", "payment_status", "total_amount"]
+    update_data = {k: v for k, v in body.items() if k in allowed_fields}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    # Add tracking update if status changed
+    if "status" in update_data:
+        await db.orders.update_one(
+            {"order_id": order_id},
+            {"$push": {"tracking_updates": {
+                "status": update_data["status"],
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "note": f"Status updated by admin"
+            }}}
+        )
+    
+    result = await db.orders.update_one({"order_id": order_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    return {"message": "Order updated successfully"}
+
+@api_router.delete("/admin/orders/{order_id}")
+async def admin_delete_order(order_id: str, user: dict = Depends(get_current_user)):
+    """Delete an order"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = await db.orders.delete_one({"order_id": order_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    return {"message": "Order deleted successfully"}
+
+# ============== ADMIN - DRAWING MANAGEMENT ==============
+
+@api_router.get("/admin/drawings")
+async def admin_list_drawings(user: dict = Depends(get_current_user)):
+    """List all drawings (without file data)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    drawings = await db.drawings.find({}, {"_id": 0, "file_data": 0}).sort("created_at", -1).to_list(200)
+    
+    # Enrich with RFQ info
+    for drawing in drawings:
+        rfq = await db.rfqs.find_one({"rfq_id": drawing["rfq_id"]}, {"_id": 0, "title": 1})
+        drawing["rfq_info"] = rfq
+    
+    return drawings
+
+@api_router.get("/admin/drawings/{drawing_id}")
+async def admin_get_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
+    """Get drawing details including file data"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    drawing = await db.drawings.find_one({"drawing_id": drawing_id}, {"_id": 0})
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+    
+    return drawing
+
+@api_router.delete("/admin/drawings/{drawing_id}")
+async def admin_delete_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
+    """Delete a drawing"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Remove from RFQ drawing_ids
+    drawing = await db.drawings.find_one({"drawing_id": drawing_id}, {"_id": 0})
+    if drawing:
+        await db.rfqs.update_one(
+            {"rfq_id": drawing["rfq_id"]},
+            {"$pull": {"drawing_ids": drawing_id}}
+        )
+    
+    result = await db.drawings.delete_one({"drawing_id": drawing_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+    
+    return {"message": "Drawing deleted successfully"}
+
+# ============== ADMIN - NDA MANAGEMENT ==============
+
+class NDAStatus:
+    DRAFT = "draft"
+    SENT = "sent"
+    SIGNED = "signed"
+    EXPIRED = "expired"
+    REJECTED = "rejected"
+
+class NDACreate(BaseModel):
+    buyer_id: str
+    vendor_id: str
+    rfq_id: Optional[str] = None
+    title: str
+    content: str
+    valid_until: Optional[str] = None
+
+@api_router.post("/admin/ndas")
+async def admin_create_nda(nda: NDACreate, user: dict = Depends(get_current_user)):
+    """Create a new NDA"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    nda_id = f"nda_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    
+    nda_doc = {
+        "nda_id": nda_id,
+        "buyer_id": nda.buyer_id,
+        "vendor_id": nda.vendor_id,
+        "rfq_id": nda.rfq_id,
+        "title": nda.title,
+        "content": nda.content,
+        "status": NDAStatus.DRAFT,
+        "valid_until": nda.valid_until or (datetime.now(timezone.utc) + timedelta(days=365)).isoformat(),
+        "buyer_signed": False,
+        "buyer_signed_at": None,
+        "vendor_signed": False,
+        "vendor_signed_at": None,
+        "created_by": user["user_id"],
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.ndas.insert_one(nda_doc)
+    return {"nda_id": nda_id, "message": "NDA created successfully"}
+
+@api_router.get("/admin/ndas")
+async def admin_list_ndas(user: dict = Depends(get_current_user), status: Optional[str] = None):
+    """List all NDAs"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    query = {}
+    if status:
+        query["status"] = status
+    
+    ndas = await db.ndas.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    
+    # Enrich with buyer and vendor info
+    for nda in ndas:
+        buyer = await db.users.find_one({"user_id": nda["buyer_id"]}, {"_id": 0, "name": 1, "email": 1})
+        vendor = await db.vendors.find_one({"vendor_id": nda["vendor_id"]}, {"_id": 0, "company_name": 1})
+        nda["buyer_info"] = buyer
+        nda["vendor_info"] = vendor
+    
+    return ndas
+
+@api_router.get("/admin/ndas/{nda_id}")
+async def admin_get_nda(nda_id: str, user: dict = Depends(get_current_user)):
+    """Get NDA details"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    nda = await db.ndas.find_one({"nda_id": nda_id}, {"_id": 0})
+    if not nda:
+        raise HTTPException(status_code=404, detail="NDA not found")
+    
+    buyer = await db.users.find_one({"user_id": nda["buyer_id"]}, {"_id": 0, "name": 1, "email": 1})
+    vendor = await db.vendors.find_one({"vendor_id": nda["vendor_id"]}, {"_id": 0, "company_name": 1})
+    
+    return {**nda, "buyer_info": buyer, "vendor_info": vendor}
+
+@api_router.put("/admin/ndas/{nda_id}")
+async def admin_update_nda(nda_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Update NDA details"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    body = await request.json()
+    allowed_fields = ["title", "content", "status", "valid_until"]
+    update_data = {k: v for k, v in body.items() if k in allowed_fields}
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    result = await db.ndas.update_one({"nda_id": nda_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="NDA not found")
+    
+    return {"message": "NDA updated successfully"}
+
+@api_router.post("/admin/ndas/{nda_id}/send")
+async def admin_send_nda(nda_id: str, user: dict = Depends(get_current_user)):
+    """Send NDA to parties for signing"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = await db.ndas.update_one(
+        {"nda_id": nda_id},
+        {"$set": {"status": NDAStatus.SENT, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="NDA not found")
+    
+    return {"message": "NDA sent for signing"}
+
+@api_router.delete("/admin/ndas/{nda_id}")
+async def admin_delete_nda(nda_id: str, user: dict = Depends(get_current_user)):
+    """Delete an NDA"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = await db.ndas.delete_one({"nda_id": nda_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="NDA not found")
+    
+    return {"message": "NDA deleted successfully"}
+
+# ============== NDA ROUTES (for buyers/vendors) ==============
+
+@api_router.get("/ndas")
+async def list_my_ndas(user: dict = Depends(get_current_user)):
+    """Get NDAs for current user"""
+    query = {"$or": [{"buyer_id": user["user_id"]}]}
+    
+    # If vendor, also include vendor NDAs
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if vendor:
+        query["$or"].append({"vendor_id": vendor["vendor_id"]})
+    
+    ndas = await db.ndas.find(query, {"_id": 0}).to_list(50)
+    return ndas
+
+@api_router.post("/ndas/{nda_id}/sign")
+async def sign_nda(nda_id: str, user: dict = Depends(get_current_user)):
+    """Sign an NDA"""
+    nda = await db.ndas.find_one({"nda_id": nda_id}, {"_id": 0})
+    if not nda:
+        raise HTTPException(status_code=404, detail="NDA not found")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    update_data = {"updated_at": now}
+    
+    # Check if user is buyer or vendor
+    if nda["buyer_id"] == user["user_id"]:
+        update_data["buyer_signed"] = True
+        update_data["buyer_signed_at"] = now
+    else:
+        vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+        if vendor and vendor["vendor_id"] == nda["vendor_id"]:
+            update_data["vendor_signed"] = True
+            update_data["vendor_signed_at"] = now
+        else:
+            raise HTTPException(status_code=403, detail="Not authorized to sign this NDA")
+    
+    await db.ndas.update_one({"nda_id": nda_id}, {"$set": update_data})
+    
+    # Check if both parties signed
+    updated_nda = await db.ndas.find_one({"nda_id": nda_id}, {"_id": 0})
+    if updated_nda["buyer_signed"] and updated_nda["vendor_signed"]:
+        await db.ndas.update_one({"nda_id": nda_id}, {"$set": {"status": NDAStatus.SIGNED}})
+    
+    return {"message": "NDA signed successfully"}
+
+# ============== ADMIN - VENDOR MANAGEMENT (Extended) ==============
+
+@api_router.get("/admin/vendors")
+async def admin_list_vendors(user: dict = Depends(get_current_user), approved: Optional[bool] = None):
+    """List all vendors"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    query = {}
+    if approved is not None:
+        query["is_approved"] = approved
+    
+    vendors = await db.vendors.find(query, {"_id": 0}).to_list(200)
+    
+    # Enrich with user info and machine count
+    for vendor in vendors:
+        vendor_user = await db.users.find_one({"user_id": vendor["user_id"]}, {"_id": 0, "email": 1, "name": 1})
+        machine_count = await db.machines.count_documents({"vendor_id": vendor["vendor_id"]})
+        vendor["user_info"] = vendor_user
+        vendor["machine_count"] = machine_count
+    
+    return vendors
+
+@api_router.put("/admin/vendors/{vendor_id}")
+async def admin_update_vendor(vendor_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Update vendor details"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    body = await request.json()
+    allowed_fields = ["company_name", "is_approved", "rating", "description", "certifications", "industries"]
+    update_data = {k: v for k, v in body.items() if k in allowed_fields}
+    
+    result = await db.vendors.update_one({"vendor_id": vendor_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    return {"message": "Vendor updated successfully"}
+
+@api_router.post("/admin/vendors/{vendor_id}/reject")
+async def admin_reject_vendor(vendor_id: str, user: dict = Depends(get_current_user)):
+    """Reject/unapprove a vendor"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = await db.vendors.update_one(
+        {"vendor_id": vendor_id},
+        {"$set": {"is_approved": False}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    return {"message": "Vendor rejected"}
 
 # ============== DASHBOARD STATS ==============
 
