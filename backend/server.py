@@ -2701,15 +2701,28 @@ async def admin_create_machine(request: Request, user: dict = Depends(get_curren
         "vendor_id": vendor_id,
         "name": body.get("name", ""),
         "machine_type": body.get("machine_type", ""),
+        "machine_category": body.get("machine_category", ""),
         "brand": body.get("brand", ""),
         "model": body.get("model", ""),
         "year_purchased": body.get("year_purchased"),
         "tolerance": body.get("tolerance", 0.01),
+        # Milling/VMC dimensions
         "max_x": body.get("max_x", 0),
         "max_y": body.get("max_y", 0),
         "max_z": body.get("max_z", 0),
-        "max_diameter": body.get("max_diameter", 0),
+        # Lathe/Turning dimensions
         "max_length": body.get("max_length", 0),
+        "max_diameter": body.get("max_diameter", 0),
+        "max_swing": body.get("max_swing", 0),
+        # Boring machine dimensions
+        "bore_diameter": body.get("bore_diameter", 0),
+        "outer_diameter": body.get("outer_diameter", 0),
+        # Sheet metal / Cutting dimensions
+        "max_thickness": body.get("max_thickness", 0),
+        "tonnage": body.get("tonnage", 0),
+        # EDM specific
+        "max_taper_angle": body.get("max_taper_angle", 0),
+        # General
         "materials": body.get("materials", []),
         "is_active": body.get("is_active", True),
         "created_at": datetime.now(timezone.utc).isoformat()
