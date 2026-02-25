@@ -1542,6 +1542,25 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         }}
     )
     
+    # Send email notifications to matched vendors (non-blocking)
+    app_url = os.environ.get("APP_URL", "https://vendor-matching-demo.preview.emergentagent.com")
+    buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1})
+    
+    for matched in matched_vendors:
+        vendor_user = await db.users.find_one({"user_id": matched.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
+        if vendor_user and vendor_user.get("email"):
+            email_data = {
+                "vendor_name": vendor_user.get("name", "Vendor"),
+                "rfq_title": rfq.get("title", "New RFQ"),
+                "material": rfq.get("material_type", "N/A"),
+                "quantity": rfq.get("quantity", "N/A"),
+                "buyer_name": buyer.get("name", "Buyer") if buyer else "Buyer",
+                "match_score": matched.get("suitability_score", 0),
+                "app_url": f"{app_url}/vendor/dashboard"
+            }
+            subject, html = get_email_template("vendor_matched", email_data)
+            asyncio.create_task(send_email_async(vendor_user["email"], subject, html))
+    
     return {"matched_vendors": matched_vendors, "total_matches": len(matched_vendors)}
 
 @api_router.post("/rfqs/{rfq_id}/submit")
