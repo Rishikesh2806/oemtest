@@ -1248,19 +1248,25 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
   
   const openEditMachine = (machine) => {
     setEditMachine(machine);
+    // Handle both old (tolerance_capability, materials_supported) and new (tolerance, materials) field names
     setMachineForm({
-      name: machine.name || "",
+      name: machine.name || machine.model || "",
       machine_type: machine.machine_type || "",
       brand: machine.brand || "",
       model: machine.model || "",
-      tolerance: machine.tolerance || 0.01,
+      tolerance: machine.tolerance || machine.tolerance_capability || 0.01,
       max_x: machine.max_x || 0,
       max_y: machine.max_y || 0,
       max_z: machine.max_z || 0,
       max_diameter: machine.max_diameter || 0,
-      materials: machine.materials?.join(", ") || ""
+      materials: (machine.materials || machine.materials_supported)?.join(", ") || ""
     });
   };
+  
+  // Helper to get machine display name
+  const getMachineName = (machine) => machine.name || `${machine.brand} ${machine.model}`.trim() || "Unnamed Machine";
+  const getMachineTolerance = (machine) => machine.tolerance || machine.tolerance_capability || 0;
+  const getMachineMaterials = (machine) => machine.materials || machine.materials_supported || [];
 
   // Vendor Profile Detail View
   if (selectedVendor && vendorProfile) {
