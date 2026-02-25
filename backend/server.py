@@ -1138,7 +1138,7 @@ async def view_drawing(drawing_id: str, token: Optional[str] = None, request: Re
         raise HTTPException(status_code=401, detail="Authentication required")
     
     try:
-        payload = jwt.decode(auth_token, JWT_SECRET_KEY, algorithms=["HS256"])
+        payload = jwt.decode(auth_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
