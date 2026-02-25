@@ -1156,12 +1156,44 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
   const [profileLoading, setProfileLoading] = useState(false);
   const [editMachine, setEditMachine] = useState(null);
   const [createMachineOpen, setCreateMachineOpen] = useState(false);
+  const [machineCategories, setMachineCategories] = useState({});
   const [machineForm, setMachineForm] = useState({
-    name: "", machine_type: "", brand: "", model: "", 
+    name: "", machine_category: "", machine_type: "", brand: "", model: "", 
     tolerance: 0.01, max_x: 0, max_y: 0, max_z: 0,
-    max_diameter: 0, materials: []
+    max_diameter: 0, max_length: 0, max_swing: 0,
+    bore_diameter: 0, outer_diameter: 0, max_thickness: 0, tonnage: 0,
+    max_taper_angle: 0, materials: ""
   });
   const [profileForm, setProfileForm] = useState({});
+  
+  // Load machine categories on mount
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const res = await api.get("/machine-categories");
+        setMachineCategories(res.data);
+      } catch (error) {
+        console.error("Failed to load machine categories");
+      }
+    };
+    loadCategories();
+  }, []);
+  
+  // Get dimension fields based on selected category
+  const getDimensionFields = () => {
+    if (!machineForm.machine_category || !machineCategories[machineForm.machine_category]) {
+      return [];
+    }
+    return machineCategories[machineForm.machine_category].dimension_fields || [];
+  };
+  
+  // Get machine types for selected category
+  const getMachineTypes = () => {
+    if (!machineForm.machine_category || !machineCategories[machineForm.machine_category]) {
+      return [];
+    }
+    return machineCategories[machineForm.machine_category].types || [];
+  };
   
   const filteredVendors = vendors.filter(v => {
     if (approvedFilter === "all") return true;
