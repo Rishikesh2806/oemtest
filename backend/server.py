@@ -2679,6 +2679,94 @@ async def admin_list_all_machines(user: dict = Depends(get_current_user), vendor
     
     return machines
 
+@api_router.get("/machine-categories")
+async def get_machine_categories():
+    """Get machine categories with their specific dimension fields"""
+    categories = {
+        "Turning/Lathe": {
+            "types": ["CNC Lathe", "CNC Turning", "Swiss Lathe", "Turret Lathe"],
+            "dimension_fields": [
+                {"key": "max_length", "label": "Max Length (mm)", "type": "number"},
+                {"key": "max_diameter", "label": "Max Diameter (mm)", "type": "number"},
+                {"key": "max_swing", "label": "Max Swing Over Bed (mm)", "type": "number"}
+            ]
+        },
+        "Milling": {
+            "types": ["CNC Milling", "VMC", "HMC", "Vertical Milling", "Horizontal Milling"],
+            "dimension_fields": [
+                {"key": "max_x", "label": "Max X Travel (mm)", "type": "number"},
+                {"key": "max_y", "label": "Max Y Travel (mm)", "type": "number"},
+                {"key": "max_z", "label": "Max Z Travel (mm)", "type": "number"}
+            ]
+        },
+        "5-Axis Machining": {
+            "types": ["5-Axis VMC", "5-Axis HMC", "5-Axis Mill-Turn"],
+            "dimension_fields": [
+                {"key": "max_x", "label": "Max X Travel (mm)", "type": "number"},
+                {"key": "max_y", "label": "Max Y Travel (mm)", "type": "number"},
+                {"key": "max_z", "label": "Max Z Travel (mm)", "type": "number"},
+                {"key": "max_diameter", "label": "Max Part Diameter (mm)", "type": "number"}
+            ]
+        },
+        "Boring": {
+            "types": ["Horizontal Boring", "Vertical Boring", "Jig Boring", "Line Boring"],
+            "dimension_fields": [
+                {"key": "bore_diameter", "label": "Max Bore Diameter (mm)", "type": "number"},
+                {"key": "outer_diameter", "label": "Max OD (mm)", "type": "number"},
+                {"key": "max_length", "label": "Max Length (mm)", "type": "number"}
+            ]
+        },
+        "Grinding": {
+            "types": ["Surface Grinding", "Cylindrical Grinding", "Centerless Grinding", "ID Grinding"],
+            "dimension_fields": [
+                {"key": "max_x", "label": "Max Length (mm)", "type": "number"},
+                {"key": "max_y", "label": "Max Width (mm)", "type": "number"},
+                {"key": "max_diameter", "label": "Max Diameter (mm)", "type": "number"}
+            ]
+        },
+        "EDM": {
+            "types": ["Wire EDM", "Sinker EDM", "Hole Drilling EDM"],
+            "dimension_fields": [
+                {"key": "max_x", "label": "Max X (mm)", "type": "number"},
+                {"key": "max_y", "label": "Max Y (mm)", "type": "number"},
+                {"key": "max_z", "label": "Max Z (mm)", "type": "number"},
+                {"key": "max_taper_angle", "label": "Max Taper Angle (°)", "type": "number"}
+            ]
+        },
+        "Cutting": {
+            "types": ["Laser Cutting", "Plasma Cutting", "Waterjet Cutting", "Oxy-Fuel Cutting"],
+            "dimension_fields": [
+                {"key": "max_x", "label": "Max Length (mm)", "type": "number"},
+                {"key": "max_y", "label": "Max Width (mm)", "type": "number"},
+                {"key": "max_thickness", "label": "Max Thickness (mm)", "type": "number"}
+            ]
+        },
+        "Sheet Metal": {
+            "types": ["Press Brake", "Punch Press", "Shearing", "Roll Forming"],
+            "dimension_fields": [
+                {"key": "max_length", "label": "Max Length (mm)", "type": "number"},
+                {"key": "max_thickness", "label": "Max Thickness (mm)", "type": "number"},
+                {"key": "tonnage", "label": "Tonnage", "type": "number"}
+            ]
+        },
+        "Welding": {
+            "types": ["MIG Welding", "TIG Welding", "Spot Welding", "Laser Welding", "Robot Welding"],
+            "dimension_fields": [
+                {"key": "max_thickness", "label": "Max Thickness (mm)", "type": "number"},
+                {"key": "max_length", "label": "Max Weld Length (mm)", "type": "number"}
+            ]
+        },
+        "Additive Manufacturing": {
+            "types": ["3D Printing", "SLS", "SLA", "DMLS", "FDM"],
+            "dimension_fields": [
+                {"key": "max_x", "label": "Build X (mm)", "type": "number"},
+                {"key": "max_y", "label": "Build Y (mm)", "type": "number"},
+                {"key": "max_z", "label": "Build Z (mm)", "type": "number"}
+            ]
+        }
+    }
+    return categories
+
 @api_router.post("/admin/machines")
 async def admin_create_machine(request: Request, user: dict = Depends(get_current_user)):
     """Create a machine for any vendor (admin)"""
