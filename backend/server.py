@@ -2602,6 +2602,172 @@ async def admin_reject_vendor(vendor_id: str, user: dict = Depends(get_current_u
     
     return {"message": "Vendor rejected"}
 
+# ============== ADMIN - VENDOR PROFILE MANAGEMENT ==============
+
+@api_router.get("/admin/vendors/{vendor_id}/full")
+async def admin_get_vendor_full_profile(vendor_id: str, user: dict = Depends(get_current_user)):
+    """Get complete vendor profile with all details for admin editing"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    vendor = await db.vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    # Get user info
+    vendor_user = await db.users.find_one({"user_id": vendor["user_id"]}, {"_id": 0, "password_hash": 0})
+    
+    # Get all machines
+    machines = await db.machines.find({"vendor_id": vendor_id}, {"_id": 0}).to_list(100)
+    
+    # Get stats
+    quotes = await db.quotes.find({"vendor_id": vendor_id}, {"_id": 0}).to_list(100)
+    orders = await db.orders.find({"vendor_id": vendor_id}, {"_id": 0}).to_list(100)
+    
+    return {
+        "vendor": vendor,
+        "user_info": vendor_user,
+        "machines": machines,
+        "stats": {
+            "total_machines": len(machines),
+            "total_quotes": len(quotes),
+            "accepted_quotes": len([q for q in quotes if q.get("status") == "accepted"]),
+            "total_orders": len(orders),
+            "completed_orders": len([o for o in orders if o.get("status") == "completed"]),
+            "total_revenue": sum(o.get("total_amount", 0) for o in orders if o.get("payment_status") == "paid")
+        }
+    }
+
+@api_router.put("/admin/vendors/{vendor_id}/profile")
+async def admin_update_vendor_profile(vendor_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Update vendor profile details (admin)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    body = await request.json()
+    
+    # Allowed vendor fields
+    vendor_fields = ["company_name", "description", "phone", "website", "address", "city", "country", 
+                     "certifications", "industries", "is_approved", "rating", "min_order_value", "lead_time_days"]
+    vendor_update = {k: v for k, v in body.items() if k in vendor_fields}
+    
+    if vendor_update:
+        result = await db.vendors.update_one({"vendor_id": vendor_id}, {"$set": vendor_update})
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    return {"message": "Vendor profile updated successfully"}
+
+# ============== ADMIN - MACHINE MANAGEMENT ==============
+
+@api_router.get("/admin/machines")
+async def admin_list_all_machines(user: dict = Depends(get_current_user), vendor_id: Optional[str] = None):
+    """List all machines, optionally filtered by vendor"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    query = {}
+    if vendor_id:
+        query["vendor_id"] = vendor_id
+    
+    machines = await db.machines.find(query, {"_id": 0}).to_list(500)
+    
+    # Enrich with vendor info
+    for machine in machines:
+        vendor = await db.vendors.find_one({"vendor_id": machine["vendor_id"]}, {"_id": 0, "company_name": 1})
+        machine["vendor_name"] = vendor.get("company_name") if vendor else "Unknown"
+    
+    return machines
+
+@api_router.post("/admin/machines")
+async def admin_create_machine(request: Request, user: dict = Depends(get_current_user)):
+    """Create a machine for any vendor (admin)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    body = await request.json()
+    vendor_id = body.get("vendor_id")
+    
+    if not vendor_id:
+        raise HTTPException(status_code=400, detail="vendor_id is required")
+    
+    vendor = await db.vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    machine_id = f"machine_{uuid.uuid4().hex[:12]}"
+    machine_doc = {
+        "machine_id": machine_id,
+        "vendor_id": vendor_id,
+        "name": body.get("name", ""),
+        "machine_type": body.get("machine_type", ""),
+        "brand": body.get("brand", ""),
+        "model": body.get("model", ""),
+        "year_purchased": body.get("year_purchased"),
+        "tolerance": body.get("tolerance", 0.01),
+        "max_x": body.get("max_x", 0),
+        "max_y": body.get("max_y", 0),
+        "max_z": body.get("max_z", 0),
+        "max_diameter": body.get("max_diameter", 0),
+        "max_length": body.get("max_length", 0),
+        "materials": body.get("materials", []),
+        "is_active": body.get("is_active", True),
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.machines.insert_one(machine_doc)
+    return {"machine_id": machine_id, "message": "Machine created successfully"}
+
+@api_router.get("/admin/machines/{machine_id}")
+async def admin_get_machine(machine_id: str, user: dict = Depends(get_current_user)):
+    """Get machine details (admin)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    machine = await db.machines.find_one({"machine_id": machine_id}, {"_id": 0})
+    if not machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    
+    # Get vendor info
+    vendor = await db.vendors.find_one({"vendor_id": machine["vendor_id"]}, {"_id": 0, "company_name": 1})
+    machine["vendor_name"] = vendor.get("company_name") if vendor else "Unknown"
+    
+    return machine
+
+@api_router.put("/admin/machines/{machine_id}")
+async def admin_update_machine(machine_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Update any machine (admin)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    body = await request.json()
+    
+    # Allowed fields
+    allowed_fields = ["name", "machine_type", "brand", "model", "year_purchased", "tolerance",
+                      "max_x", "max_y", "max_z", "max_diameter", "max_length", "materials", "is_active"]
+    update_data = {k: v for k, v in body.items() if k in allowed_fields}
+    
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    
+    result = await db.machines.update_one({"machine_id": machine_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    
+    return {"message": "Machine updated successfully"}
+
+@api_router.delete("/admin/machines/{machine_id}")
+async def admin_delete_machine(machine_id: str, user: dict = Depends(get_current_user)):
+    """Delete any machine (admin)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = await db.machines.delete_one({"machine_id": machine_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    
+    return {"message": "Machine deleted successfully"}
+
 # ============== DASHBOARD STATS ==============
 
 @api_router.get("/dashboard/buyer")
