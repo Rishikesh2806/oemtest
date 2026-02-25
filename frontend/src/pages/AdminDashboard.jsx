@@ -1487,66 +1487,94 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
             <DialogHeader>
               <DialogTitle>{editMachine ? "Edit Machine" : "Add New Machine"}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 mt-4 max-h-[60vh] overflow-y-auto">
+            <div className="space-y-4 mt-4 max-h-[60vh] overflow-y-auto pr-2">
               <div className="grid grid-cols-2 gap-4">
+                {/* Machine Name */}
                 <div className="col-span-2">
                   <Label>Machine Name</Label>
                   <Input value={machineForm.name} onChange={(e) => setMachineForm(m => ({...m, name: e.target.value}))} placeholder="e.g. Haas VF-2SS" />
                 </div>
-                <div>
-                  <Label>Machine Type</Label>
-                  <Select value={machineForm.machine_type} onValueChange={(v) => setMachineForm(m => ({...m, machine_type: v}))}>
-                    <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                
+                {/* Machine Category - Primary Selection */}
+                <div className="col-span-2">
+                  <Label className="text-orange-600 font-medium">Machine Category *</Label>
+                  <Select 
+                    value={machineForm.machine_category} 
+                    onValueChange={(v) => setMachineForm(m => ({...m, machine_category: v, machine_type: ""}))}
+                  >
+                    <SelectTrigger className="border-orange-200 focus:ring-orange-500"><SelectValue placeholder="Select category first" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="CNC Milling">CNC Milling</SelectItem>
-                      <SelectItem value="CNC Turning">CNC Turning</SelectItem>
-                      <SelectItem value="5-Axis VMC">5-Axis VMC</SelectItem>
-                      <SelectItem value="CNC Lathe">CNC Lathe</SelectItem>
-                      <SelectItem value="Wire EDM">Wire EDM</SelectItem>
-                      <SelectItem value="Surface Grinding">Surface Grinding</SelectItem>
-                      <SelectItem value="Cylindrical Grinding">Cylindrical Grinding</SelectItem>
-                      <SelectItem value="MIG Welding">MIG Welding</SelectItem>
-                      <SelectItem value="TIG Welding">TIG Welding</SelectItem>
-                      <SelectItem value="Laser Cutting">Laser Cutting</SelectItem>
-                      <SelectItem value="Plasma Cutting">Plasma Cutting</SelectItem>
-                      <SelectItem value="3D Printing">3D Printing</SelectItem>
+                      {Object.keys(machineCategories).map((category) => (
+                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
+                
+                {/* Machine Type - Based on Category */}
+                <div>
+                  <Label>Machine Type</Label>
+                  <Select 
+                    value={machineForm.machine_type} 
+                    onValueChange={(v) => setMachineForm(m => ({...m, machine_type: v}))}
+                    disabled={!machineForm.machine_category}
+                  >
+                    <SelectTrigger><SelectValue placeholder={machineForm.machine_category ? "Select type" : "Select category first"} /></SelectTrigger>
+                    <SelectContent>
+                      {getMachineTypes().map((type) => (
+                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {/* Brand */}
                 <div>
                   <Label>Brand</Label>
                   <Input value={machineForm.brand} onChange={(e) => setMachineForm(m => ({...m, brand: e.target.value}))} placeholder="e.g. Haas, DMG Mori" />
                 </div>
+                
+                {/* Model */}
                 <div>
                   <Label>Model</Label>
                   <Input value={machineForm.model} onChange={(e) => setMachineForm(m => ({...m, model: e.target.value}))} placeholder="e.g. VF-2SS" />
                 </div>
+                
+                {/* Tolerance */}
                 <div>
                   <Label>Tolerance (mm)</Label>
-                  <Input type="number" step="0.001" value={machineForm.tolerance} onChange={(e) => setMachineForm(m => ({...m, tolerance: parseFloat(e.target.value)}))} />
+                  <Input type="number" step="0.001" value={machineForm.tolerance} onChange={(e) => setMachineForm(m => ({...m, tolerance: parseFloat(e.target.value) || 0}))} />
                 </div>
-                <div>
-                  <Label>Max X (mm)</Label>
-                  <Input type="number" value={machineForm.max_x} onChange={(e) => setMachineForm(m => ({...m, max_x: parseInt(e.target.value)}))} />
-                </div>
-                <div>
-                  <Label>Max Y (mm)</Label>
-                  <Input type="number" value={machineForm.max_y} onChange={(e) => setMachineForm(m => ({...m, max_y: parseInt(e.target.value)}))} />
-                </div>
-                <div>
-                  <Label>Max Z (mm)</Label>
-                  <Input type="number" value={machineForm.max_z} onChange={(e) => setMachineForm(m => ({...m, max_z: parseInt(e.target.value)}))} />
-                </div>
-                <div>
-                  <Label>Max Diameter (mm)</Label>
-                  <Input type="number" value={machineForm.max_diameter} onChange={(e) => setMachineForm(m => ({...m, max_diameter: parseInt(e.target.value)}))} />
-                </div>
-                <div className="col-span-2">
+                
+                {/* Conditional Dimension Fields Based on Category */}
+                {machineForm.machine_category && (
+                  <>
+                    <div className="col-span-2 border-t pt-4 mt-2">
+                      <p className="text-sm font-medium text-slate-700 mb-3">
+                        {machineForm.machine_category} Dimensions
+                      </p>
+                    </div>
+                    {getDimensionFields().map((field) => (
+                      <div key={field.key}>
+                        <Label>{field.label}</Label>
+                        <Input 
+                          type="number" 
+                          step={field.key.includes("angle") ? "0.1" : "1"}
+                          value={machineForm[field.key] || 0} 
+                          onChange={(e) => setMachineForm(m => ({...m, [field.key]: parseFloat(e.target.value) || 0}))} 
+                        />
+                      </div>
+                    ))}
+                  </>
+                )}
+                
+                {/* Materials */}
+                <div className="col-span-2 border-t pt-4 mt-2">
                   <Label>Materials (comma-separated)</Label>
                   <Input value={machineForm.materials} onChange={(e) => setMachineForm(m => ({...m, materials: e.target.value}))} placeholder="Aluminum, Steel, Stainless Steel, Titanium" />
                 </div>
               </div>
-              <Button onClick={saveMachine} className="w-full bg-orange-600 hover:bg-orange-700">
+              <Button onClick={saveMachine} className="w-full bg-orange-600 hover:bg-orange-700" disabled={!machineForm.machine_category}>
                 {editMachine ? "Update Machine" : "Create Machine"}
               </Button>
             </div>
