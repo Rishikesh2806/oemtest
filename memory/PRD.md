@@ -10,6 +10,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - **AI**: OpenAI GPT-5.2 Vision (via Emergent LLM Key)
 - **Auth**: JWT + Emergent Google OAuth
 - **Payments**: Stripe (test mode)
+- **Email**: Resend API
 
 ## User Personas
 1. **Buyer** - Engineers/procurement teams sourcing manufacturing services
@@ -26,6 +27,8 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Vendor profile and machine capability management
 - Buyer-vendor messaging system
 - Full admin panel with data management capabilities
+- Email notifications for key events
+- Drawing view/download functionality
 
 ## What's Been Implemented (Feb 2026)
 
@@ -42,15 +45,14 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - ✅ Dashboard statistics APIs
 - ✅ Messaging/Chat APIs
 - ✅ Vendor Full Profile API
-
-### Admin Management APIs (NEW - Feb 25, 2026)
-- ✅ **User Management**: GET /api/admin/users, PUT /api/admin/users/{id}, DELETE /api/admin/users/{id}
-- ✅ **RFQ Management**: GET /api/admin/rfqs, GET /api/admin/rfqs/{id}, PUT /api/admin/rfqs/{id}, DELETE /api/admin/rfqs/{id}
-- ✅ **Quote Management**: GET /api/admin/quotes, PUT /api/admin/quotes/{id}, DELETE /api/admin/quotes/{id}
-- ✅ **Order Management**: GET /api/admin/orders, PUT /api/admin/orders/{id}, DELETE /api/admin/orders/{id}
-- ✅ **Drawing Management**: GET /api/admin/drawings, GET /api/admin/drawings/{id}, DELETE /api/admin/drawings/{id}
-- ✅ **Vendor Management**: GET /api/admin/vendors, PUT /api/admin/vendors/{id}, approve/reject vendors
-- ✅ **NDA Management**: POST /api/admin/ndas, GET /api/admin/ndas, PUT /api/admin/ndas/{id}, POST /api/admin/ndas/{id}/send, DELETE /api/admin/ndas/{id}
+- ✅ **Admin Management APIs** (users, rfqs, quotes, orders, drawings, vendors, ndas)
+- ✅ **Email Notifications (NEW - Feb 25, 2026)**
+  - Resend API integration
+  - Templates: vendor_matched, quote_received, quote_accepted, order_status_update, new_message
+  - Non-blocking async email sending
+- ✅ **Drawing View/Download (NEW - Feb 25, 2026)**
+  - GET /api/drawings/{id}/view - View in browser (supports token auth in query param)
+  - GET /api/drawings/{id}/download - Download as attachment
 
 ### Frontend (React)
 - ✅ Landing page with hero, features, how-it-works
@@ -66,35 +68,35 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - ✅ Order detail with payment & tracking
 - ✅ VendorProfileView page
 - ✅ ChatPage (messaging between buyers/vendors)
-
-### Admin Dashboard (NEW - Feb 25, 2026)
-- ✅ **Overview Tab**: Platform stats (users, vendors, RFQs, quotes, orders, NDAs), pending vendor approvals
-- ✅ **Users Tab**: Search, role filter, user table, edit/delete users
-- ✅ **Vendors Tab**: Filter by approval status, approve/reject vendors, edit vendor details
-- ✅ **RFQs Tab**: Search, status filter, RFQ table with buyer info, edit/delete RFQs
-- ✅ **Quotes Tab**: Status filter, quotes table with vendor/RFQ info, edit/delete quotes
-- ✅ **Orders Tab**: Status filter, orders table with all party info, edit status/payment, delete orders
-- ✅ **Drawings Tab**: Drawings list with AI analysis status, delete drawings
-- ✅ **NDAs Tab**: Create new NDA, list NDAs with signature status, edit/send/delete NDAs
+- ✅ **Admin Dashboard** (8 tabs: Overview, Users, Vendors, RFQs, Quotes, Orders, Drawings, NDAs)
+- ✅ **Drawing View/Download buttons (NEW - Feb 25, 2026)**
+  - Image preview for supported formats
+  - View button (opens in new tab)
+  - Download button (triggers file download)
 
 ### Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders
 - payment_transactions, messages, conversations
-- **ndas** (NEW)
+- ndas
+
+## Email Notification Triggers
+1. **vendor_matched** - When vendor is matched to an RFQ
+2. **quote_received** - When buyer receives a quote
+3. **quote_accepted** - When vendor's quote is accepted
+4. **order_status_update** - When order status changes
+5. **new_message** - When user receives a message
 
 ## Prioritized Backlog
 
-### P0 - Critical (Next Sprint)
-- [ ] Email notifications for RFQ updates
-- [ ] Real vendor data seeding
-- [ ] File download for drawings
+### P0 - Critical (Completed)
+- ✅ Email notifications
+- ✅ Drawing view/download
+- ✅ Full Admin Panel
 
-### P1 - High Priority
-- ✅ Chat between buyer & vendor (DONE)
-- ✅ Full Admin Panel (DONE)
-- [ ] Capacity calendar for vendors
-- [ ] Revenue analytics charts
+### P1 - High Priority (Next)
+- [ ] Real vendor data seeding with realistic machine specs
+- [ ] Revenue analytics charts on admin dashboard
 - [ ] Multi-file drawing upload
 
 ### P2 - Medium Priority
@@ -113,15 +115,22 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 
 ## Test Credentials
 - **Admin**: admin@offoadex.com / admin123
-- **Test Buyer**: Can register via UI
+- **Test Buyer**: testbuyer_1772037252@test.com / TestPass123!
 - **Test Vendor**: Can register via UI
 
 ## Test Reports
 - /app/test_reports/iteration_1.json - Chat/Profile features (100% pass)
 - /app/test_reports/iteration_2.json - Admin Panel (100% pass)
+- /app/test_reports/iteration_3.json - Email & Drawings (100% pass)
+
+## API Keys Configured
+- EMERGENT_LLM_KEY: GPT-5.2 Vision for drawing analysis
+- STRIPE_API_KEY: Payment processing (test mode)
+- RESEND_API_KEY: Email notifications
+- SENDER_EMAIL: onboarding@resend.dev
 
 ## Next Tasks
-1. Add email notifications (SendGrid/Resend)
-2. Seed demo vendor data with real machine specs
-3. Add analytics charts to dashboards
-4. Enhance AI analysis with more drawing formats
+1. Seed realistic vendor data with machine specifications
+2. Add analytics charts to admin dashboard
+3. Improve mobile responsiveness
+4. Add vendor rating/review system
