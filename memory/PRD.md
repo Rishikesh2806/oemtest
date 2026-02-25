@@ -17,19 +17,6 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 2. **Vendor** - Machine shops/manufacturers offering services
 3. **Admin** - Platform administrators with full CRUD access to all data
 
-## Core Requirements (Static)
-- Multi-role authentication (Buyer, Vendor, Admin)
-- RFQ creation with drawing upload
-- AI-powered drawing analysis
-- Smart vendor matching algorithm
-- Quote submission and comparison
-- Order management with payment processing
-- Vendor profile and machine capability management
-- Buyer-vendor messaging system
-- Full admin panel with data management capabilities
-- Email notifications for key events
-- Drawing view/download functionality
-
 ## What's Been Implemented (Feb 2026)
 
 ### Backend (FastAPI)
@@ -38,7 +25,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - ✅ RFQ CRUD operations
 - ✅ Drawing upload with base64 storage
 - ✅ AI drawing analysis (GPT-5.2 Vision)
-- ✅ Vendor matching algorithm (with user_id for chat)
+- ✅ Vendor matching algorithm
 - ✅ Quote management
 - ✅ Order creation and tracking
 - ✅ Stripe payment integration
@@ -46,13 +33,17 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - ✅ Messaging/Chat APIs
 - ✅ Vendor Full Profile API
 - ✅ **Admin Management APIs** (users, rfqs, quotes, orders, drawings, vendors, ndas)
-- ✅ **Email Notifications (NEW - Feb 25, 2026)**
-  - Resend API integration
-  - Templates: vendor_matched, quote_received, quote_accepted, order_status_update, new_message
-  - Non-blocking async email sending
-- ✅ **Drawing View/Download (NEW - Feb 25, 2026)**
-  - GET /api/drawings/{id}/view - View in browser (supports token auth in query param)
-  - GET /api/drawings/{id}/download - Download as attachment
+- ✅ **Email Notifications** (Resend API integration)
+- ✅ **Drawing View/Download** (token-based browser viewing)
+- ✅ **Admin Vendor Profile Management (NEW - Feb 25)**
+  - GET /api/admin/vendors/{id}/full - Full vendor profile with machines and stats
+  - PUT /api/admin/vendors/{id}/profile - Update vendor profile
+- ✅ **Admin Machine Management (NEW - Feb 25)**
+  - GET /api/admin/machines - List all machines (filter by vendor)
+  - POST /api/admin/machines - Create machine for any vendor
+  - GET /api/admin/machines/{id} - Get machine details
+  - PUT /api/admin/machines/{id} - Update any machine
+  - DELETE /api/admin/machines/{id} - Delete any machine
 
 ### Frontend (React)
 - ✅ Landing page with hero, features, how-it-works
@@ -61,6 +52,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - ✅ Buyer dashboard with stats
 - ✅ Multi-step RFQ creation wizard
 - ✅ RFQ detail with AI analysis display
+- ✅ **Drawing View/Download buttons** on RFQ detail
 - ✅ Vendor dashboard
 - ✅ Vendor profile management
 - ✅ Machine management (CRUD)
@@ -68,11 +60,12 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - ✅ Order detail with payment & tracking
 - ✅ VendorProfileView page
 - ✅ ChatPage (messaging between buyers/vendors)
-- ✅ **Admin Dashboard** (8 tabs: Overview, Users, Vendors, RFQs, Quotes, Orders, Drawings, NDAs)
-- ✅ **Drawing View/Download buttons (NEW - Feb 25, 2026)**
-  - Image preview for supported formats
-  - View button (opens in new tab)
-  - Download button (triggers file download)
+- ✅ **Admin Dashboard** (8 tabs)
+- ✅ **Admin Vendor Profile Management (NEW - Feb 25)**
+  - View/Edit vendor profile (company info, certifications, industries, location, rating)
+  - Machines list with CRUD operations
+  - Add Machine dialog with all fields
+  - Edit/Delete machine functionality
 
 ### Database Collections
 - users, user_sessions, vendors, machines
@@ -87,17 +80,27 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 4. **order_status_update** - When order status changes
 5. **new_message** - When user receives a message
 
+## Test Reports
+- /app/test_reports/iteration_1.json - Chat/Profile features (100% pass)
+- /app/test_reports/iteration_2.json - Admin Panel (100% pass)
+- /app/test_reports/iteration_3.json - Email & Drawings (100% pass)
+- /app/test_reports/iteration_4.json - Admin Vendor/Machine Management (100% pass)
+
+## Test Credentials
+- **Admin**: admin@offoadex.com / admin123
+
 ## Prioritized Backlog
 
 ### P0 - Critical (Completed)
 - ✅ Email notifications
 - ✅ Drawing view/download
 - ✅ Full Admin Panel
+- ✅ Admin Vendor/Machine Management
 
 ### P1 - High Priority (Next)
-- [ ] Real vendor data seeding with realistic machine specs
 - [ ] Revenue analytics charts on admin dashboard
-- [ ] Multi-file drawing upload
+- [ ] Vendor capacity calendar
+- [ ] Bulk machine import (CSV)
 
 ### P2 - Medium Priority
 - [ ] WhatsApp/SMS notifications
@@ -113,24 +116,8 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - [ ] Multi-currency support
 - [ ] Mobile app version
 
-## Test Credentials
-- **Admin**: admin@offoadex.com / admin123
-- **Test Buyer**: testbuyer_1772037252@test.com / TestPass123!
-- **Test Vendor**: Can register via UI
-
-## Test Reports
-- /app/test_reports/iteration_1.json - Chat/Profile features (100% pass)
-- /app/test_reports/iteration_2.json - Admin Panel (100% pass)
-- /app/test_reports/iteration_3.json - Email & Drawings (100% pass)
-
-## API Keys Configured
-- EMERGENT_LLM_KEY: GPT-5.2 Vision for drawing analysis
-- STRIPE_API_KEY: Payment processing (test mode)
-- RESEND_API_KEY: Email notifications
-- SENDER_EMAIL: onboarding@resend.dev
-
 ## Next Tasks
-1. Seed realistic vendor data with machine specifications
-2. Add analytics charts to admin dashboard
-3. Improve mobile responsiveness
-4. Add vendor rating/review system
+1. Add revenue analytics charts to admin dashboard
+2. Implement vendor capacity calendar
+3. Add vendor rating/review system
+4. Improve mobile responsiveness
