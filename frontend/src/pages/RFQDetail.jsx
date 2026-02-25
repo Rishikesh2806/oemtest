@@ -433,19 +433,84 @@ const RFQDetail = () => {
               <CardTitle className="font-heading text-lg">Uploaded Drawings</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {drawings.map((drawing) => (
-                  <div 
-                    key={drawing.drawing_id}
-                    className="p-4 bg-slate-50 rounded-lg border border-slate-200"
-                  >
-                    <FileText className="w-8 h-8 text-slate-400 mb-2" />
-                    <p className="text-sm font-medium text-slate-900 truncate">{drawing.filename}</p>
-                    <p className="text-xs text-slate-500">
-                      {(drawing.file_size / 1024).toFixed(1)} KB
-                    </p>
-                  </div>
-                ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {drawings.map((drawing) => {
+                  const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(drawing.file_type?.toLowerCase());
+                  const isPdf = drawing.file_type?.toLowerCase() === 'pdf';
+                  const API_URL = process.env.REACT_APP_BACKEND_URL;
+                  const token = localStorage.getItem('token');
+                  
+                  return (
+                    <div 
+                      key={drawing.drawing_id}
+                      className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-orange-300 transition-colors"
+                      data-testid={`drawing-${drawing.drawing_id}`}
+                    >
+                      {/* Preview for images */}
+                      {isImage && drawing.file_data && (
+                        <div className="mb-3 rounded overflow-hidden bg-white border">
+                          <img 
+                            src={drawing.file_data.startsWith('data:') ? drawing.file_data : `data:image/${drawing.file_type};base64,${drawing.file_data}`}
+                            alt={drawing.filename}
+                            className="w-full h-32 object-contain"
+                          />
+                        </div>
+                      )}
+                      
+                      {/* Icon for non-images */}
+                      {!isImage && (
+                        <div className="mb-3 h-32 flex items-center justify-center bg-white rounded border">
+                          <FileText className="w-12 h-12 text-slate-300" />
+                        </div>
+                      )}
+                      
+                      <p className="text-sm font-medium text-slate-900 truncate mb-1">{drawing.filename}</p>
+                      <p className="text-xs text-slate-500 mb-3">
+                        {(drawing.file_size / 1024).toFixed(1)} KB • {drawing.file_type?.toUpperCase()}
+                      </p>
+                      
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={() => {
+                            // Open in new tab with auth
+                            window.open(`${API_URL}/api/drawings/${drawing.drawing_id}/view?token=${token}`, '_blank');
+                          }}
+                          data-testid={`view-drawing-${drawing.drawing_id}`}
+                        >
+                          <Eye className="w-4 h-4 mr-1" /> View
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="flex-1"
+                          onClick={async () => {
+                            try {
+                              const response = await api.get(`/drawings/${drawing.drawing_id}/download`, {
+                                responseType: 'blob'
+                              });
+                              const url = window.URL.createObjectURL(new Blob([response.data]));
+                              const link = document.createElement('a');
+                              link.href = url;
+                              link.setAttribute('download', drawing.filename);
+                              document.body.appendChild(link);
+                              link.click();
+                              link.remove();
+                              window.URL.revokeObjectURL(url);
+                            } catch (err) {
+                              toast.error("Failed to download file");
+                            }
+                          }}
+                          data-testid={`download-drawing-${drawing.drawing_id}`}
+                        >
+                          <FileText className="w-4 h-4 mr-1" /> Download
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
