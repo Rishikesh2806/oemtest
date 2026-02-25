@@ -1704,6 +1704,24 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
         {"$set": {"status": RFQStatus.PO_ISSUED, "updated_at": now}}
     )
     
+    # Send email notification to vendor
+    app_url = os.environ.get("APP_URL", "https://vendor-matching-demo.preview.emergentagent.com")
+    vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
+    if vendor:
+        vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
+        buyer = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "name": 1})
+        if vendor_user and vendor_user.get("email"):
+            email_data = {
+                "vendor_name": vendor_user.get("name", vendor.get("company_name", "Vendor")),
+                "rfq_title": rfq.get("title", "RFQ"),
+                "buyer_name": buyer.get("name", "Buyer") if buyer else "Buyer",
+                "price": f"{quote['price']:.2f}",
+                "order_id": order_id,
+                "app_url": f"{app_url}/orders/{order_id}"
+            }
+            subject, html = get_email_template("quote_accepted", email_data)
+            asyncio.create_task(send_email_async(vendor_user["email"], subject, html))
+    
     return {"message": "Quote accepted", "order_id": order_id}
 
 # ============== ORDER ROUTES ==============
