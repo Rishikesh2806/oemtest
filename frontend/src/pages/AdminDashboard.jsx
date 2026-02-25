@@ -2,31 +2,1352 @@ import { useState, useEffect } from "react";
 import { useAuth, api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Textarea } from "../components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { toast } from "sonner";
 import { 
-  Users, FileText, Package, DollarSign, 
-  CheckCircle2, XCircle, Loader2, Building2
+  Users, FileText, Package, DollarSign, Building2, Wrench, FileCheck,
+  CheckCircle2, XCircle, Loader2, Search, Plus, Edit, Trash2,
+  Eye, Send, AlertCircle, RefreshCw, ChevronRight, Clock
 } from "lucide-react";
 
+// Tab components
+const TabButton = ({ active, onClick, icon: Icon, label, count }) => (
+  <button
+    onClick={onClick}
+    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+      active 
+        ? "border-orange-600 text-orange-600" 
+        : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
+    }`}
+  >
+    <Icon className="w-4 h-4" />
+    {label}
+    {count !== undefined && (
+      <span className={`ml-1 px-2 py-0.5 text-xs rounded-full ${
+        active ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-600"
+      }`}>
+        {count}
+      </span>
+    )}
+  </button>
+);
+
+// Status badge component
+const StatusBadge = ({ status }) => {
+  const statusStyles = {
+    draft: "bg-slate-100 text-slate-600",
+    submitted: "bg-blue-100 text-blue-700",
+    analyzing: "bg-purple-100 text-purple-700",
+    matching: "bg-cyan-100 text-cyan-700",
+    quoted: "bg-amber-100 text-amber-700",
+    po_issued: "bg-green-100 text-green-700",
+    in_production: "bg-orange-100 text-orange-700",
+    completed: "bg-green-100 text-green-700",
+    cancelled: "bg-red-100 text-red-700",
+    pending: "bg-amber-100 text-amber-700",
+    accepted: "bg-green-100 text-green-700",
+    rejected: "bg-red-100 text-red-700",
+    paid: "bg-green-100 text-green-700",
+    sent: "bg-blue-100 text-blue-700",
+    signed: "bg-green-100 text-green-700",
+    expired: "bg-red-100 text-red-700",
+  };
+  
+  return (
+    <span className={`px-2 py-1 text-xs font-medium rounded ${statusStyles[status] || "bg-slate-100 text-slate-600"}`}>
+      {status?.replace("_", " ")}
+    </span>
+  );
+};
+
+// ============== OVERVIEW TAB ==============
+const OverviewTab = ({ stats, pendingVendors, onApproveVendor, onRejectVendor, onRefresh }) => (
+  <div className="space-y-6">
+    {/* Stats Cards */}
+    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      <Card className="border-slate-200">
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+              <Users className="w-5 h-5 text-slate-600" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-slate-900">{stats?.total_users || 0}</p>
+              <p className="text-xs text-slate-500">Users</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="border-slate-200">
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
+              <Building2 className="w-5 h-5 text-orange-600" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-slate-900">{stats?.approved_vendors || 0}</p>
+              <p className="text-xs text-slate-500">Vendors</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="border-slate-200">
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+              <FileText className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-slate-900">{stats?.total_rfqs || 0}</p>
+              <p className="text-xs text-slate-500">RFQs</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="border-slate-200">
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+              <DollarSign className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-slate-900">{stats?.total_quotes || 0}</p>
+              <p className="text-xs text-slate-500">Quotes</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="border-slate-200">
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
+              <Package className="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-slate-900">{stats?.total_orders || 0}</p>
+              <p className="text-xs text-slate-500">Orders</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
+      <Card className="border-slate-200">
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+              <FileCheck className="w-5 h-5 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-xl font-bold text-slate-900">{stats?.total_ndas || 0}</p>
+              <p className="text-xs text-slate-500">NDAs</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+    
+    {/* Pending Vendors */}
+    <Card className="border-slate-200">
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle className="font-heading text-lg flex items-center gap-2">
+          <Building2 className="w-5 h-5 text-orange-600" />
+          Pending Vendor Approvals ({stats?.pending_vendors || 0})
+        </CardTitle>
+        <Button variant="ghost" size="sm" onClick={onRefresh}>
+          <RefreshCw className="w-4 h-4" />
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {pendingVendors.length > 0 ? (
+          <div className="space-y-3">
+            {pendingVendors.map((vendor) => (
+              <div
+                key={vendor.vendor_id}
+                className="flex items-center justify-between p-4 bg-slate-50 rounded-lg"
+                data-testid={`pending-vendor-${vendor.vendor_id}`}
+              >
+                <div>
+                  <p className="font-medium text-slate-900">{vendor.company_name}</p>
+                  <p className="text-sm text-slate-500">
+                    {vendor.city}, {vendor.country} • {vendor.industries?.slice(0, 2).join(", ")}
+                  </p>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {vendor.certifications?.slice(0, 3).map((cert, i) => (
+                      <span key={i} className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded">
+                        {cert}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => onApproveVendor(vendor.vendor_id)}
+                    className="bg-green-600 hover:bg-green-700"
+                    size="sm"
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-1" /> Approve
+                  </Button>
+                  <Button
+                    onClick={() => onRejectVendor(vendor.vendor_id)}
+                    variant="outline"
+                    size="sm"
+                    className="text-red-600 border-red-200 hover:bg-red-50"
+                  >
+                    <XCircle className="w-4 h-4 mr-1" /> Reject
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <CheckCircle2 className="w-12 h-12 text-green-300 mx-auto mb-4" />
+            <p className="text-slate-500">No pending approvals</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  </div>
+);
+
+// ============== USERS TAB ==============
+const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser }) => {
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("all");
+  const [editUser, setEditUser] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", role: "" });
+  
+  const filteredUsers = users.filter(u => {
+    const matchesSearch = u.name?.toLowerCase().includes(search.toLowerCase()) || 
+                          u.email?.toLowerCase().includes(search.toLowerCase());
+    const matchesRole = roleFilter === "all" || u.role === roleFilter;
+    return matchesSearch && matchesRole;
+  });
+  
+  const handleEdit = (user) => {
+    setEditUser(user);
+    setEditForm({ name: user.name, role: user.role });
+  };
+  
+  const handleSave = async () => {
+    await onUpdateUser(editUser.user_id, editForm);
+    setEditUser(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="flex gap-4 items-center">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input
+            placeholder="Search users..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={roleFilter} onValueChange={setRoleFilter}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="All roles" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Roles</SelectItem>
+            <SelectItem value="buyer">Buyers</SelectItem>
+            <SelectItem value="vendor">Vendors</SelectItem>
+            <SelectItem value="admin">Admins</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" onClick={onRefresh}>
+          <RefreshCw className="w-4 h-4" />
+        </Button>
+      </div>
+      
+      {/* Users Table */}
+      <Card className="border-slate-200">
+        <CardContent className="p-0">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">User</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Role</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Company</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Created</th>
+                <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredUsers.map((user) => (
+                <tr key={user.user_id} className="hover:bg-slate-50" data-testid={`user-row-${user.user_id}`}>
+                  <td className="p-4">
+                    <div>
+                      <p className="font-medium text-slate-900">{user.name}</p>
+                      <p className="text-sm text-slate-500">{user.email}</p>
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <StatusBadge status={user.role} />
+                  </td>
+                  <td className="p-4 text-slate-600">{user.company_name || "-"}</td>
+                  <td className="p-4 text-sm text-slate-500">
+                    {new Date(user.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(user)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-red-600 hover:bg-red-50"
+                        onClick={() => onDeleteUser(user.user_id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredUsers.length === 0 && (
+            <div className="text-center py-12 text-slate-500">No users found</div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* Edit Dialog */}
+      <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label>Name</Label>
+              <Input
+                value={editForm.name}
+                onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Role</Label>
+              <Select value={editForm.role} onValueChange={(v) => setEditForm(prev => ({ ...prev, role: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="buyer">Buyer</SelectItem>
+                  <SelectItem value="vendor">Vendor</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button onClick={handleSave} className="w-full bg-orange-600 hover:bg-orange-700">
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+// ============== RFQs TAB ==============
+const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ }) => {
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [editRFQ, setEditRFQ] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  
+  const filteredRFQs = rfqs.filter(r => {
+    const matchesSearch = r.title?.toLowerCase().includes(search.toLowerCase()) ||
+                          r.rfq_id?.toLowerCase().includes(search.toLowerCase());
+    const matchesStatus = statusFilter === "all" || r.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+  
+  const handleEdit = (rfq) => {
+    setEditRFQ(rfq);
+    setEditForm({ 
+      title: rfq.title, 
+      status: rfq.status, 
+      material_type: rfq.material_type,
+      quantity: rfq.quantity,
+      tolerance: rfq.tolerance
+    });
+  };
+  
+  const handleSave = async () => {
+    await onUpdateRFQ(editRFQ.rfq_id, editForm);
+    setEditRFQ(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="flex gap-4 items-center">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input
+            placeholder="Search RFQs..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="submitted">Submitted</SelectItem>
+            <SelectItem value="analyzing">Analyzing</SelectItem>
+            <SelectItem value="matching">Matching</SelectItem>
+            <SelectItem value="quoted">Quoted</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" onClick={onRefresh}>
+          <RefreshCw className="w-4 h-4" />
+        </Button>
+      </div>
+      
+      {/* RFQs Table */}
+      <Card className="border-slate-200">
+        <CardContent className="p-0">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">RFQ</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Buyer</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Material</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Status</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Created</th>
+                <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredRFQs.map((rfq) => (
+                <tr key={rfq.rfq_id} className="hover:bg-slate-50" data-testid={`rfq-row-${rfq.rfq_id}`}>
+                  <td className="p-4">
+                    <div>
+                      <p className="font-medium text-slate-900">{rfq.title}</p>
+                      <p className="text-xs text-slate-500 font-mono">{rfq.rfq_id}</p>
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <div>
+                      <p className="text-sm text-slate-900">{rfq.buyer_info?.name || "-"}</p>
+                      <p className="text-xs text-slate-500">{rfq.buyer_info?.email}</p>
+                    </div>
+                  </td>
+                  <td className="p-4 text-slate-600">{rfq.material_type}</td>
+                  <td className="p-4"><StatusBadge status={rfq.status} /></td>
+                  <td className="p-4 text-sm text-slate-500">
+                    {new Date(rfq.created_at).toLocaleDateString()}
+                  </td>
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(rfq)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-red-600 hover:bg-red-50"
+                        onClick={() => onDeleteRFQ(rfq.rfq_id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredRFQs.length === 0 && (
+            <div className="text-center py-12 text-slate-500">No RFQs found</div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* Edit Dialog */}
+      <Dialog open={!!editRFQ} onOpenChange={() => setEditRFQ(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit RFQ</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label>Title</Label>
+              <Input
+                value={editForm.title}
+                onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select value={editForm.status} onValueChange={(v) => setEditForm(prev => ({ ...prev, status: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="submitted">Submitted</SelectItem>
+                  <SelectItem value="analyzing">Analyzing</SelectItem>
+                  <SelectItem value="matching">Matching</SelectItem>
+                  <SelectItem value="quoted">Quoted</SelectItem>
+                  <SelectItem value="po_issued">PO Issued</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Material</Label>
+                <Input
+                  value={editForm.material_type}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, material_type: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Quantity</Label>
+                <Input
+                  type="number"
+                  value={editForm.quantity}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, quantity: parseInt(e.target.value) }))}
+                />
+              </div>
+            </div>
+            <Button onClick={handleSave} className="w-full bg-orange-600 hover:bg-orange-700">
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+// ============== QUOTES TAB ==============
+const QuotesTab = ({ quotes, loading, onRefresh, onUpdateQuote, onDeleteQuote }) => {
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [editQuote, setEditQuote] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  
+  const filteredQuotes = quotes.filter(q => statusFilter === "all" || q.status === statusFilter);
+  
+  const handleEdit = (quote) => {
+    setEditQuote(quote);
+    setEditForm({ 
+      price: quote.price, 
+      lead_time_days: quote.lead_time_days, 
+      status: quote.status,
+      notes: quote.notes || ""
+    });
+  };
+  
+  const handleSave = async () => {
+    await onUpdateQuote(editQuote.quote_id, editForm);
+    setEditQuote(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="flex gap-4 items-center justify-between">
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="accepted">Accepted</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" onClick={onRefresh}>
+          <RefreshCw className="w-4 h-4" />
+        </Button>
+      </div>
+      
+      {/* Quotes Table */}
+      <Card className="border-slate-200">
+        <CardContent className="p-0">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Quote ID</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">RFQ</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Vendor</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Price</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Lead Time</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Status</th>
+                <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredQuotes.map((quote) => (
+                <tr key={quote.quote_id} className="hover:bg-slate-50" data-testid={`quote-row-${quote.quote_id}`}>
+                  <td className="p-4 text-xs font-mono text-slate-600">{quote.quote_id}</td>
+                  <td className="p-4 text-sm text-slate-900">{quote.rfq_info?.title || quote.rfq_id}</td>
+                  <td className="p-4 text-sm text-slate-900">{quote.vendor_info?.company_name || "-"}</td>
+                  <td className="p-4 font-medium text-slate-900">${quote.price?.toFixed(2)}</td>
+                  <td className="p-4 text-slate-600">{quote.lead_time_days} days</td>
+                  <td className="p-4"><StatusBadge status={quote.status} /></td>
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(quote)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-red-600 hover:bg-red-50"
+                        onClick={() => onDeleteQuote(quote.quote_id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredQuotes.length === 0 && (
+            <div className="text-center py-12 text-slate-500">No quotes found</div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* Edit Dialog */}
+      <Dialog open={!!editQuote} onOpenChange={() => setEditQuote(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Quote</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Price ($)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={editForm.price}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, price: parseFloat(e.target.value) }))}
+                />
+              </div>
+              <div>
+                <Label>Lead Time (days)</Label>
+                <Input
+                  type="number"
+                  value={editForm.lead_time_days}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, lead_time_days: parseInt(e.target.value) }))}
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select value={editForm.status} onValueChange={(v) => setEditForm(prev => ({ ...prev, status: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="accepted">Accepted</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Textarea
+                value={editForm.notes}
+                onChange={(e) => setEditForm(prev => ({ ...prev, notes: e.target.value }))}
+              />
+            </div>
+            <Button onClick={handleSave} className="w-full bg-orange-600 hover:bg-orange-700">
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+// ============== ORDERS TAB ==============
+const OrdersTab = ({ orders, loading, onRefresh, onUpdateOrder, onDeleteOrder }) => {
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [editOrder, setEditOrder] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  
+  const filteredOrders = orders.filter(o => statusFilter === "all" || o.status === statusFilter);
+  
+  const handleEdit = (order) => {
+    setEditOrder(order);
+    setEditForm({ 
+      status: order.status, 
+      payment_status: order.payment_status,
+      total_amount: order.total_amount
+    });
+  };
+  
+  const handleSave = async () => {
+    await onUpdateOrder(editOrder.order_id, editForm);
+    setEditOrder(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="flex gap-4 items-center justify-between">
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="pending_payment">Pending Payment</SelectItem>
+            <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="in_production">In Production</SelectItem>
+            <SelectItem value="dispatched">Dispatched</SelectItem>
+            <SelectItem value="delivered">Delivered</SelectItem>
+            <SelectItem value="completed">Completed</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" onClick={onRefresh}>
+          <RefreshCw className="w-4 h-4" />
+        </Button>
+      </div>
+      
+      {/* Orders Table */}
+      <Card className="border-slate-200">
+        <CardContent className="p-0">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Order ID</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">RFQ</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Buyer</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Vendor</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Amount</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Status</th>
+                <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredOrders.map((order) => (
+                <tr key={order.order_id} className="hover:bg-slate-50" data-testid={`order-row-${order.order_id}`}>
+                  <td className="p-4 text-xs font-mono text-slate-600">{order.order_id}</td>
+                  <td className="p-4 text-sm text-slate-900">{order.rfq_info?.title || "-"}</td>
+                  <td className="p-4 text-sm text-slate-900">{order.buyer_info?.name || "-"}</td>
+                  <td className="p-4 text-sm text-slate-900">{order.vendor_info?.company_name || "-"}</td>
+                  <td className="p-4 font-medium text-slate-900">${order.total_amount?.toFixed(2)}</td>
+                  <td className="p-4"><StatusBadge status={order.status} /></td>
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(order)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-red-600 hover:bg-red-50"
+                        onClick={() => onDeleteOrder(order.order_id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredOrders.length === 0 && (
+            <div className="text-center py-12 text-slate-500">No orders found</div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* Edit Dialog */}
+      <Dialog open={!!editOrder} onOpenChange={() => setEditOrder(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Order</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label>Order Status</Label>
+              <Select value={editForm.status} onValueChange={(v) => setEditForm(prev => ({ ...prev, status: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending_payment">Pending Payment</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="in_production">In Production</SelectItem>
+                  <SelectItem value="quality_check">Quality Check</SelectItem>
+                  <SelectItem value="dispatched">Dispatched</SelectItem>
+                  <SelectItem value="delivered">Delivered</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Payment Status</Label>
+              <Select value={editForm.payment_status} onValueChange={(v) => setEditForm(prev => ({ ...prev, payment_status: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="paid">Paid</SelectItem>
+                  <SelectItem value="refunded">Refunded</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Total Amount ($)</Label>
+              <Input
+                type="number"
+                step="0.01"
+                value={editForm.total_amount}
+                onChange={(e) => setEditForm(prev => ({ ...prev, total_amount: parseFloat(e.target.value) }))}
+              />
+            </div>
+            <Button onClick={handleSave} className="w-full bg-orange-600 hover:bg-orange-700">
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+// ============== DRAWINGS TAB ==============
+const DrawingsTab = ({ drawings, loading, onRefresh, onDeleteDrawing }) => {
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" onClick={onRefresh}>
+          <RefreshCw className="w-4 h-4" />
+        </Button>
+      </div>
+      
+      <Card className="border-slate-200">
+        <CardContent className="p-0">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Drawing ID</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Filename</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">RFQ</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Type</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Size</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">AI Analysis</th>
+                <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {drawings.map((drawing) => (
+                <tr key={drawing.drawing_id} className="hover:bg-slate-50" data-testid={`drawing-row-${drawing.drawing_id}`}>
+                  <td className="p-4 text-xs font-mono text-slate-600">{drawing.drawing_id}</td>
+                  <td className="p-4 text-sm text-slate-900">{drawing.filename}</td>
+                  <td className="p-4 text-sm text-slate-600">{drawing.rfq_info?.title || drawing.rfq_id}</td>
+                  <td className="p-4 text-sm text-slate-600">{drawing.file_type}</td>
+                  <td className="p-4 text-sm text-slate-600">{(drawing.file_size / 1024).toFixed(1)} KB</td>
+                  <td className="p-4">
+                    {drawing.ai_analysis ? (
+                      <CheckCircle2 className="w-4 h-4 text-green-600" />
+                    ) : (
+                      <XCircle className="w-4 h-4 text-slate-400" />
+                    )}
+                  </td>
+                  <td className="p-4 text-right">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="text-red-600 hover:bg-red-50"
+                      onClick={() => onDeleteDrawing(drawing.drawing_id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {drawings.length === 0 && (
+            <div className="text-center py-12 text-slate-500">No drawings found</div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+// ============== NDAs TAB ==============
+const NDAsTab = ({ ndas, users, vendors, loading, onRefresh, onCreateNDA, onUpdateNDA, onSendNDA, onDeleteNDA }) => {
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editNDA, setEditNDA] = useState(null);
+  const [createForm, setCreateForm] = useState({
+    title: "",
+    buyer_id: "",
+    vendor_id: "",
+    content: "",
+    valid_until: ""
+  });
+  const [editForm, setEditForm] = useState({});
+  
+  const filteredNDAs = ndas.filter(n => statusFilter === "all" || n.status === statusFilter);
+  const buyers = users.filter(u => u.role === "buyer");
+  
+  const handleCreate = async () => {
+    await onCreateNDA(createForm);
+    setCreateOpen(false);
+    setCreateForm({ title: "", buyer_id: "", vendor_id: "", content: "", valid_until: "" });
+  };
+  
+  const handleEdit = (nda) => {
+    setEditNDA(nda);
+    setEditForm({ title: nda.title, status: nda.status, content: nda.content });
+  };
+  
+  const handleSave = async () => {
+    await onUpdateNDA(editNDA.nda_id, editForm);
+    setEditNDA(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Actions */}
+      <div className="flex gap-4 items-center justify-between">
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="All statuses" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="sent">Sent</SelectItem>
+            <SelectItem value="signed">Signed</SelectItem>
+            <SelectItem value="expired">Expired</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={onRefresh}>
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+          <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-orange-600 hover:bg-orange-700" size="sm">
+                <Plus className="w-4 h-4 mr-1" /> New NDA
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Create New NDA</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-4">
+                <div>
+                  <Label>Title</Label>
+                  <Input
+                    value={createForm.title}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, title: e.target.value }))}
+                    placeholder="NDA Title"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Buyer</Label>
+                    <Select value={createForm.buyer_id} onValueChange={(v) => setCreateForm(prev => ({ ...prev, buyer_id: v }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select buyer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {buyers.map(b => (
+                          <SelectItem key={b.user_id} value={b.user_id}>{b.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Vendor</Label>
+                    <Select value={createForm.vendor_id} onValueChange={(v) => setCreateForm(prev => ({ ...prev, vendor_id: v }))}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select vendor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {vendors.map(v => (
+                          <SelectItem key={v.vendor_id} value={v.vendor_id}>{v.company_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <Label>Content</Label>
+                  <Textarea
+                    value={createForm.content}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, content: e.target.value }))}
+                    placeholder="NDA terms and conditions..."
+                    className="min-h-[150px]"
+                  />
+                </div>
+                <div>
+                  <Label>Valid Until</Label>
+                  <Input
+                    type="date"
+                    value={createForm.valid_until}
+                    onChange={(e) => setCreateForm(prev => ({ ...prev, valid_until: e.target.value }))}
+                  />
+                </div>
+                <Button onClick={handleCreate} className="w-full bg-orange-600 hover:bg-orange-700">
+                  Create NDA
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+      
+      {/* NDAs Table */}
+      <Card className="border-slate-200">
+        <CardContent className="p-0">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">NDA</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Buyer</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Vendor</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Status</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Signatures</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Valid Until</th>
+                <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredNDAs.map((nda) => (
+                <tr key={nda.nda_id} className="hover:bg-slate-50" data-testid={`nda-row-${nda.nda_id}`}>
+                  <td className="p-4">
+                    <div>
+                      <p className="font-medium text-slate-900">{nda.title}</p>
+                      <p className="text-xs text-slate-500 font-mono">{nda.nda_id}</p>
+                    </div>
+                  </td>
+                  <td className="p-4 text-sm text-slate-900">{nda.buyer_info?.name || "-"}</td>
+                  <td className="p-4 text-sm text-slate-900">{nda.vendor_info?.company_name || "-"}</td>
+                  <td className="p-4"><StatusBadge status={nda.status} /></td>
+                  <td className="p-4">
+                    <div className="flex gap-2">
+                      <span className={`text-xs px-2 py-1 rounded ${nda.buyer_signed ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+                        Buyer {nda.buyer_signed ? "✓" : "○"}
+                      </span>
+                      <span className={`text-xs px-2 py-1 rounded ${nda.vendor_signed ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-500"}`}>
+                        Vendor {nda.vendor_signed ? "✓" : "○"}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="p-4 text-sm text-slate-500">
+                    {nda.valid_until ? new Date(nda.valid_until).toLocaleDateString() : "-"}
+                  </td>
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      {nda.status === "draft" && (
+                        <Button variant="ghost" size="sm" onClick={() => onSendNDA(nda.nda_id)}>
+                          <Send className="w-4 h-4" />
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(nda)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-red-600 hover:bg-red-50"
+                        onClick={() => onDeleteNDA(nda.nda_id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredNDAs.length === 0 && (
+            <div className="text-center py-12 text-slate-500">No NDAs found</div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* Edit Dialog */}
+      <Dialog open={!!editNDA} onOpenChange={() => setEditNDA(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit NDA</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label>Title</Label>
+              <Input
+                value={editForm.title}
+                onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select value={editForm.status} onValueChange={(v) => setEditForm(prev => ({ ...prev, status: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="sent">Sent</SelectItem>
+                  <SelectItem value="signed">Signed</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Content</Label>
+              <Textarea
+                value={editForm.content}
+                onChange={(e) => setEditForm(prev => ({ ...prev, content: e.target.value }))}
+                className="min-h-[150px]"
+              />
+            </div>
+            <Button onClick={handleSave} className="w-full bg-orange-600 hover:bg-orange-700">
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+// ============== VENDORS TAB ==============
+const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdateVendor }) => {
+  const [approvedFilter, setApprovedFilter] = useState("all");
+  const [editVendor, setEditVendor] = useState(null);
+  const [editForm, setEditForm] = useState({});
+  
+  const filteredVendors = vendors.filter(v => {
+    if (approvedFilter === "all") return true;
+    return approvedFilter === "approved" ? v.is_approved : !v.is_approved;
+  });
+  
+  const handleEdit = (vendor) => {
+    setEditVendor(vendor);
+    setEditForm({ 
+      company_name: vendor.company_name, 
+      is_approved: vendor.is_approved,
+      rating: vendor.rating || 0,
+      description: vendor.description || ""
+    });
+  };
+  
+  const handleSave = async () => {
+    await onUpdateVendor(editVendor.vendor_id, editForm);
+    setEditVendor(null);
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="flex gap-4 items-center justify-between">
+        <Select value={approvedFilter} onValueChange={setApprovedFilter}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="All vendors" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Vendors</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button variant="outline" size="sm" onClick={onRefresh}>
+          <RefreshCw className="w-4 h-4" />
+        </Button>
+      </div>
+      
+      {/* Vendors Table */}
+      <Card className="border-slate-200">
+        <CardContent className="p-0">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b">
+              <tr>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Company</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Contact</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Location</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Machines</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Rating</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Status</th>
+                <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredVendors.map((vendor) => (
+                <tr key={vendor.vendor_id} className="hover:bg-slate-50" data-testid={`vendor-row-${vendor.vendor_id}`}>
+                  <td className="p-4">
+                    <div>
+                      <p className="font-medium text-slate-900">{vendor.company_name}</p>
+                      <p className="text-xs text-slate-500 font-mono">{vendor.vendor_id}</p>
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <div>
+                      <p className="text-sm text-slate-900">{vendor.user_info?.name}</p>
+                      <p className="text-xs text-slate-500">{vendor.user_info?.email}</p>
+                    </div>
+                  </td>
+                  <td className="p-4 text-sm text-slate-600">
+                    {vendor.city}, {vendor.country}
+                  </td>
+                  <td className="p-4 text-sm text-slate-900">{vendor.machine_count || 0}</td>
+                  <td className="p-4 text-sm text-slate-900">{vendor.rating?.toFixed(1) || "-"}</td>
+                  <td className="p-4">
+                    <StatusBadge status={vendor.is_approved ? "approved" : "pending"} />
+                  </td>
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      {!vendor.is_approved && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-green-600 hover:bg-green-50"
+                          onClick={() => onApprove(vendor.vendor_id)}
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {vendor.is_approved && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-amber-600 hover:bg-amber-50"
+                          onClick={() => onReject(vendor.vendor_id)}
+                        >
+                          <XCircle className="w-4 h-4" />
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(vendor)}>
+                        <Edit className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredVendors.length === 0 && (
+            <div className="text-center py-12 text-slate-500">No vendors found</div>
+          )}
+        </CardContent>
+      </Card>
+      
+      {/* Edit Dialog */}
+      <Dialog open={!!editVendor} onOpenChange={() => setEditVendor(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Vendor</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label>Company Name</Label>
+              <Input
+                value={editForm.company_name}
+                onChange={(e) => setEditForm(prev => ({ ...prev, company_name: e.target.value }))}
+              />
+            </div>
+            <div>
+              <Label>Rating (0-5)</Label>
+              <Input
+                type="number"
+                step="0.1"
+                min="0"
+                max="5"
+                value={editForm.rating}
+                onChange={(e) => setEditForm(prev => ({ ...prev, rating: parseFloat(e.target.value) }))}
+              />
+            </div>
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                value={editForm.description}
+                onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="approved"
+                checked={editForm.is_approved}
+                onChange={(e) => setEditForm(prev => ({ ...prev, is_approved: e.target.checked }))}
+                className="rounded"
+              />
+              <Label htmlFor="approved">Approved</Label>
+            </div>
+            <Button onClick={handleSave} className="w-full bg-orange-600 hover:bg-orange-700">
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+// ============== MAIN ADMIN DASHBOARD ==============
 const AdminDashboard = () => {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [loading, setLoading] = useState(true);
+  
+  // Data states
   const [stats, setStats] = useState(null);
   const [pendingVendors, setPendingVendors] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState([]);
+  const [rfqs, setRfqs] = useState([]);
+  const [quotes, setQuotes] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [drawings, setDrawings] = useState([]);
+  const [ndas, setNdas] = useState([]);
+  const [vendors, setVendors] = useState([]);
 
   useEffect(() => {
-    fetchData();
+    fetchInitialData();
   }, []);
 
-  const fetchData = async () => {
+  const fetchInitialData = async () => {
     try {
-      const [statsRes, vendorsRes] = await Promise.all([
+      const [statsRes, pendingRes] = await Promise.all([
         api.get("/admin/stats"),
         api.get("/admin/vendors/pending")
       ]);
       setStats(statsRes.data);
-      setPendingVendors(vendorsRes.data);
+      setPendingVendors(pendingRes.data);
     } catch (error) {
       toast.error("Failed to load admin data");
     } finally {
@@ -34,13 +1355,255 @@ const AdminDashboard = () => {
     }
   };
 
+  const fetchUsers = async () => {
+    try {
+      const res = await api.get("/admin/users");
+      setUsers(res.data);
+    } catch (error) {
+      toast.error("Failed to load users");
+    }
+  };
+
+  const fetchRFQs = async () => {
+    try {
+      const res = await api.get("/admin/rfqs");
+      setRfqs(res.data);
+    } catch (error) {
+      toast.error("Failed to load RFQs");
+    }
+  };
+
+  const fetchQuotes = async () => {
+    try {
+      const res = await api.get("/admin/quotes");
+      setQuotes(res.data);
+    } catch (error) {
+      toast.error("Failed to load quotes");
+    }
+  };
+
+  const fetchOrders = async () => {
+    try {
+      const res = await api.get("/admin/orders");
+      setOrders(res.data);
+    } catch (error) {
+      toast.error("Failed to load orders");
+    }
+  };
+
+  const fetchDrawings = async () => {
+    try {
+      const res = await api.get("/admin/drawings");
+      setDrawings(res.data);
+    } catch (error) {
+      toast.error("Failed to load drawings");
+    }
+  };
+
+  const fetchNDAs = async () => {
+    try {
+      const res = await api.get("/admin/ndas");
+      setNdas(res.data);
+    } catch (error) {
+      toast.error("Failed to load NDAs");
+    }
+  };
+
+  const fetchVendors = async () => {
+    try {
+      const res = await api.get("/admin/vendors");
+      setVendors(res.data);
+    } catch (error) {
+      toast.error("Failed to load vendors");
+    }
+  };
+
+  // Tab change handler - fetch data for tab
+  useEffect(() => {
+    if (activeTab === "users" && users.length === 0) fetchUsers();
+    if (activeTab === "rfqs" && rfqs.length === 0) fetchRFQs();
+    if (activeTab === "quotes" && quotes.length === 0) fetchQuotes();
+    if (activeTab === "orders" && orders.length === 0) fetchOrders();
+    if (activeTab === "drawings" && drawings.length === 0) fetchDrawings();
+    if (activeTab === "ndas") {
+      fetchNDAs();
+      if (users.length === 0) fetchUsers();
+      if (vendors.length === 0) fetchVendors();
+    }
+    if (activeTab === "vendors" && vendors.length === 0) fetchVendors();
+  }, [activeTab]);
+
+  // Action handlers
   const approveVendor = async (vendorId) => {
     try {
       await api.post(`/admin/vendors/${vendorId}/approve`);
-      toast.success("Vendor approved successfully");
-      fetchData();
+      toast.success("Vendor approved");
+      fetchInitialData();
+      if (vendors.length > 0) fetchVendors();
     } catch (error) {
       toast.error("Failed to approve vendor");
+    }
+  };
+
+  const rejectVendor = async (vendorId) => {
+    try {
+      await api.post(`/admin/vendors/${vendorId}/reject`);
+      toast.success("Vendor rejected");
+      fetchInitialData();
+      if (vendors.length > 0) fetchVendors();
+    } catch (error) {
+      toast.error("Failed to reject vendor");
+    }
+  };
+
+  const updateUser = async (userId, data) => {
+    try {
+      await api.put(`/admin/users/${userId}`, data);
+      toast.success("User updated");
+      fetchUsers();
+    } catch (error) {
+      toast.error("Failed to update user");
+    }
+  };
+
+  const deleteUser = async (userId) => {
+    if (!confirm("Are you sure you want to delete this user?")) return;
+    try {
+      await api.delete(`/admin/users/${userId}`);
+      toast.success("User deleted");
+      fetchUsers();
+      fetchInitialData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to delete user");
+    }
+  };
+
+  const updateRFQ = async (rfqId, data) => {
+    try {
+      await api.put(`/admin/rfqs/${rfqId}`, data);
+      toast.success("RFQ updated");
+      fetchRFQs();
+    } catch (error) {
+      toast.error("Failed to update RFQ");
+    }
+  };
+
+  const deleteRFQ = async (rfqId) => {
+    if (!confirm("Are you sure you want to delete this RFQ?")) return;
+    try {
+      await api.delete(`/admin/rfqs/${rfqId}`);
+      toast.success("RFQ deleted");
+      fetchRFQs();
+      fetchInitialData();
+    } catch (error) {
+      toast.error("Failed to delete RFQ");
+    }
+  };
+
+  const updateQuote = async (quoteId, data) => {
+    try {
+      await api.put(`/admin/quotes/${quoteId}`, data);
+      toast.success("Quote updated");
+      fetchQuotes();
+    } catch (error) {
+      toast.error("Failed to update quote");
+    }
+  };
+
+  const deleteQuote = async (quoteId) => {
+    if (!confirm("Are you sure you want to delete this quote?")) return;
+    try {
+      await api.delete(`/admin/quotes/${quoteId}`);
+      toast.success("Quote deleted");
+      fetchQuotes();
+    } catch (error) {
+      toast.error("Failed to delete quote");
+    }
+  };
+
+  const updateOrder = async (orderId, data) => {
+    try {
+      await api.put(`/admin/orders/${orderId}`, data);
+      toast.success("Order updated");
+      fetchOrders();
+    } catch (error) {
+      toast.error("Failed to update order");
+    }
+  };
+
+  const deleteOrder = async (orderId) => {
+    if (!confirm("Are you sure you want to delete this order?")) return;
+    try {
+      await api.delete(`/admin/orders/${orderId}`);
+      toast.success("Order deleted");
+      fetchOrders();
+      fetchInitialData();
+    } catch (error) {
+      toast.error("Failed to delete order");
+    }
+  };
+
+  const deleteDrawing = async (drawingId) => {
+    if (!confirm("Are you sure you want to delete this drawing?")) return;
+    try {
+      await api.delete(`/admin/drawings/${drawingId}`);
+      toast.success("Drawing deleted");
+      fetchDrawings();
+    } catch (error) {
+      toast.error("Failed to delete drawing");
+    }
+  };
+
+  const createNDA = async (data) => {
+    try {
+      await api.post("/admin/ndas", data);
+      toast.success("NDA created");
+      fetchNDAs();
+      fetchInitialData();
+    } catch (error) {
+      toast.error("Failed to create NDA");
+    }
+  };
+
+  const updateNDA = async (ndaId, data) => {
+    try {
+      await api.put(`/admin/ndas/${ndaId}`, data);
+      toast.success("NDA updated");
+      fetchNDAs();
+    } catch (error) {
+      toast.error("Failed to update NDA");
+    }
+  };
+
+  const sendNDA = async (ndaId) => {
+    try {
+      await api.post(`/admin/ndas/${ndaId}/send`);
+      toast.success("NDA sent for signing");
+      fetchNDAs();
+    } catch (error) {
+      toast.error("Failed to send NDA");
+    }
+  };
+
+  const deleteNDA = async (ndaId) => {
+    if (!confirm("Are you sure you want to delete this NDA?")) return;
+    try {
+      await api.delete(`/admin/ndas/${ndaId}`);
+      toast.success("NDA deleted");
+      fetchNDAs();
+      fetchInitialData();
+    } catch (error) {
+      toast.error("Failed to delete NDA");
+    }
+  };
+
+  const updateVendor = async (vendorId, data) => {
+    try {
+      await api.put(`/admin/vendors/${vendorId}`, data);
+      toast.success("Vendor updated");
+      fetchVendors();
+    } catch (error) {
+      toast.error("Failed to update vendor");
     }
   };
 
@@ -56,123 +1619,150 @@ const AdminDashboard = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-8" data-testid="admin-dashboard">
+      <div className="space-y-6" data-testid="admin-dashboard">
         {/* Header */}
         <div>
           <h1 className="font-heading text-2xl font-bold text-slate-900">Admin Dashboard</h1>
-          <p className="text-slate-500">Platform overview and management</p>
+          <p className="text-slate-500">Platform management and operations</p>
         </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="border-slate-200">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
-                  <Users className="w-6 h-6 text-slate-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">{stats?.total_users || 0}</p>
-                  <p className="text-sm text-slate-500">Total Users</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <Building2 className="w-6 h-6 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">{stats?.approved_vendors || 0}</p>
-                  <p className="text-sm text-slate-500">Active Vendors</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <FileText className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">{stats?.total_rfqs || 0}</p>
-                  <p className="text-sm text-slate-500">Total RFQs</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-slate-200">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                  <Package className="w-6 h-6 text-green-600" />
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-slate-900">{stats?.total_orders || 0}</p>
-                  <p className="text-sm text-slate-500">Total Orders</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Tabs */}
+        <div className="border-b border-slate-200 overflow-x-auto">
+          <div className="flex min-w-max">
+            <TabButton 
+              active={activeTab === "overview"} 
+              onClick={() => setActiveTab("overview")} 
+              icon={Package} 
+              label="Overview" 
+            />
+            <TabButton 
+              active={activeTab === "users"} 
+              onClick={() => setActiveTab("users")} 
+              icon={Users} 
+              label="Users"
+              count={stats?.total_users}
+            />
+            <TabButton 
+              active={activeTab === "vendors"} 
+              onClick={() => setActiveTab("vendors")} 
+              icon={Building2} 
+              label="Vendors"
+              count={stats?.total_vendors}
+            />
+            <TabButton 
+              active={activeTab === "rfqs"} 
+              onClick={() => setActiveTab("rfqs")} 
+              icon={FileText} 
+              label="RFQs"
+              count={stats?.total_rfqs}
+            />
+            <TabButton 
+              active={activeTab === "quotes"} 
+              onClick={() => setActiveTab("quotes")} 
+              icon={DollarSign} 
+              label="Quotes"
+              count={stats?.total_quotes}
+            />
+            <TabButton 
+              active={activeTab === "orders"} 
+              onClick={() => setActiveTab("orders")} 
+              icon={Package} 
+              label="Orders"
+              count={stats?.total_orders}
+            />
+            <TabButton 
+              active={activeTab === "drawings"} 
+              onClick={() => setActiveTab("drawings")} 
+              icon={Wrench} 
+              label="Drawings"
+            />
+            <TabButton 
+              active={activeTab === "ndas"} 
+              onClick={() => setActiveTab("ndas")} 
+              icon={FileCheck} 
+              label="NDAs"
+              count={stats?.total_ndas}
+            />
+          </div>
         </div>
 
-        {/* Pending Vendors */}
-        <Card className="border-slate-200">
-          <CardHeader>
-            <CardTitle className="font-heading text-lg flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-orange-600" />
-              Pending Vendor Approvals ({stats?.pending_vendors || 0})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {pendingVendors.length > 0 ? (
-              <div className="space-y-4">
-                {pendingVendors.map((vendor) => (
-                  <div
-                    key={vendor.vendor_id}
-                    className="flex items-center justify-between p-4 bg-slate-50 rounded-lg"
-                    data-testid={`vendor-item-${vendor.vendor_id}`}
-                  >
-                    <div>
-                      <p className="font-medium text-slate-900">{vendor.company_name}</p>
-                      <p className="text-sm text-slate-500">
-                        {vendor.city}, {vendor.country} • {vendor.industries?.join(", ")}
-                      </p>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {vendor.certifications?.map((cert, i) => (
-                          <span key={i} className="text-xs bg-slate-200 text-slate-600 px-2 py-1 rounded">
-                            {cert}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => approveVendor(vendor.vendor_id)}
-                        className="bg-green-600 hover:bg-green-700"
-                        size="sm"
-                        data-testid={`approve-vendor-${vendor.vendor_id}`}
-                      >
-                        <CheckCircle2 className="w-4 h-4 mr-1" /> Approve
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <CheckCircle2 className="w-12 h-12 text-green-300 mx-auto mb-4" />
-                <p className="text-slate-500">No pending approvals</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* Tab Content */}
+        {activeTab === "overview" && (
+          <OverviewTab 
+            stats={stats} 
+            pendingVendors={pendingVendors}
+            onApproveVendor={approveVendor}
+            onRejectVendor={rejectVendor}
+            onRefresh={fetchInitialData}
+          />
+        )}
+        {activeTab === "users" && (
+          <UsersTab 
+            users={users} 
+            loading={loading}
+            onRefresh={fetchUsers}
+            onUpdateUser={updateUser}
+            onDeleteUser={deleteUser}
+          />
+        )}
+        {activeTab === "vendors" && (
+          <VendorsTab
+            vendors={vendors}
+            loading={loading}
+            onRefresh={fetchVendors}
+            onApprove={approveVendor}
+            onReject={rejectVendor}
+            onUpdateVendor={updateVendor}
+          />
+        )}
+        {activeTab === "rfqs" && (
+          <RFQsTab 
+            rfqs={rfqs} 
+            loading={loading}
+            onRefresh={fetchRFQs}
+            onUpdateRFQ={updateRFQ}
+            onDeleteRFQ={deleteRFQ}
+          />
+        )}
+        {activeTab === "quotes" && (
+          <QuotesTab 
+            quotes={quotes} 
+            loading={loading}
+            onRefresh={fetchQuotes}
+            onUpdateQuote={updateQuote}
+            onDeleteQuote={deleteQuote}
+          />
+        )}
+        {activeTab === "orders" && (
+          <OrdersTab 
+            orders={orders} 
+            loading={loading}
+            onRefresh={fetchOrders}
+            onUpdateOrder={updateOrder}
+            onDeleteOrder={deleteOrder}
+          />
+        )}
+        {activeTab === "drawings" && (
+          <DrawingsTab 
+            drawings={drawings} 
+            loading={loading}
+            onRefresh={fetchDrawings}
+            onDeleteDrawing={deleteDrawing}
+          />
+        )}
+        {activeTab === "ndas" && (
+          <NDAsTab 
+            ndas={ndas}
+            users={users}
+            vendors={vendors}
+            loading={loading}
+            onRefresh={fetchNDAs}
+            onCreateNDA={createNDA}
+            onUpdateNDA={updateNDA}
+            onSendNDA={sendNDA}
+            onDeleteNDA={deleteNDA}
+          />
+        )}
       </div>
     </DashboardLayout>
   );
