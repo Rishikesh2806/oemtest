@@ -1124,6 +1124,85 @@ async def get_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Drawing not found")
     return drawing
 
+@api_router.get("/drawings/{drawing_id}/view")
+async def view_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
+    """View/download the actual drawing file"""
+    drawing = await db.drawings.find_one({"drawing_id": drawing_id}, {"_id": 0})
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+    
+    file_data = drawing.get("file_data")
+    if not file_data:
+        raise HTTPException(status_code=404, detail="Drawing file data not found")
+    
+    # Remove base64 prefix if present
+    if "," in file_data:
+        file_data = file_data.split(",")[1]
+    
+    # Decode base64
+    try:
+        file_bytes = base64.b64decode(file_data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to decode file")
+    
+    # Determine content type
+    file_type = drawing.get("file_type", "application/octet-stream")
+    content_type_map = {
+        "png": "image/png",
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "pdf": "application/pdf",
+        "step": "application/step",
+        "stp": "application/step",
+        "dxf": "application/dxf",
+        "dwg": "application/dwg"
+    }
+    content_type = content_type_map.get(file_type.lower(), "application/octet-stream")
+    
+    filename = drawing.get("filename", f"drawing.{file_type}")
+    
+    return StreamingResponse(
+        iter([file_bytes]),
+        media_type=content_type,
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Content-Length": str(len(file_bytes))
+        }
+    )
+
+@api_router.get("/drawings/{drawing_id}/download")
+async def download_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
+    """Download the drawing file as attachment"""
+    drawing = await db.drawings.find_one({"drawing_id": drawing_id}, {"_id": 0})
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+    
+    file_data = drawing.get("file_data")
+    if not file_data:
+        raise HTTPException(status_code=404, detail="Drawing file data not found")
+    
+    # Remove base64 prefix if present
+    if "," in file_data:
+        file_data = file_data.split(",")[1]
+    
+    # Decode base64
+    try:
+        file_bytes = base64.b64decode(file_data)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to decode file")
+    
+    file_type = drawing.get("file_type", "bin")
+    filename = drawing.get("filename", f"drawing.{file_type}")
+    
+    return StreamingResponse(
+        iter([file_bytes]),
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Length": str(len(file_bytes))
+        }
+    )
+
 def convert_pdf_to_image_base64(pdf_base64: str) -> str:
     """Convert PDF to image for AI analysis"""
     import fitz  # PyMuPDF
