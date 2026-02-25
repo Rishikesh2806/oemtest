@@ -1439,7 +1439,7 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
               <Wrench className="w-5 h-5 text-orange-600" />
               Machines ({machines.length})
             </CardTitle>
-            <Button size="sm" className="bg-orange-600 hover:bg-orange-700" onClick={() => { setCreateMachineOpen(true); setEditMachine(null); setMachineForm({ name: "", machine_type: "", brand: "", model: "", tolerance: 0.01, max_x: 0, max_y: 0, max_z: 0, max_diameter: 0, materials: [] }); }}>
+            <Button size="sm" className="bg-orange-600 hover:bg-orange-700" onClick={() => { setCreateMachineOpen(true); setEditMachine(null); resetMachineForm(); }}>
               <Plus className="w-4 h-4 mr-1" /> Add Machine
             </Button>
           </CardHeader>
@@ -1449,14 +1449,18 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
                 {machines.map((machine) => (
                   <div key={machine.machine_id} className="p-4 bg-slate-50 rounded-lg border flex items-center justify-between" data-testid={`machine-${machine.machine_id}`}>
                     <div className="flex-1">
-                      <p className="font-medium text-slate-900">{getMachineName(machine)}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-slate-900">{getMachineName(machine)}</p>
+                        {(machine.machine_category || detectCategoryFromType(machine.machine_type)) && (
+                          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">
+                            {machine.machine_category || detectCategoryFromType(machine.machine_type)}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-slate-500">{machine.machine_type} • {machine.brand} {machine.model}</p>
                       <div className="flex flex-wrap gap-4 mt-2 text-xs text-slate-500">
                         <span>Tolerance: ±{getMachineTolerance(machine)}mm</span>
-                        {(machine.max_x || machine.max_y || machine.max_z) && (
-                          <span>Envelope: {machine.max_x || 0}x{machine.max_y || 0}x{machine.max_z || 0}mm</span>
-                        )}
-                        {machine.max_diameter > 0 && <span>Max Dia: {machine.max_diameter}mm</span>}
+                        {getMachineDimensions(machine) && <span>{getMachineDimensions(machine)}</span>}
                         {getMachineMaterials(machine).length > 0 && <span>Materials: {getMachineMaterials(machine).slice(0, 3).join(", ")}</span>}
                       </div>
                     </div>
