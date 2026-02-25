@@ -1125,8 +1125,25 @@ async def get_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
     return drawing
 
 @api_router.get("/drawings/{drawing_id}/view")
-async def view_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
-    """View/download the actual drawing file"""
+async def view_drawing(drawing_id: str, token: Optional[str] = None, request: Request = None):
+    """View/download the actual drawing file - supports both Authorization header and query token"""
+    # Try to authenticate via query token or header
+    auth_token = token
+    if not auth_token and request:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            auth_token = auth_header[7:]
+    
+    if not auth_token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    try:
+        payload = jwt.decode(auth_token, JWT_SECRET_KEY, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
     drawing = await db.drawings.find_one({"drawing_id": drawing_id}, {"_id": 0})
     if not drawing:
         raise HTTPException(status_code=404, detail="Drawing not found")
