@@ -2755,9 +2755,11 @@ async def admin_update_machine(machine_id: str, request: Request, user: dict = D
     
     body = await request.json()
     
-    # Allowed fields
-    allowed_fields = ["name", "machine_type", "brand", "model", "year_purchased", "tolerance",
-                      "max_x", "max_y", "max_z", "max_diameter", "max_length", "materials", "is_active"]
+    # Allowed fields - includes all machine-specific dimension fields
+    allowed_fields = ["name", "machine_type", "machine_category", "brand", "model", "year_purchased", "tolerance",
+                      "max_x", "max_y", "max_z", "max_diameter", "max_length", "max_swing",
+                      "bore_diameter", "outer_diameter", "max_thickness", "tonnage", "max_taper_angle",
+                      "materials", "is_active"]
     update_data = {k: v for k, v in body.items() if k in allowed_fields}
     
     if not update_data:
