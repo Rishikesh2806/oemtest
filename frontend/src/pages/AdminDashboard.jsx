@@ -1278,11 +1278,25 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
     }
   };
   
+  // Detect category from machine type
+  const detectCategoryFromType = (machineType) => {
+    for (const [category, data] of Object.entries(machineCategories)) {
+      if (data.types?.includes(machineType)) {
+        return category;
+      }
+    }
+    return "";
+  };
+  
   const openEditMachine = (machine) => {
     setEditMachine(machine);
-    // Handle both old (tolerance_capability, materials_supported) and new (tolerance, materials) field names
+    // Detect category from machine type
+    const detectedCategory = detectCategoryFromType(machine.machine_type) || machine.machine_category || "";
+    
+    // Handle both old and new field names
     setMachineForm({
       name: machine.name || machine.model || "",
+      machine_category: detectedCategory,
       machine_type: machine.machine_type || "",
       brand: machine.brand || "",
       model: machine.model || "",
@@ -1291,7 +1305,24 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
       max_y: machine.max_y || 0,
       max_z: machine.max_z || 0,
       max_diameter: machine.max_diameter || 0,
+      max_length: machine.max_length || 0,
+      max_swing: machine.max_swing || 0,
+      bore_diameter: machine.bore_diameter || 0,
+      outer_diameter: machine.outer_diameter || 0,
+      max_thickness: machine.max_thickness || 0,
+      tonnage: machine.tonnage || 0,
+      max_taper_angle: machine.max_taper_angle || 0,
       materials: (machine.materials || machine.materials_supported)?.join(", ") || ""
+    });
+  };
+  
+  const resetMachineForm = () => {
+    setMachineForm({
+      name: "", machine_category: "", machine_type: "", brand: "", model: "", 
+      tolerance: 0.01, max_x: 0, max_y: 0, max_z: 0,
+      max_diameter: 0, max_length: 0, max_swing: 0,
+      bore_diameter: 0, outer_diameter: 0, max_thickness: 0, tonnage: 0,
+      max_taper_angle: 0, materials: ""
     });
   };
   
@@ -1299,6 +1330,37 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
   const getMachineName = (machine) => machine.name || `${machine.brand} ${machine.model}`.trim() || "Unnamed Machine";
   const getMachineTolerance = (machine) => machine.tolerance || machine.tolerance_capability || 0;
   const getMachineMaterials = (machine) => machine.materials || machine.materials_supported || [];
+  
+  // Get display dimensions based on machine category/type
+  const getMachineDimensions = (machine) => {
+    const dims = [];
+    const cat = detectCategoryFromType(machine.machine_type) || machine.machine_category;
+    
+    if (cat === "Turning/Lathe") {
+      if (machine.max_length) dims.push(`L: ${machine.max_length}mm`);
+      if (machine.max_diameter) dims.push(`Ø: ${machine.max_diameter}mm`);
+      if (machine.max_swing) dims.push(`Swing: ${machine.max_swing}mm`);
+    } else if (cat === "Boring") {
+      if (machine.bore_diameter) dims.push(`Bore Ø: ${machine.bore_diameter}mm`);
+      if (machine.outer_diameter) dims.push(`OD: ${machine.outer_diameter}mm`);
+      if (machine.max_length) dims.push(`L: ${machine.max_length}mm`);
+    } else if (cat === "Sheet Metal" || cat === "Welding") {
+      if (machine.max_length) dims.push(`L: ${machine.max_length}mm`);
+      if (machine.max_thickness) dims.push(`T: ${machine.max_thickness}mm`);
+      if (machine.tonnage) dims.push(`${machine.tonnage}T`);
+    } else if (cat === "Cutting") {
+      if (machine.max_x) dims.push(`X: ${machine.max_x}mm`);
+      if (machine.max_y) dims.push(`Y: ${machine.max_y}mm`);
+      if (machine.max_thickness) dims.push(`T: ${machine.max_thickness}mm`);
+    } else {
+      // Default: Milling/VMC style
+      if (machine.max_x || machine.max_y || machine.max_z) {
+        dims.push(`${machine.max_x || 0}×${machine.max_y || 0}×${machine.max_z || 0}mm`);
+      }
+      if (machine.max_diameter) dims.push(`Ø: ${machine.max_diameter}mm`);
+    }
+    return dims.join(" | ");
+  };
 
   // Vendor Profile Detail View
   if (selectedVendor && vendorProfile) {
