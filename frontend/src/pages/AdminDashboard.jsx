@@ -1355,12 +1355,15 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
                 {machines.map((machine) => (
                   <div key={machine.machine_id} className="p-4 bg-slate-50 rounded-lg border flex items-center justify-between" data-testid={`machine-${machine.machine_id}`}>
                     <div className="flex-1">
-                      <p className="font-medium text-slate-900">{machine.name}</p>
+                      <p className="font-medium text-slate-900">{getMachineName(machine)}</p>
                       <p className="text-sm text-slate-500">{machine.machine_type} • {machine.brand} {machine.model}</p>
-                      <div className="flex gap-4 mt-2 text-xs text-slate-500">
-                        <span>Tolerance: ±{machine.tolerance}mm</span>
-                        <span>Envelope: {machine.max_x}x{machine.max_y}x{machine.max_z}mm</span>
-                        {machine.materials?.length > 0 && <span>Materials: {machine.materials.slice(0, 3).join(", ")}</span>}
+                      <div className="flex flex-wrap gap-4 mt-2 text-xs text-slate-500">
+                        <span>Tolerance: ±{getMachineTolerance(machine)}mm</span>
+                        {(machine.max_x || machine.max_y || machine.max_z) && (
+                          <span>Envelope: {machine.max_x || 0}x{machine.max_y || 0}x{machine.max_z || 0}mm</span>
+                        )}
+                        {machine.max_diameter > 0 && <span>Max Dia: {machine.max_diameter}mm</span>}
+                        {getMachineMaterials(machine).length > 0 && <span>Materials: {getMachineMaterials(machine).slice(0, 3).join(", ")}</span>}
                       </div>
                     </div>
                     <div className="flex gap-2">
