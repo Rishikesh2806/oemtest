@@ -255,10 +255,10 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <Factory className="w-6 h-6 text-orange-600" />
+              <img src="https://static.prod-images.emergentagent.com/jobs/10fd967d-100a-4ba4-9810-7f001d27333f/images/538e025cbcf1bcc1a8edd395590b4013ce298ebbb676ea7cd077596def05a82f.png" alt="Offloadex Logo" className="w-7 h-7" />
               <span className="font-heading font-bold text-white">OFFLOADEX</span>
             </div>
-            <p className="text-sm">© 2024 Offloadex. Precision Manufacturing on Demand.</p>
+            <p className="text-sm">© 2025 Offloadex. Precision Manufacturing on Demand.</p>
           </div>
         </div>
       </footer>
