@@ -509,6 +509,14 @@ class Order(BaseModel):
     created_at: str
     updated_at: str
 
+class RatingCreate(BaseModel):
+    overall_rating: float  # 1-5
+    quality_rating: float  # 1-5
+    communication_rating: float  # 1-5
+    delivery_rating: float  # 1-5
+    review_text: Optional[str] = None
+    would_recommend: bool = True
+
 # ============== AUTH HELPERS ==============
 
 def hash_password(password: str) -> str:
