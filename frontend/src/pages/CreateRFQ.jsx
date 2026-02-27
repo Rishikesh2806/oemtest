@@ -325,6 +325,47 @@ const CreateRFQ = () => {
                 </div>
               </div>
 
+              {/* Payment Terms */}
+              <div className="pt-4 border-t border-slate-200">
+                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Preferred Payment Terms
+                </Label>
+                <div className="grid grid-cols-2 gap-4 mt-2">
+                  <Select
+                    value={formData.preferred_payment_terms}
+                    onValueChange={(value) => handleInputChange("preferred_payment_terms", value)}
+                  >
+                    <SelectTrigger data-testid="payment-terms-select">
+                      <SelectValue placeholder="Select payment terms" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAYMENT_TERMS.map((term) => (
+                        <SelectItem key={term.value} value={term.value}>{term.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  
+                  {formData.preferred_payment_terms === "custom" && (
+                    <Input
+                      placeholder="Specify custom terms..."
+                      value={formData.payment_terms_notes}
+                      onChange={(e) => handleInputChange("payment_terms_notes", e.target.value)}
+                      data-testid="payment-terms-notes"
+                    />
+                  )}
+                </div>
+                {formData.preferred_payment_terms !== "custom" && (
+                  <Textarea
+                    placeholder="Additional payment notes (optional)"
+                    value={formData.payment_terms_notes}
+                    onChange={(e) => handleInputChange("payment_terms_notes", e.target.value)}
+                    className="mt-2"
+                    rows={2}
+                    data-testid="payment-notes-textarea"
+                  />
+                )}
+              </div>
+
               <div className="flex justify-end pt-4">
                 <Button 
                   onClick={createRFQ} 
