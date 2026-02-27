@@ -263,6 +263,11 @@ const AppRouter = () => {
           <VendorProfile />
         </ProtectedRoute>
       } />
+      <Route path="/vendor/matched-rfqs" element={
+        <ProtectedRoute allowedRoles={["vendor"]}>
+          <VendorMatchedRFQs />
+        </ProtectedRoute>
+      } />
       <Route path="/vendor/machines" element={
         <ProtectedRoute allowedRoles={["vendor"]}>
           <MachineManagement />
