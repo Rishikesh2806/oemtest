@@ -291,17 +291,61 @@ class Machine(BaseModel):
     model_config = ConfigDict(extra="ignore")
     machine_id: str
     vendor_id: str
-    machine_type: str  # CNC, VMC, HMC, Laser, Press Brake, etc.
+    name: Optional[str] = None
+    machine_category: Optional[str] = None
+    machine_type: str
     brand: str
     model: str
-    max_x: Optional[float] = None  # mm
-    max_y: Optional[float] = None  # mm
-    max_z: Optional[float] = None  # mm
-    max_diameter: Optional[float] = None  # mm
+    # Standard dimensions
+    max_x: Optional[float] = None
+    max_y: Optional[float] = None
+    max_z: Optional[float] = None
+    max_diameter: Optional[float] = None
+    max_length: Optional[float] = None
+    max_swing: Optional[float] = None
+    # Boring/Drilling specific
+    bore_diameter: Optional[float] = None
+    outer_diameter: Optional[float] = None
+    spindle_bore: Optional[float] = None
+    spindle_travel: Optional[float] = None
+    arm_length: Optional[float] = None
+    max_depth: Optional[float] = None
+    # VTL/Table specific
+    table_diameter: Optional[float] = None
+    table_size_x: Optional[float] = None
+    table_size_y: Optional[float] = None
+    pallet_size: Optional[float] = None
+    max_weight: Optional[float] = None
+    # Shaping specific
+    max_stroke: Optional[float] = None
+    stroke: Optional[float] = None
+    # Gear specific
+    max_module: Optional[float] = None
+    min_teeth: Optional[int] = None
+    # 5-Axis specific
+    a_axis_range: Optional[float] = None
+    c_axis_range: Optional[float] = None
+    # Sheet Metal/Press specific
     tonnage: Optional[float] = None
-    tolerance_capability: float = 0.1  # mm
-    axis_config: Optional[str] = None  # 3-axis, 5-axis, etc.
+    max_thickness: Optional[float] = None
+    # Laser specific
+    laser_power: Optional[float] = None
+    # Welding specific
+    amperage: Optional[float] = None
+    # Heat Treatment specific
+    max_temp: Optional[float] = None
+    # Inspection specific
+    accuracy: Optional[float] = None
+    # Additive specific
+    layer_thickness: Optional[float] = None
+    # EDM specific
+    max_taper_angle: Optional[float] = None
+    # Common fields
+    tolerance_capability: float = 0.1
+    tolerance: Optional[float] = None
+    axis_config: Optional[str] = None
     materials_supported: List[str] = []
+    materials: Optional[List[str]] = None
     monthly_capacity_hours: int = 160
     is_active: bool = True
     created_at: str
