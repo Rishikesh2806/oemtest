@@ -671,10 +671,21 @@ const RFQDetail = () => {
         {/* Quotes */}
         {quotes.length > 0 && (
           <Card className="border-slate-200">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="font-heading text-lg">
                 {isBuyer ? "Received Quotes" : "Quote Status"}
               </CardTitle>
+              {isBuyer && quotes.filter(q => q.status === "pending").length >= 2 && (
+                <Button 
+                  variant="outline" 
+                  onClick={() => setCompareDialogOpen(true)}
+                  className="border-orange-300 text-orange-600 hover:bg-orange-50"
+                  data-testid="compare-quotes-btn"
+                >
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Compare Quotes
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -686,6 +697,7 @@ const RFQDetail = () => {
                         ? "bg-green-50 border-green-200" 
                         : "bg-slate-50 border-slate-200"
                     }`}
+                    data-testid={`quote-card-${quote.quote_id}`}
                   >
                     <div className="flex items-center justify-between">
                       <div>
@@ -697,21 +709,41 @@ const RFQDetail = () => {
                             <p className="font-medium text-slate-900">
                               {quote.vendor_name || "Vendor"}
                             </p>
-                            {quote.vendor_rating > 0 && (
-                              <span className="flex items-center gap-1 text-sm text-slate-500">
-                                <Star className="w-4 h-4 text-amber-500" /> {quote.vendor_rating?.toFixed(1)}
-                              </span>
-                            )}
+                            <div className="flex items-center gap-3 text-sm text-slate-500">
+                              {quote.vendor_rating > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <Star className="w-4 h-4 text-amber-500" /> {quote.vendor_rating?.toFixed(1)}
+                                </span>
+                              )}
+                              {quote.vendor_location && (
+                                <span className="flex items-center gap-1">
+                                  <MapPin className="w-3 h-3" /> {quote.vendor_location}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                         {quote.notes && (
-                          <p className="text-sm text-slate-500 mt-2">{quote.notes}</p>
+                          <p className="text-sm text-slate-500 mt-2 italic">"{quote.notes}"</p>
+                        )}
+                        {/* Vendor Machines Preview */}
+                        {quote.vendor_machines?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {quote.vendor_machines.slice(0, 2).map((machine, i) => (
+                              <span key={i} className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-mono">
+                                {machine}
+                              </span>
+                            ))}
+                            {quote.vendor_machines.length > 2 && (
+                              <span className="text-xs text-slate-400">+{quote.vendor_machines.length - 2} more</span>
+                            )}
+                          </div>
                         )}
                       </div>
                       <div className="text-right">
                         <div className="flex items-center gap-1 text-2xl font-bold text-slate-900">
                           <DollarSign className="w-5 h-5" />
-                          {quote.price?.toFixed(2)}
+                          {quote.price?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                         <div className="flex items-center gap-1 text-sm text-slate-500 mt-1">
                           <Clock className="w-4 h-4" /> {quote.lead_time_days} days
@@ -723,7 +755,7 @@ const RFQDetail = () => {
                     </div>
                     
                     {isBuyer && quote.status === "pending" && (
-                      <div className="mt-4 pt-4 border-t border-slate-200">
+                      <div className="mt-4 pt-4 border-t border-slate-200 flex gap-2">
                         <Button
                           onClick={() => acceptQuote(quote.quote_id)}
                           className="bg-green-600 hover:bg-green-700"
@@ -731,6 +763,20 @@ const RFQDetail = () => {
                         >
                           <CheckCircle2 className="w-4 h-4 mr-2" /> Accept Quote
                         </Button>
+                        {quote.vendor_id_ref && (
+                          <Link to={`/vendor-profile/${quote.vendor_id_ref}`}>
+                            <Button variant="outline" size="default">
+                              <Eye className="w-4 h-4 mr-2" /> View Profile
+                            </Button>
+                          </Link>
+                        )}
+                        {quote.vendor_user_id && (
+                          <Link to={`/chat?with=${quote.vendor_user_id}&rfq=${rfqId}`}>
+                            <Button variant="outline" size="default">
+                              <MessageSquare className="w-4 h-4 mr-2" /> Chat
+                            </Button>
+                          </Link>
+                        )}
                       </div>
                     )}
                   </div>
@@ -738,6 +784,17 @@ const RFQDetail = () => {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Quote Comparison Dialog */}
+        {isBuyer && (
+          <QuoteComparison
+            quotes={quotes}
+            open={compareDialogOpen}
+            onOpenChange={setCompareDialogOpen}
+            onAcceptQuote={acceptQuote}
+            rfqId={rfqId}
+          />
         )}
       </div>
     </DashboardLayout>
