@@ -33,6 +33,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
   - Material compatibility check
   - Tolerance capability validation
 - Quote management (create, list, accept)
+- **Enriched Quotes API** (Feb 27) - Returns vendor machines, certifications, acceptance_rate
 - Order creation and tracking
 - Stripe payment integration
 - Dashboard statistics APIs
@@ -61,7 +62,11 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Vendor profile management
 - Machine management (CRUD) with 21 categories
 - Quote submission for vendors
-- Quote comparison for buyers
+- **Quote Comparison Feature** (Feb 27) - NEW
+  - Side-by-side comparison dialog
+  - Highlights: Best Price, Fastest, Top Rated
+  - Shows vendor machines, certifications, acceptance rate
+  - Accept, Profile, Chat actions
 - Order detail with payment & tracking
 - VendorProfileView page
 - ChatPage (messaging between buyers/vendors)
@@ -97,18 +102,19 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 20. Additive Manufacturing
 21. Conventional Machines
 
-## Matching Algorithm Scoring (v2.0)
-| Component | Max Points | Description |
-|-----------|------------|-------------|
-| Dimension Capability | 15 | Machine envelope fits part |
-| Process Matching | 20-30 | Machine type matches required process |
-| Tolerance Capable | 20 | Machine tolerance <= required |
-| Materials Match | 15 | Supported materials include required |
-| Keyword Matches | 10 | Keywords from title/desc match |
-| Experience Score | 20 | Past similar jobs + keywords |
-| Vendor Rating | 10 | Rating * 2 |
-| Total Jobs | 10 | total_jobs / 10 |
-| **Max Total** | **100** | |
+## Quote Comparison Feature (NEW)
+- **Trigger**: "Compare Quotes" button appears when 2+ pending quotes exist
+- **Display**: Side-by-side cards showing:
+  - Price (USD) with Best Price badge
+  - Lead time with Fastest badge
+  - Vendor rating with Top Rated badge
+  - Jobs done count
+  - Acceptance rate (%)
+  - Certifications
+  - Machines list
+  - Vendor notes
+- **Actions**: Accept Quote, View Profile, Chat
+- **Selection**: For 4+ quotes, checkbox selection to compare up to 4
 
 ## Test Reports
 - /app/test_reports/iteration_1.json - Chat/Profile features (100% pass)
@@ -116,9 +122,11 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - /app/test_reports/iteration_3.json - Email & Drawings (100% pass)
 - /app/test_reports/iteration_4.json - Admin Vendor/Machine Management (100% pass)
 - /app/test_reports/iteration_5.json - RFQ Matching Algorithm (100% pass - 18 tests)
+- /app/test_reports/iteration_6.json - Quote Comparison (100% pass - 15 tests)
 
 ## Test Credentials
 - **Admin**: admin@offoadex.com / admin123
+- **Buyer**: buyer@offoadex.com / buyer123
 
 ## Prioritized Backlog
 
@@ -128,6 +136,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Full Admin Panel
 - Admin Vendor/Machine Management
 - Enhanced RFQ Matching Algorithm
+- Quote Comparison Feature
 
 ### P1 - High Priority (Next)
 - Quote rejection endpoint (allow buyers to reject quotes explicitly)
@@ -142,7 +151,6 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Vendor rating system after order completion
 - Document version control
 - Mobile responsive improvements
-- Quote comparison view (side-by-side)
 
 ### P3 - Future Features
 - Instant AI auto-quote
