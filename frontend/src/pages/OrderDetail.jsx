@@ -375,7 +375,6 @@ const OrderDetail = () => {
                 )}
               </div>
             )}
-            </div>
 
             {/* Payment Button for Buyer */}
             {isBuyer && order.status === "pending_payment" && order.payment_status !== "paid" && (
