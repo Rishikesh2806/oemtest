@@ -4,9 +4,21 @@ import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { 
   DollarSign, Clock, Star, MapPin, Building2, CheckCircle2, 
-  Trophy, TrendingDown, Zap, Award, Wrench, MessageSquare, Eye
+  Trophy, TrendingDown, Zap, Award, Wrench, MessageSquare, Eye, CreditCard
 } from "lucide-react";
 import { Link } from "react-router-dom";
+
+const PAYMENT_TERMS_LABELS = {
+  "net_30": "Net 30 Days",
+  "net_45": "Net 45 Days",
+  "net_60": "Net 60 Days",
+  "50_advance_50_delivery": "50% Advance, 50% on Delivery",
+  "100_advance": "100% Advance",
+  "against_delivery": "Against Delivery",
+  "milestone_based": "Milestone-Based",
+  "letter_of_credit": "Letter of Credit",
+  "custom": "Custom Terms"
+};
 
 const QuoteComparison = ({ quotes, open, onOpenChange, onAcceptQuote, rfqId }) => {
   const [selectedQuotes, setSelectedQuotes] = useState([]);
