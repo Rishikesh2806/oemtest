@@ -498,6 +498,8 @@ class Quote(BaseModel):
     currency: str = "USD"
     lead_time_days: int
     notes: Optional[str] = None
+    proposed_payment_terms: Optional[str] = PaymentTerms.NET_30
+    payment_terms_notes: Optional[str] = None
     is_selected: bool = False
     status: str = "pending"  # pending, accepted, rejected, expired
     created_at: str
