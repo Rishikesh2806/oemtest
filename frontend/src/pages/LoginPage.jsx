@@ -42,7 +42,7 @@ const LoginPage = () => {
       <div className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md">
           <Link to="/" className="flex items-center gap-2 mb-8">
-            <Factory className="w-8 h-8 text-orange-600" />
+            <img src="https://static.prod-images.emergentagent.com/jobs/10fd967d-100a-4ba4-9810-7f001d27333f/images/538e025cbcf1bcc1a8edd395590b4013ce298ebbb676ea7cd077596def05a82f.png" alt="Offloadex Logo" className="w-9 h-9" />
             <span className="font-heading font-bold text-xl text-slate-900">OFFLOADEX</span>
           </Link>
 
