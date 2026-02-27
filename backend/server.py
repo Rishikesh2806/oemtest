@@ -442,6 +442,30 @@ class RFQ(BaseModel):
     created_at: str
     updated_at: str
 
+# Payment Terms Options
+class PaymentTerms:
+    NET_30 = "net_30"
+    NET_45 = "net_45"
+    NET_60 = "net_60"
+    ADVANCE_50_DELIVERY_50 = "50_advance_50_delivery"
+    ADVANCE_100 = "100_advance"
+    AGAINST_DELIVERY = "against_delivery"
+    MILESTONE_BASED = "milestone_based"
+    LETTER_OF_CREDIT = "letter_of_credit"
+    CUSTOM = "custom"
+
+PAYMENT_TERMS_LABELS = {
+    "net_30": "Net 30 Days",
+    "net_45": "Net 45 Days",
+    "net_60": "Net 60 Days",
+    "50_advance_50_delivery": "50% Advance, 50% on Delivery",
+    "100_advance": "100% Advance",
+    "against_delivery": "Payment Against Delivery",
+    "milestone_based": "Milestone-Based Payment",
+    "letter_of_credit": "Letter of Credit (LC)",
+    "custom": "Custom Terms"
+}
+
 class RFQCreate(BaseModel):
     title: str
     description: Optional[str] = None
@@ -451,6 +475,8 @@ class RFQCreate(BaseModel):
     surface_finish: Optional[str] = None
     supply_type: str = SupplyType.VENDOR_MATERIAL
     deadline: Optional[str] = None
+    preferred_payment_terms: Optional[str] = PaymentTerms.NET_30
+    payment_terms_notes: Optional[str] = None
 
 class Drawing(BaseModel):
     model_config = ConfigDict(extra="ignore")
