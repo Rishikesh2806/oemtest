@@ -197,6 +197,22 @@ const QuoteComparison = ({ quotes, open, onOpenChange, onAcceptQuote, rfqId }) =
                     </div>
                   </div>
                 )}
+
+                {/* Payment Terms */}
+                {quote.proposed_payment_terms && (
+                  <div className="p-3 border-t bg-blue-50">
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                      <CreditCard className="w-3 h-3 inline mr-1" />
+                      Payment Terms
+                    </p>
+                    <p className="text-sm font-medium text-blue-700">
+                      {PAYMENT_TERMS_LABELS[quote.proposed_payment_terms] || quote.proposed_payment_terms}
+                    </p>
+                    {quote.payment_terms_notes && (
+                      <p className="text-xs text-slate-500 mt-1">{quote.payment_terms_notes}</p>
+                    )}
+                  </div>
+                )}
                 
                 {/* Certifications */}
                 {quote.vendor_certifications?.length > 0 && (
