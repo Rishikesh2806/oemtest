@@ -34,6 +34,8 @@ const RFQDetail = () => {
     notes: ""
   });
 
+  const [compareDialogOpen, setCompareDialogOpen] = useState(false);
+
   useEffect(() => {
     fetchRFQData();
   }, [rfqId]);
