@@ -2683,85 +2683,194 @@ async def admin_list_all_machines(user: dict = Depends(get_current_user), vendor
 async def get_machine_categories():
     """Get machine categories with their specific dimension fields"""
     categories = {
-        "Turning/Lathe": {
-            "types": ["CNC Lathe", "CNC Turning", "Swiss Lathe", "Turret Lathe"],
+        "CNC Turning/Lathe": {
+            "types": ["CNC Lathe", "CNC Turning", "Swiss Lathe", "CNC Turn-Mill"],
             "dimension_fields": [
-                {"key": "max_length", "label": "Max Length (mm)", "type": "number"},
-                {"key": "max_diameter", "label": "Max Diameter (mm)", "type": "number"},
+                {"key": "max_length", "label": "Max Turning Length (mm)", "type": "number"},
+                {"key": "max_diameter", "label": "Max Turning Diameter (mm)", "type": "number"},
                 {"key": "max_swing", "label": "Max Swing Over Bed (mm)", "type": "number"}
             ]
         },
-        "Milling": {
-            "types": ["CNC Milling", "VMC", "HMC", "Vertical Milling", "Horizontal Milling"],
+        "VTL (Vertical Turret Lathe)": {
+            "types": ["VTL", "Vertical Turret Lathe", "CNC VTL", "Double Column VTL"],
             "dimension_fields": [
-                {"key": "max_x", "label": "Max X Travel (mm)", "type": "number"},
-                {"key": "max_y", "label": "Max Y Travel (mm)", "type": "number"},
-                {"key": "max_z", "label": "Max Z Travel (mm)", "type": "number"}
+                {"key": "max_diameter", "label": "Max Turning Diameter (mm)", "type": "number"},
+                {"key": "max_length", "label": "Max Turning Height (mm)", "type": "number"},
+                {"key": "table_diameter", "label": "Table Diameter (mm)", "type": "number"},
+                {"key": "max_weight", "label": "Max Workpiece Weight (kg)", "type": "number"}
+            ]
+        },
+        "VMC (Vertical Machining Center)": {
+            "types": ["VMC", "CNC VMC", "High Speed VMC", "Heavy Duty VMC", "Double Column VMC"],
+            "dimension_fields": [
+                {"key": "max_x", "label": "X-Axis Travel (mm)", "type": "number"},
+                {"key": "max_y", "label": "Y-Axis Travel (mm)", "type": "number"},
+                {"key": "max_z", "label": "Z-Axis Travel (mm)", "type": "number"},
+                {"key": "table_size_x", "label": "Table Size X (mm)", "type": "number"},
+                {"key": "table_size_y", "label": "Table Size Y (mm)", "type": "number"}
+            ]
+        },
+        "HMC (Horizontal Machining Center)": {
+            "types": ["HMC", "CNC HMC", "Pallet HMC", "High Speed HMC"],
+            "dimension_fields": [
+                {"key": "max_x", "label": "X-Axis Travel (mm)", "type": "number"},
+                {"key": "max_y", "label": "Y-Axis Travel (mm)", "type": "number"},
+                {"key": "max_z", "label": "Z-Axis Travel (mm)", "type": "number"},
+                {"key": "pallet_size", "label": "Pallet Size (mm)", "type": "number"}
             ]
         },
         "5-Axis Machining": {
-            "types": ["5-Axis VMC", "5-Axis HMC", "5-Axis Mill-Turn"],
+            "types": ["5-Axis VMC", "5-Axis HMC", "5-Axis Mill-Turn", "5-Axis Gantry"],
             "dimension_fields": [
-                {"key": "max_x", "label": "Max X Travel (mm)", "type": "number"},
-                {"key": "max_y", "label": "Max Y Travel (mm)", "type": "number"},
-                {"key": "max_z", "label": "Max Z Travel (mm)", "type": "number"},
-                {"key": "max_diameter", "label": "Max Part Diameter (mm)", "type": "number"}
+                {"key": "max_x", "label": "X-Axis Travel (mm)", "type": "number"},
+                {"key": "max_y", "label": "Y-Axis Travel (mm)", "type": "number"},
+                {"key": "max_z", "label": "Z-Axis Travel (mm)", "type": "number"},
+                {"key": "max_diameter", "label": "Max Part Diameter (mm)", "type": "number"},
+                {"key": "a_axis_range", "label": "A-Axis Range (°)", "type": "number"},
+                {"key": "c_axis_range", "label": "C-Axis Range (°)", "type": "number"}
             ]
         },
-        "Boring": {
-            "types": ["Horizontal Boring", "Vertical Boring", "Jig Boring", "Line Boring"],
+        "Conventional Lathe": {
+            "types": ["Engine Lathe", "Turret Lathe", "Capstan Lathe", "Gap Bed Lathe", "Heavy Duty Lathe"],
             "dimension_fields": [
-                {"key": "bore_diameter", "label": "Max Bore Diameter (mm)", "type": "number"},
-                {"key": "outer_diameter", "label": "Max OD (mm)", "type": "number"},
-                {"key": "max_length", "label": "Max Length (mm)", "type": "number"}
+                {"key": "max_length", "label": "Center Distance (mm)", "type": "number"},
+                {"key": "max_diameter", "label": "Swing Over Bed (mm)", "type": "number"},
+                {"key": "spindle_bore", "label": "Spindle Bore (mm)", "type": "number"}
+            ]
+        },
+        "Conventional Milling": {
+            "types": ["Universal Milling", "Vertical Milling", "Horizontal Milling", "Knee Mill", "Bed Mill", "Ram Turret Mill"],
+            "dimension_fields": [
+                {"key": "max_x", "label": "Table Travel X (mm)", "type": "number"},
+                {"key": "max_y", "label": "Table Travel Y (mm)", "type": "number"},
+                {"key": "max_z", "label": "Head Travel Z (mm)", "type": "number"},
+                {"key": "table_size_x", "label": "Table Size X (mm)", "type": "number"},
+                {"key": "table_size_y", "label": "Table Size Y (mm)", "type": "number"}
+            ]
+        },
+        "Boring Machine": {
+            "types": ["Horizontal Boring Mill", "Vertical Boring Mill", "Jig Boring", "Line Boring", "CNC Boring Mill", "Floor Boring"],
+            "dimension_fields": [
+                {"key": "bore_diameter", "label": "Max Spindle Diameter (mm)", "type": "number"},
+                {"key": "max_x", "label": "X-Axis Travel (mm)", "type": "number"},
+                {"key": "max_y", "label": "Y-Axis Travel (mm)", "type": "number"},
+                {"key": "max_z", "label": "Z-Axis/Spindle Travel (mm)", "type": "number"}
+            ]
+        },
+        "Shaping Machine": {
+            "types": ["Shaper", "Planer", "Slotter", "CNC Shaper"],
+            "dimension_fields": [
+                {"key": "max_stroke", "label": "Max Stroke Length (mm)", "type": "number"},
+                {"key": "max_x", "label": "Table Travel X (mm)", "type": "number"},
+                {"key": "max_y", "label": "Table Travel Y (mm)", "type": "number"},
+                {"key": "table_size_x", "label": "Table Size X (mm)", "type": "number"}
+            ]
+        },
+        "Gear Manufacturing": {
+            "types": ["Gear Hobbing", "Gear Shaping", "Gear Grinding", "Gear Shaving", "Bevel Gear Generator", "CNC Gear Hobbing"],
+            "dimension_fields": [
+                {"key": "max_diameter", "label": "Max Gear Diameter (mm)", "type": "number"},
+                {"key": "max_module", "label": "Max Module (mm)", "type": "number"},
+                {"key": "max_length", "label": "Max Face Width (mm)", "type": "number"},
+                {"key": "min_teeth", "label": "Min No. of Teeth", "type": "number"}
             ]
         },
         "Grinding": {
-            "types": ["Surface Grinding", "Cylindrical Grinding", "Centerless Grinding", "ID Grinding"],
+            "types": ["Surface Grinder", "Cylindrical Grinder", "Centerless Grinder", "ID Grinder", "Tool & Cutter Grinder", "CNC Grinding"],
             "dimension_fields": [
-                {"key": "max_x", "label": "Max Length (mm)", "type": "number"},
-                {"key": "max_y", "label": "Max Width (mm)", "type": "number"},
-                {"key": "max_diameter", "label": "Max Diameter (mm)", "type": "number"}
+                {"key": "max_x", "label": "Table Travel/Length (mm)", "type": "number"},
+                {"key": "max_y", "label": "Table Width (mm)", "type": "number"},
+                {"key": "max_diameter", "label": "Max Grinding Diameter (mm)", "type": "number"},
+                {"key": "max_length", "label": "Max Grinding Length (mm)", "type": "number"}
             ]
         },
         "EDM": {
-            "types": ["Wire EDM", "Sinker EDM", "Hole Drilling EDM"],
+            "types": ["Wire EDM", "Sinker EDM", "Hole Drilling EDM", "CNC EDM"],
             "dimension_fields": [
-                {"key": "max_x", "label": "Max X (mm)", "type": "number"},
-                {"key": "max_y", "label": "Max Y (mm)", "type": "number"},
-                {"key": "max_z", "label": "Max Z (mm)", "type": "number"},
-                {"key": "max_taper_angle", "label": "Max Taper Angle (°)", "type": "number"}
+                {"key": "max_x", "label": "X-Axis Travel (mm)", "type": "number"},
+                {"key": "max_y", "label": "Y-Axis Travel (mm)", "type": "number"},
+                {"key": "max_z", "label": "Z-Axis Travel (mm)", "type": "number"},
+                {"key": "max_taper_angle", "label": "Max Taper Angle (°)", "type": "number"},
+                {"key": "max_thickness", "label": "Max Workpiece Thickness (mm)", "type": "number"}
             ]
         },
-        "Cutting": {
-            "types": ["Laser Cutting", "Plasma Cutting", "Waterjet Cutting", "Oxy-Fuel Cutting"],
+        "Drilling Machine": {
+            "types": ["Radial Drill", "Pillar Drill", "Bench Drill", "Gang Drill", "CNC Drilling", "Deep Hole Drilling"],
             "dimension_fields": [
-                {"key": "max_x", "label": "Max Length (mm)", "type": "number"},
-                {"key": "max_y", "label": "Max Width (mm)", "type": "number"},
-                {"key": "max_thickness", "label": "Max Thickness (mm)", "type": "number"}
+                {"key": "max_diameter", "label": "Max Drilling Diameter (mm)", "type": "number"},
+                {"key": "max_depth", "label": "Max Drilling Depth (mm)", "type": "number"},
+                {"key": "spindle_travel", "label": "Spindle Travel (mm)", "type": "number"},
+                {"key": "arm_length", "label": "Radial Arm Length (mm)", "type": "number"}
             ]
         },
-        "Sheet Metal": {
-            "types": ["Press Brake", "Punch Press", "Shearing", "Roll Forming"],
+        "Laser Cutting": {
+            "types": ["CO2 Laser", "Fiber Laser", "Tube Laser", "3D Laser Cutting"],
             "dimension_fields": [
-                {"key": "max_length", "label": "Max Length (mm)", "type": "number"},
-                {"key": "max_thickness", "label": "Max Thickness (mm)", "type": "number"},
-                {"key": "tonnage", "label": "Tonnage", "type": "number"}
+                {"key": "max_x", "label": "Cutting Area X (mm)", "type": "number"},
+                {"key": "max_y", "label": "Cutting Area Y (mm)", "type": "number"},
+                {"key": "max_thickness", "label": "Max Cutting Thickness (mm)", "type": "number"},
+                {"key": "laser_power", "label": "Laser Power (kW)", "type": "number"}
+            ]
+        },
+        "Plasma/Waterjet Cutting": {
+            "types": ["Plasma Cutting", "Waterjet Cutting", "CNC Plasma", "Abrasive Waterjet"],
+            "dimension_fields": [
+                {"key": "max_x", "label": "Cutting Area X (mm)", "type": "number"},
+                {"key": "max_y", "label": "Cutting Area Y (mm)", "type": "number"},
+                {"key": "max_thickness", "label": "Max Cutting Thickness (mm)", "type": "number"}
+            ]
+        },
+        "Sheet Metal/Press": {
+            "types": ["Press Brake", "Hydraulic Press", "Mechanical Press", "Punch Press", "Shearing Machine", "Roll Forming"],
+            "dimension_fields": [
+                {"key": "max_length", "label": "Bed Length (mm)", "type": "number"},
+                {"key": "max_thickness", "label": "Max Sheet Thickness (mm)", "type": "number"},
+                {"key": "tonnage", "label": "Tonnage/Press Force (ton)", "type": "number"},
+                {"key": "stroke", "label": "Stroke (mm)", "type": "number"}
             ]
         },
         "Welding": {
-            "types": ["MIG Welding", "TIG Welding", "Spot Welding", "Laser Welding", "Robot Welding"],
+            "types": ["MIG Welding", "TIG Welding", "ARC Welding", "Spot Welding", "Seam Welding", "Laser Welding", "Robot Welding", "Submerged Arc Welding"],
             "dimension_fields": [
-                {"key": "max_thickness", "label": "Max Thickness (mm)", "type": "number"},
-                {"key": "max_length", "label": "Max Weld Length (mm)", "type": "number"}
+                {"key": "max_thickness", "label": "Max Weld Thickness (mm)", "type": "number"},
+                {"key": "max_length", "label": "Max Weld Length (mm)", "type": "number"},
+                {"key": "amperage", "label": "Max Amperage (A)", "type": "number"}
+            ]
+        },
+        "Heat Treatment": {
+            "types": ["Furnace", "Induction Hardening", "Case Hardening", "Annealing", "Quenching", "Tempering"],
+            "dimension_fields": [
+                {"key": "max_x", "label": "Chamber Length (mm)", "type": "number"},
+                {"key": "max_y", "label": "Chamber Width (mm)", "type": "number"},
+                {"key": "max_z", "label": "Chamber Height (mm)", "type": "number"},
+                {"key": "max_temp", "label": "Max Temperature (°C)", "type": "number"}
+            ]
+        },
+        "Surface Treatment": {
+            "types": ["Shot Blasting", "Sand Blasting", "Electroplating", "Anodizing", "Powder Coating", "Painting"],
+            "dimension_fields": [
+                {"key": "max_x", "label": "Max Part Length (mm)", "type": "number"},
+                {"key": "max_y", "label": "Max Part Width (mm)", "type": "number"},
+                {"key": "max_z", "label": "Max Part Height (mm)", "type": "number"},
+                {"key": "max_weight", "label": "Max Part Weight (kg)", "type": "number"}
+            ]
+        },
+        "Inspection/CMM": {
+            "types": ["CMM", "Vision System", "Profile Projector", "Roughness Tester", "Hardness Tester", "3D Scanner"],
+            "dimension_fields": [
+                {"key": "max_x", "label": "Measuring Range X (mm)", "type": "number"},
+                {"key": "max_y", "label": "Measuring Range Y (mm)", "type": "number"},
+                {"key": "max_z", "label": "Measuring Range Z (mm)", "type": "number"},
+                {"key": "accuracy", "label": "Accuracy (μm)", "type": "number"}
             ]
         },
         "Additive Manufacturing": {
-            "types": ["3D Printing", "SLS", "SLA", "DMLS", "FDM"],
+            "types": ["FDM", "SLA", "SLS", "DMLS", "SLM", "Binder Jetting", "Metal 3D Printing"],
             "dimension_fields": [
-                {"key": "max_x", "label": "Build X (mm)", "type": "number"},
-                {"key": "max_y", "label": "Build Y (mm)", "type": "number"},
-                {"key": "max_z", "label": "Build Z (mm)", "type": "number"}
+                {"key": "max_x", "label": "Build Volume X (mm)", "type": "number"},
+                {"key": "max_y", "label": "Build Volume Y (mm)", "type": "number"},
+                {"key": "max_z", "label": "Build Volume Z (mm)", "type": "number"},
+                {"key": "layer_thickness", "label": "Min Layer Thickness (μm)", "type": "number"}
             ]
         }
     }
