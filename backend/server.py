@@ -439,6 +439,8 @@ class RFQ(BaseModel):
     drawing_ids: List[str] = []
     ai_analysis: Optional[Dict[str, Any]] = None
     matched_vendors: List[Dict[str, Any]] = []
+    preferred_payment_terms: Optional[str] = None  # Buyer's preferred payment terms
+    payment_terms_notes: Optional[str] = None  # Additional payment terms notes
     created_at: str
     updated_at: str
 
