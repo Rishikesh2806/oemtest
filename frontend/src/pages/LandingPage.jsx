@@ -59,7 +59,7 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
             <Factory className="w-8 h-8 text-orange-600" />
-            <span className="font-heading font-bold text-xl text-slate-900">OFFOADEX</span>
+            <span className="font-heading font-bold text-xl text-slate-900">OFFLOADEX</span>
           </Link>
           
           <div className="flex items-center gap-4">
@@ -225,7 +225,7 @@ const LandingPage = () => {
               Ready to Transform Your Manufacturing Supply Chain?
             </h2>
             <p className="text-slate-400 text-lg mb-8">
-              Join thousands of buyers and manufacturers already using Offoadex to streamline their production workflow.
+              Join thousands of buyers and manufacturers already using Offloadex to streamline their production workflow.
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link to="/register">
@@ -256,9 +256,9 @@ const LandingPage = () => {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <Factory className="w-6 h-6 text-orange-600" />
-              <span className="font-heading font-bold text-white">OFFOADEX</span>
+              <span className="font-heading font-bold text-white">OFFLOADEX</span>
             </div>
-            <p className="text-sm">© 2024 Offoadex. Precision Manufacturing on Demand.</p>
+            <p className="text-sm">© 2024 Offloadex. Precision Manufacturing on Demand.</p>
           </div>
         </div>
       </footer>

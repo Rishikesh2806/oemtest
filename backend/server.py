@@ -27,12 +27,12 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 # JWT Settings
-JWT_SECRET = os.environ.get('JWT_SECRET_KEY', 'offoadex_secret_key')
+JWT_SECRET = os.environ.get('JWT_SECRET_KEY', 'offloadex_secret_key')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 168  # 7 days
 
 # Create the main app
-app = FastAPI(title="Offoadex API", version="1.0.0")
+app = FastAPI(title="Offloadex API", version="1.0.0")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -90,14 +90,14 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                         <p style="color: #64748b; margin: 5px 0;"><strong>Your Match Score:</strong> {data.get('match_score', 'N/A')}%</p>
                     </div>
                     
-                    <p style="font-size: 16px; color: #334155;">Log in to Offoadex to view details and submit your quote.</p>
+                    <p style="font-size: 16px; color: #334155;">Log in to Offloadex to view details and submit your quote.</p>
                     
                     <div style="text-align: center; margin-top: 30px;">
                         <a href="{data.get('app_url', '#')}" style="background: #f97316; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">View RFQ</a>
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>Offoadex - AI-Powered Manufacturing Marketplace</p>
+                    <p>Offloadex - AI-Powered Manufacturing Marketplace</p>
                 </div>
             </div>
             """
@@ -127,7 +127,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>Offoadex - AI-Powered Manufacturing Marketplace</p>
+                    <p>Offloadex - AI-Powered Manufacturing Marketplace</p>
                 </div>
             </div>
             """
@@ -157,7 +157,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>Offoadex - AI-Powered Manufacturing Marketplace</p>
+                    <p>Offloadex - AI-Powered Manufacturing Marketplace</p>
                 </div>
             </div>
             """
@@ -185,7 +185,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>Offoadex - AI-Powered Manufacturing Marketplace</p>
+                    <p>Offloadex - AI-Powered Manufacturing Marketplace</p>
                 </div>
             </div>
             """
@@ -199,7 +199,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                 </div>
                 <div style="padding: 30px; background: #f8fafc;">
                     <p style="font-size: 16px; color: #334155;">Hello {data.get('recipient_name', 'User')},</p>
-                    <p style="font-size: 16px; color: #334155;">You have a new message on Offoadex.</p>
+                    <p style="font-size: 16px; color: #334155;">You have a new message on Offloadex.</p>
                     
                     <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #8b5cf6;">
                         <p style="color: #64748b; margin: 0 0 10px 0;"><strong>From:</strong> {data.get('sender_name', 'N/A')}</p>
@@ -211,7 +211,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>Offoadex - AI-Powered Manufacturing Marketplace</p>
+                    <p>Offloadex - AI-Powered Manufacturing Marketplace</p>
                 </div>
             </div>
             """
@@ -219,7 +219,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
     }
     
     template = templates.get(template_type, {})
-    return template.get("subject", "Offoadex Notification"), template.get("html", "<p>Notification</p>")
+    return template.get("subject", "Offloadex Notification"), template.get("html", "<p>Notification</p>")
 
 # ============== MODELS ==============
 
@@ -3713,7 +3713,7 @@ async def get_vendor_dashboard(user: dict = Depends(get_current_user)):
 
 @api_router.get("/")
 async def root():
-    return {"message": "Offoadex API", "version": "1.0.0"}
+    return {"message": "Offloadex API", "version": "1.0.0"}
 
 @api_router.get("/health")
 async def health_check():

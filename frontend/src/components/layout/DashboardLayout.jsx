@@ -110,7 +110,7 @@ const DashboardLayout = ({ children }) => {
           
           <Link to="/" className="flex items-center gap-2">
             <Factory className="w-7 h-7 text-orange-600" />
-            <span className="font-heading font-bold text-slate-900">OFFOADEX</span>
+            <span className="font-heading font-bold text-slate-900">OFFLOADEX</span>
           </Link>
 
           <DropdownMenu>
@@ -137,7 +137,7 @@ const DashboardLayout = ({ children }) => {
           <div className="p-6 border-b border-slate-800">
             <Link to="/" className="flex items-center gap-2">
               <Factory className="w-8 h-8 text-orange-600" />
-              <span className="font-heading font-bold text-xl text-white">OFFOADEX</span>
+              <span className="font-heading font-bold text-xl text-white">OFFLOADEX</span>
             </Link>
           </div>
 
