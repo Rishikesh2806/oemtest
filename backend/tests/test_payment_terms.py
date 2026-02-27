@@ -23,10 +23,11 @@ class TestPaymentTermsAPI:
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         
         data = response.json()
-        assert "payment_terms" in data, "Response should contain 'payment_terms' key"
+        # API returns 'terms' key
+        assert "terms" in data, f"Response should contain 'terms' key. Got: {data.keys()}"
         
-        terms = data["payment_terms"]
-        assert isinstance(terms, list), "payment_terms should be a list"
+        terms = data["terms"]
+        assert isinstance(terms, list), "terms should be a list"
         assert len(terms) >= 8, f"Expected at least 8 payment terms, got {len(terms)}"
         
         # Verify each term has value and label
