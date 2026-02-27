@@ -2411,15 +2411,13 @@ async def confirm_delivery(order_id: str, user: dict = Depends(get_current_user)
     try:
         vendor = await db.vendors.find_one({"vendor_id": order["vendor_id"]}, {"_id": 0})
         if vendor and vendor.get("contact_email"):
-            await send_email(
-                to_email=vendor["contact_email"],
-                template_key="order_status_update",
-                data={
-                    "order_id": order_id,
-                    "status": "Delivered",
-                    "app_url": f"{os.environ.get('CORS_ORIGINS', '').split(',')[0]}/orders/{order_id}"
-                }
-            )
+            email_data = {
+                "order_id": order_id,
+                "status": "Delivered - Confirmed by buyer",
+                "app_url": f"{os.environ.get('CORS_ORIGINS', '').split(',')[0]}/orders/{order_id}"
+            }
+            subject, html = get_email_template("order_status_update", email_data)
+            asyncio.create_task(send_email_async(vendor["contact_email"], subject, html))
     except Exception as e:
         print(f"Email error: {e}")
     
