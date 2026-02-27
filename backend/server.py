@@ -2472,15 +2472,13 @@ async def add_tracking_info(order_id: str, request: Request, user: dict = Depend
     try:
         buyer = await db.users.find_one({"user_id": order["buyer_id"]}, {"_id": 0})
         if buyer and buyer.get("email"):
-            await send_email(
-                to_email=buyer["email"],
-                template_key="order_status_update",
-                data={
-                    "order_id": order_id,
-                    "status": f"Dispatched - Track via {courier}: {tracking_number}",
-                    "app_url": f"{os.environ.get('CORS_ORIGINS', '').split(',')[0]}/orders/{order_id}"
-                }
-            )
+            email_data = {
+                "order_id": order_id,
+                "status": f"Dispatched - Track via {courier}: {tracking_number}",
+                "app_url": f"{os.environ.get('CORS_ORIGINS', '').split(',')[0]}/orders/{order_id}"
+            }
+            subject, html = get_email_template("order_status_update", email_data)
+            asyncio.create_task(send_email_async(buyer["email"], subject, html))
     except Exception as e:
         print(f"Email error: {e}")
     
