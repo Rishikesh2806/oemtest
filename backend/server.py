@@ -2991,24 +2991,53 @@ async def admin_create_machine(request: Request, user: dict = Depends(get_curren
         "model": body.get("model", ""),
         "year_purchased": body.get("year_purchased"),
         "tolerance": body.get("tolerance", 0.01),
-        # Milling/VMC dimensions
+        # Standard dimensions
         "max_x": body.get("max_x", 0),
         "max_y": body.get("max_y", 0),
         "max_z": body.get("max_z", 0),
-        # Lathe/Turning dimensions
-        "max_length": body.get("max_length", 0),
         "max_diameter": body.get("max_diameter", 0),
+        "max_length": body.get("max_length", 0),
         "max_swing": body.get("max_swing", 0),
-        # Boring machine dimensions
+        # Boring/Drilling specific
         "bore_diameter": body.get("bore_diameter", 0),
         "outer_diameter": body.get("outer_diameter", 0),
-        # Sheet metal / Cutting dimensions
-        "max_thickness": body.get("max_thickness", 0),
+        "spindle_bore": body.get("spindle_bore", 0),
+        "spindle_travel": body.get("spindle_travel", 0),
+        "arm_length": body.get("arm_length", 0),
+        "max_depth": body.get("max_depth", 0),
+        # VTL/Table specific
+        "table_diameter": body.get("table_diameter", 0),
+        "table_size_x": body.get("table_size_x", 0),
+        "table_size_y": body.get("table_size_y", 0),
+        "pallet_size": body.get("pallet_size", 0),
+        "max_weight": body.get("max_weight", 0),
+        # Shaping specific
+        "max_stroke": body.get("max_stroke", 0),
+        "stroke": body.get("stroke", 0),
+        # Gear specific
+        "max_module": body.get("max_module", 0),
+        "min_teeth": body.get("min_teeth", 0),
+        # 5-Axis specific
+        "a_axis_range": body.get("a_axis_range", 0),
+        "c_axis_range": body.get("c_axis_range", 0),
+        # Sheet Metal/Press specific
         "tonnage": body.get("tonnage", 0),
+        "max_thickness": body.get("max_thickness", 0),
+        # Laser specific
+        "laser_power": body.get("laser_power", 0),
+        # Welding specific
+        "amperage": body.get("amperage", 0),
+        # Heat Treatment specific
+        "max_temp": body.get("max_temp", 0),
+        # Inspection specific
+        "accuracy": body.get("accuracy", 0),
+        # Additive specific
+        "layer_thickness": body.get("layer_thickness", 0),
         # EDM specific
         "max_taper_angle": body.get("max_taper_angle", 0),
         # General
         "materials": body.get("materials", []),
+        "materials_supported": body.get("materials_supported", []),
         "is_active": body.get("is_active", True),
         "created_at": datetime.now(timezone.utc).isoformat()
     }
