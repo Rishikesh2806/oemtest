@@ -1,4 +1,9 @@
-# Offoadex.com - AI-Powered Manufacturing Marketplace PRD
+# Offloadex.com - AI-Powered Manufacturing Marketplace PRD
+
+## Brand
+- **Name**: Offloadex
+- **Logo**: https://static.prod-images.emergentagent.com/jobs/10fd967d-100a-4ba4-9810-7f001d27333f/images/538e025cbcf1bcc1a8edd395590b4013ce298ebbb676ea7cd077596def05a82f.png
+- **Tagline**: Precision Manufacturing on Demand
 
 ## Original Problem Statement
 Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometry where buyers upload engineering drawings and RFQs, and vendors are automatically matched based on machine capability, past work, and technical suitability. Platform should intelligently read engineering drawings and extract dimensions/tolerances.
