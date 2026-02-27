@@ -2174,9 +2174,14 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
         {"$set": {"status": "rejected"}}
     )
     
-    # Create order
+    # Create order with finalized payment terms from quote
     order_id = f"order_{uuid.uuid4().hex[:12]}"
+    po_number = f"PO-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
     now = datetime.now(timezone.utc).isoformat()
+    
+    # Get payment terms from quote (vendor's proposed terms) 
+    payment_terms = quote.get("proposed_payment_terms", "net_30")
+    payment_terms_notes = quote.get("payment_terms_notes", "")
     
     order_doc = {
         "order_id": order_id,
@@ -2188,8 +2193,12 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
         "currency": quote["currency"],
         "status": OrderStatus.PENDING_PAYMENT,
         "payment_status": "pending",
+        "payment_terms": payment_terms,
+        "payment_terms_label": PAYMENT_TERMS_LABELS.get(payment_terms, payment_terms),
+        "payment_terms_notes": payment_terms_notes,
+        "po_number": po_number,
         "tracking_updates": [
-            {"status": "Order Created", "timestamp": now, "note": "Quote accepted, awaiting payment"}
+            {"status": "Order Created", "timestamp": now, "note": f"Quote accepted. PO #{po_number}. Payment Terms: {PAYMENT_TERMS_LABELS.get(payment_terms, payment_terms)}"}
         ],
         "created_at": now,
         "updated_at": now
