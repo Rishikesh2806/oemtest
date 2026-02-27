@@ -639,6 +639,43 @@ async def get_current_user_optional(request: Request) -> Optional[dict]:
     except HTTPException:
         return None
 
+# ============== NOTIFICATION HELPER ==============
+
+async def create_notification(
+    user_id: str, 
+    notification_type: str, 
+    title: str, 
+    message: str, 
+    data: dict = None,
+    send_email: bool = False,
+    email_template: str = None,
+    email_data: dict = None
+):
+    """Create an in-app notification and optionally send email"""
+    now = datetime.now(timezone.utc).isoformat()
+    
+    notification = {
+        "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+        "user_id": user_id,
+        "type": notification_type,
+        "title": title,
+        "message": message,
+        "data": data or {},
+        "is_read": False,
+        "created_at": now
+    }
+    
+    await db.notifications.insert_one(notification)
+    
+    # Send email if requested
+    if send_email and email_template and email_data:
+        user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "email": 1})
+        if user and user.get("email"):
+            subject, html = get_email_template(email_template, email_data)
+            asyncio.create_task(send_email_async(user["email"], subject, html))
+    
+    return notification
+
 # ============== AUTH ROUTES ==============
 
 @api_router.post("/auth/register", response_model=TokenResponse)
