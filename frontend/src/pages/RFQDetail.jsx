@@ -6,6 +6,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { toast } from "sonner";
@@ -13,9 +14,26 @@ import {
   FileText, Package, Star, MapPin, Loader2, 
   CheckCircle2, Send, DollarSign, Clock, ArrowLeft,
   Building2, Cpu, Wrench, AlertCircle, Target, MessageSquare, Eye,
-  BarChart3
+  BarChart3, CreditCard
 } from "lucide-react";
 import QuoteComparison from "../components/quotes/QuoteComparison";
+
+const PAYMENT_TERMS = [
+  { value: "net_30", label: "Net 30 Days" },
+  { value: "net_45", label: "Net 45 Days" },
+  { value: "net_60", label: "Net 60 Days" },
+  { value: "50_advance_50_delivery", label: "50% Advance, 50% on Delivery" },
+  { value: "100_advance", label: "100% Advance" },
+  { value: "against_delivery", label: "Payment Against Delivery" },
+  { value: "milestone_based", label: "Milestone-Based Payment" },
+  { value: "letter_of_credit", label: "Letter of Credit (LC)" },
+  { value: "custom", label: "Custom Terms" }
+];
+
+const getPaymentTermLabel = (value) => {
+  const term = PAYMENT_TERMS.find(t => t.value === value);
+  return term ? term.label : value;
+};
 
 const RFQDetail = () => {
   const { rfqId } = useParams();
@@ -31,7 +49,9 @@ const RFQDetail = () => {
   const [quoteForm, setQuoteForm] = useState({
     price: "",
     lead_time_days: "",
-    notes: ""
+    notes: "",
+    proposed_payment_terms: "net_30",
+    payment_terms_notes: ""
   });
 
   const [compareDialogOpen, setCompareDialogOpen] = useState(false);
