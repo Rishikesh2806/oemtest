@@ -1,13 +1,19 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth, api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Textarea } from "../components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "../components/ui/dialog";
 import { toast } from "sonner";
 import { 
   Package, ArrowLeft, Loader2, CreditCard, 
-  CheckCircle2, Clock, Truck, MapPin, AlertCircle
+  CheckCircle2, Clock, Truck, MapPin, AlertCircle,
+  Star, MessageSquare, Building2, ThumbsUp, Send,
+  FileText, User, Box, Calendar
 } from "lucide-react";
 
 const OrderDetail = () => {
@@ -16,15 +22,38 @@ const OrderDetail = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
+  const [orderDetails, setOrderDetails] = useState(null);
   const [loading, setLoading] = useState(true);
   const [processingPayment, setProcessingPayment] = useState(false);
+  
+  // Rating dialog state
+  const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
+  const [rating, setRating] = useState({
+    overall_rating: 5,
+    quality_rating: 5,
+    communication_rating: 5,
+    delivery_rating: 5,
+    review_text: "",
+    would_recommend: true
+  });
+  const [submittingRating, setSubmittingRating] = useState(false);
+  
+  // Tracking dialog state
+  const [trackingDialogOpen, setTrackingDialogOpen] = useState(false);
+  const [trackingInfo, setTrackingInfo] = useState({
+    courier: "",
+    tracking_number: "",
+    estimated_delivery: "",
+    note: ""
+  });
+  const [submittingTracking, setSubmittingTracking] = useState(false);
 
   useEffect(() => {
     fetchOrder();
+    fetchOrderDetails();
   }, [orderId]);
 
   useEffect(() => {
-    // Check for payment callback
     const sessionId = searchParams.get("session_id");
     if (sessionId) {
       pollPaymentStatus(sessionId);
@@ -39,6 +68,15 @@ const OrderDetail = () => {
       toast.error("Failed to load order details");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchOrderDetails = async () => {
+    try {
+      const response = await api.get(`/orders/${orderId}/details`);
+      setOrderDetails(response.data);
+    } catch (error) {
+      console.error("Failed to load order details:", error);
     }
   };
 
@@ -57,13 +95,13 @@ const OrderDetail = () => {
       if (response.data.payment_status === "paid") {
         toast.success("Payment successful!");
         fetchOrder();
+        fetchOrderDetails();
         return;
       } else if (response.data.status === "expired") {
         toast.error("Payment session expired");
         return;
       }
 
-      // Continue polling
       setTimeout(() => pollPaymentStatus(sessionId, attempts + 1), pollInterval);
     } catch (error) {
       console.error("Error checking payment status:", error);
@@ -93,16 +131,79 @@ const OrderDetail = () => {
       await api.put(`/orders/${orderId}/status`, { status: newStatus, note });
       toast.success("Status updated");
       fetchOrder();
+      fetchOrderDetails();
     } catch (error) {
       toast.error("Failed to update status");
     }
   };
+
+  const confirmDelivery = async () => {
+    try {
+      await api.post(`/orders/${orderId}/confirm-delivery`);
+      toast.success("Delivery confirmed! You can now rate the vendor.");
+      fetchOrder();
+      fetchOrderDetails();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to confirm delivery");
+    }
+  };
+
+  const submitRating = async () => {
+    setSubmittingRating(true);
+    try {
+      await api.post(`/orders/${orderId}/rate`, rating);
+      toast.success("Thank you for your feedback!");
+      setRatingDialogOpen(false);
+      fetchOrder();
+      fetchOrderDetails();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to submit rating");
+    } finally {
+      setSubmittingRating(false);
+    }
+  };
+
+  const submitTracking = async () => {
+    setSubmittingTracking(true);
+    try {
+      await api.post(`/orders/${orderId}/add-tracking`, trackingInfo);
+      toast.success("Tracking information added");
+      setTrackingDialogOpen(false);
+      fetchOrder();
+      fetchOrderDetails();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to add tracking");
+    } finally {
+      setSubmittingTracking(false);
+    }
+  };
+
+  const StarRating = ({ value, onChange, label }) => (
+    <div className="space-y-1">
+      <Label className="text-sm text-slate-600">{label}</Label>
+      <div className="flex gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            type="button"
+            onClick={() => onChange(star)}
+            className="focus:outline-none transition-transform hover:scale-110"
+          >
+            <Star 
+              className={`w-7 h-7 ${star <= value ? "fill-amber-400 text-amber-400" : "text-slate-300"}`}
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 
   const getStatusIcon = (status) => {
     switch (status) {
       case "pending_payment": return <CreditCard className="w-5 h-5" />;
       case "paid": return <CheckCircle2 className="w-5 h-5" />;
       case "in_production": return <Clock className="w-5 h-5" />;
+      case "quality_check": return <Box className="w-5 h-5" />;
       case "dispatched": return <Truck className="w-5 h-5" />;
       case "delivered": return <MapPin className="w-5 h-5" />;
       case "completed": return <CheckCircle2 className="w-5 h-5" />;
@@ -115,8 +216,9 @@ const OrderDetail = () => {
       case "pending_payment": return "text-amber-600 bg-amber-100";
       case "paid": return "text-green-600 bg-green-100";
       case "in_production": return "text-blue-600 bg-blue-100";
-      case "dispatched": return "text-purple-600 bg-purple-100";
-      case "delivered": return "text-indigo-600 bg-indigo-100";
+      case "quality_check": return "text-purple-600 bg-purple-100";
+      case "dispatched": return "text-indigo-600 bg-indigo-100";
+      case "delivered": return "text-teal-600 bg-teal-100";
       case "completed": return "text-green-600 bg-green-100";
       case "cancelled": return "text-red-600 bg-red-100";
       default: return "text-slate-600 bg-slate-100";
@@ -158,6 +260,9 @@ const OrderDetail = () => {
   ];
 
   const currentStatusIndex = statusFlow.findIndex(s => s.key === order.status);
+  const canRate = isBuyer && 
+    (order.status === "delivered" || order.status === "completed") && 
+    !orderDetails?.is_rated;
 
   return (
     <DashboardLayout>
@@ -171,6 +276,16 @@ const OrderDetail = () => {
           >
             <ArrowLeft className="w-4 h-4 mr-2" /> Back
           </Button>
+          
+          {canRate && (
+            <Button 
+              onClick={() => setRatingDialogOpen(true)}
+              className="bg-amber-500 hover:bg-amber-600"
+              data-testid="rate-vendor-btn"
+            >
+              <Star className="w-4 h-4 mr-2" /> Rate Vendor
+            </Button>
+          )}
         </div>
 
         {/* Order Summary */}
@@ -188,19 +303,19 @@ const OrderDetail = () => {
               <div className={`px-4 py-2 rounded-lg ${getStatusColor(order.status)}`}>
                 <div className="flex items-center gap-2 font-medium">
                   {getStatusIcon(order.status)}
-                  {order.status.replace("_", " ").toUpperCase()}
+                  {order.status.replace(/_/g, " ").toUpperCase()}
                 </div>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-4 gap-4">
               <div className="p-4 bg-slate-50 rounded-lg">
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
                   Total Amount
                 </p>
-                <p className="text-3xl font-bold text-slate-900">
-                  ${order.total_amount?.toFixed(2)}
+                <p className="text-2xl font-bold text-slate-900">
+                  ${order.total_amount?.toLocaleString(undefined, {minimumFractionDigits: 2})}
                 </p>
                 <p className="text-sm text-slate-500">{order.currency}</p>
               </div>
@@ -208,7 +323,16 @@ const OrderDetail = () => {
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
                   Payment Status
                 </p>
-                <span className={`status-badge ${order.payment_status === "paid" ? "status-paid" : "status-pending"}`}>
+                <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${
+                  order.payment_status === "paid" 
+                    ? "bg-green-100 text-green-700" 
+                    : "bg-amber-100 text-amber-700"
+                }`}>
+                  {order.payment_status === "paid" ? (
+                    <CheckCircle2 className="w-4 h-4" />
+                  ) : (
+                    <Clock className="w-4 h-4" />
+                  )}
                   {order.payment_status}
                 </span>
               </div>
@@ -217,8 +341,22 @@ const OrderDetail = () => {
                   RFQ Reference
                 </p>
                 <p className="text-sm font-mono text-slate-600">
-                  {order.rfq_id}
+                  {order.rfq_id?.slice(-8)}
                 </p>
+                {orderDetails?.rfq?.title && (
+                  <p className="text-xs text-slate-500 mt-1 truncate">
+                    {orderDetails.rfq.title}
+                  </p>
+                )}
+              </div>
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Quantity
+                </p>
+                <p className="text-2xl font-bold text-slate-900">
+                  {orderDetails?.rfq?.quantity || 1}
+                </p>
+                <p className="text-sm text-slate-500">units</p>
               </div>
             </div>
 
@@ -236,12 +374,140 @@ const OrderDetail = () => {
                   ) : (
                     <CreditCard className="w-4 h-4 mr-2" />
                   )}
-                  Pay Now - ${order.total_amount?.toFixed(2)}
+                  Pay Now - ${order.total_amount?.toLocaleString(undefined, {minimumFractionDigits: 2})}
                 </Button>
+              </div>
+            )}
+
+            {/* Confirm Delivery Button for Buyer */}
+            {isBuyer && order.status === "dispatched" && !order.delivery_confirmed && (
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <Button
+                  onClick={confirmDelivery}
+                  className="bg-teal-600 hover:bg-teal-700 w-full md:w-auto"
+                  data-testid="confirm-delivery-btn"
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Confirm Delivery Received
+                </Button>
+                <p className="text-xs text-slate-500 mt-2">
+                  Confirm when you've received the order to rate the vendor
+                </p>
               </div>
             )}
           </CardContent>
         </Card>
+
+        {/* Vendor/Buyer Info Cards */}
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Vendor Info (for Buyer) */}
+          {isBuyer && orderDetails?.vendor && (
+            <Card className="border-slate-200">
+              <CardHeader>
+                <CardTitle className="font-heading text-lg flex items-center gap-2">
+                  <Building2 className="w-5 h-5 text-orange-600" />
+                  Vendor Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Company</span>
+                    <span className="font-medium">{orderDetails.vendor.company_name}</span>
+                  </div>
+                  {orderDetails.vendor.rating > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">Rating</span>
+                      <span className="flex items-center gap-1 font-medium">
+                        <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                        {orderDetails.vendor.rating.toFixed(1)}
+                      </span>
+                    </div>
+                  )}
+                  {orderDetails.vendor.address && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">Location</span>
+                      <span className="text-sm">{orderDetails.vendor.address}</span>
+                    </div>
+                  )}
+                  {orderDetails.vendor.vendor_id && (
+                    <Link to={`/vendor-profile/${orderDetails.vendor.vendor_id}`}>
+                      <Button variant="outline" size="sm" className="w-full mt-2">
+                        View Full Profile
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Buyer Info (for Vendor) */}
+          {isVendor && orderDetails?.buyer && (
+            <Card className="border-slate-200">
+              <CardHeader>
+                <CardTitle className="font-heading text-lg flex items-center gap-2">
+                  <User className="w-5 h-5 text-orange-600" />
+                  Buyer Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Name</span>
+                    <span className="font-medium">{orderDetails.buyer.name}</span>
+                  </div>
+                  {orderDetails.buyer.email && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">Email</span>
+                      <span className="text-sm">{orderDetails.buyer.email}</span>
+                    </div>
+                  )}
+                  {orderDetails.buyer.user_id && (
+                    <Link to={`/chat?with=${orderDetails.buyer.user_id}`}>
+                      <Button variant="outline" size="sm" className="w-full mt-2">
+                        <MessageSquare className="w-4 h-4 mr-2" />
+                        Message Buyer
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Tracking Info */}
+          {order.tracking_info && (
+            <Card className="border-slate-200">
+              <CardHeader>
+                <CardTitle className="font-heading text-lg flex items-center gap-2">
+                  <Truck className="w-5 h-5 text-indigo-600" />
+                  Shipping Information
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Courier</span>
+                    <span className="font-medium">{order.tracking_info.courier}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600">Tracking Number</span>
+                    <span className="font-mono text-sm bg-slate-100 px-2 py-1 rounded">
+                      {order.tracking_info.tracking_number}
+                    </span>
+                  </div>
+                  {order.tracking_info.estimated_delivery && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-600">Est. Delivery</span>
+                      <span>{order.tracking_info.estimated_delivery}</span>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
 
         {/* Status Timeline */}
         <Card className="border-slate-200">
@@ -281,27 +547,86 @@ const OrderDetail = () => {
             </div>
 
             {/* Vendor Status Update Buttons */}
-            {isVendor && order.payment_status === "paid" && (
+            {isVendor && order.payment_status === "paid" && order.status !== "completed" && (
               <div className="mt-6 pt-6 border-t border-slate-200">
                 <p className="text-sm text-slate-500 mb-3">Update order status:</p>
                 <div className="flex flex-wrap gap-2">
-                  {["in_production", "quality_check", "dispatched", "delivered"].map((status) => (
-                    <Button
-                      key={status}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => updateStatus(status)}
-                      disabled={statusFlow.findIndex(s => s.key === status) <= currentStatusIndex}
-                      data-testid={`status-${status}-btn`}
-                    >
-                      {status.replace("_", " ")}
-                    </Button>
-                  ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => updateStatus("in_production", "Production started")}
+                    disabled={currentStatusIndex >= statusFlow.findIndex(s => s.key === "in_production")}
+                    data-testid="status-in_production-btn"
+                  >
+                    <Clock className="w-4 h-4 mr-1" /> Start Production
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => updateStatus("quality_check", "Quality inspection in progress")}
+                    disabled={currentStatusIndex >= statusFlow.findIndex(s => s.key === "quality_check")}
+                    data-testid="status-quality_check-btn"
+                  >
+                    <Box className="w-4 h-4 mr-1" /> Quality Check
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setTrackingDialogOpen(true)}
+                    disabled={currentStatusIndex >= statusFlow.findIndex(s => s.key === "dispatched")}
+                    data-testid="add-tracking-btn"
+                  >
+                    <Truck className="w-4 h-4 mr-1" /> Add Tracking & Ship
+                  </Button>
                 </div>
               </div>
             )}
           </CardContent>
         </Card>
+
+        {/* Rating Display (if rated) */}
+        {orderDetails?.rating && (
+          <Card className="border-slate-200 bg-gradient-to-r from-amber-50 to-orange-50">
+            <CardHeader>
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <Star className="w-5 h-5 fill-amber-400 text-amber-400" />
+                Your Rating
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid md:grid-cols-4 gap-4 mb-4">
+                {[
+                  { label: "Overall", value: orderDetails.rating.overall_rating },
+                  { label: "Quality", value: orderDetails.rating.quality_rating },
+                  { label: "Communication", value: orderDetails.rating.communication_rating },
+                  { label: "Delivery", value: orderDetails.rating.delivery_rating }
+                ].map(item => (
+                  <div key={item.label} className="text-center">
+                    <p className="text-xs text-slate-500 mb-1">{item.label}</p>
+                    <div className="flex justify-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map(star => (
+                        <Star 
+                          key={star}
+                          className={`w-4 h-4 ${star <= item.value ? "fill-amber-400 text-amber-400" : "text-slate-300"}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {orderDetails.rating.review_text && (
+                <div className="bg-white p-3 rounded-lg border border-amber-200">
+                  <p className="text-sm text-slate-600 italic">"{orderDetails.rating.review_text}"</p>
+                </div>
+              )}
+              {orderDetails.rating.would_recommend && (
+                <p className="text-sm text-green-600 mt-3 flex items-center gap-1">
+                  <ThumbsUp className="w-4 h-4" /> You recommended this vendor
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Tracking Updates */}
         {order.tracking_updates?.length > 0 && (
@@ -315,7 +640,9 @@ const OrderDetail = () => {
                   <div key={i} className="flex items-start gap-4">
                     <div className="w-2 h-2 bg-orange-600 rounded-full mt-2" />
                     <div>
-                      <p className="font-medium text-slate-900">{update.status}</p>
+                      <p className="font-medium text-slate-900 capitalize">
+                        {update.status.replace(/_/g, " ")}
+                      </p>
                       {update.note && <p className="text-sm text-slate-500">{update.note}</p>}
                       <p className="text-xs text-slate-400 mt-1">
                         {new Date(update.timestamp).toLocaleString()}
@@ -328,6 +655,152 @@ const OrderDetail = () => {
           </Card>
         )}
       </div>
+
+      {/* Rating Dialog */}
+      <Dialog open={ratingDialogOpen} onOpenChange={setRatingDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Star className="w-5 h-5 text-amber-500" />
+              Rate Your Experience
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-5 py-4">
+            <StarRating 
+              label="Overall Rating" 
+              value={rating.overall_rating} 
+              onChange={(v) => setRating({...rating, overall_rating: v})}
+            />
+            <StarRating 
+              label="Quality of Work" 
+              value={rating.quality_rating} 
+              onChange={(v) => setRating({...rating, quality_rating: v})}
+            />
+            <StarRating 
+              label="Communication" 
+              value={rating.communication_rating} 
+              onChange={(v) => setRating({...rating, communication_rating: v})}
+            />
+            <StarRating 
+              label="Delivery Time" 
+              value={rating.delivery_rating} 
+              onChange={(v) => setRating({...rating, delivery_rating: v})}
+            />
+            
+            <div className="space-y-2">
+              <Label>Write a Review (Optional)</Label>
+              <Textarea 
+                placeholder="Share your experience with this vendor..."
+                value={rating.review_text}
+                onChange={(e) => setRating({...rating, review_text: e.target.value})}
+                rows={3}
+              />
+            </div>
+            
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input 
+                type="checkbox"
+                checked={rating.would_recommend}
+                onChange={(e) => setRating({...rating, would_recommend: e.target.checked})}
+                className="w-4 h-4 text-orange-600 rounded"
+              />
+              <span className="text-sm text-slate-600">
+                I would recommend this vendor to others
+              </span>
+            </label>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRatingDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={submitRating} 
+              disabled={submittingRating}
+              className="bg-amber-500 hover:bg-amber-600"
+              data-testid="submit-rating-btn"
+            >
+              {submittingRating ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Send className="w-4 h-4 mr-2" />
+              )}
+              Submit Rating
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Tracking Info Dialog */}
+      <Dialog open={trackingDialogOpen} onOpenChange={setTrackingDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Truck className="w-5 h-5 text-indigo-600" />
+              Add Shipping Details
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Courier / Shipping Company *</Label>
+              <Input 
+                placeholder="e.g., FedEx, DHL, UPS"
+                value={trackingInfo.courier}
+                onChange={(e) => setTrackingInfo({...trackingInfo, courier: e.target.value})}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Tracking Number *</Label>
+              <Input 
+                placeholder="Enter tracking number"
+                value={trackingInfo.tracking_number}
+                onChange={(e) => setTrackingInfo({...trackingInfo, tracking_number: e.target.value})}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Estimated Delivery Date</Label>
+              <Input 
+                type="date"
+                value={trackingInfo.estimated_delivery}
+                onChange={(e) => setTrackingInfo({...trackingInfo, estimated_delivery: e.target.value})}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label>Additional Notes</Label>
+              <Textarea 
+                placeholder="Any additional shipping information..."
+                value={trackingInfo.note}
+                onChange={(e) => setTrackingInfo({...trackingInfo, note: e.target.value})}
+                rows={2}
+              />
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTrackingDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={submitTracking} 
+              disabled={submittingTracking || !trackingInfo.courier || !trackingInfo.tracking_number}
+              className="bg-indigo-600 hover:bg-indigo-700"
+              data-testid="submit-tracking-btn"
+            >
+              {submittingTracking ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Send className="w-4 h-4 mr-2" />
+              )}
+              Add & Ship
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };
