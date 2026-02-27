@@ -17,6 +17,75 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - **Payments**: Stripe (test mode)
 - **Email**: Resend API
 
+## What's Been Implemented (Feb 2026)
+
+### Payment Terms System (NEW - Feb 27)
+- **9 Payment Term Options**: Net 30/45/60, 50% advance + 50% delivery, 100% advance, Against Delivery, Milestone-Based, Letter of Credit, Custom
+- **RFQ**: Buyer specifies preferred_payment_terms when creating RFQ
+- **Quote**: Vendor proposes payment terms when submitting quote
+- **Order/PO**: Finalized payment terms reflected in Purchase Order
+- **PO Number Format**: PO-YYYYMMDD-XXXXXX
+
+### Vendor Rating System
+- 4-category rating (Overall, Quality, Communication, Delivery)
+- Auto-updates vendor average rating
+- Reviews displayed on VendorProfileView
+
+### Enhanced Order Management
+- Full order lifecycle tracking
+- Confirm delivery by buyer
+- Add tracking info by vendor
+- Status timeline visualization
+
+### Quote Comparison
+- Side-by-side comparison dialog
+- Best Price, Fastest, Top Rated badges
+- Payment terms comparison
+
+### Core Features
+- User authentication (JWT + Google OAuth)
+- Role-based access control (Buyer, Vendor, Admin)
+- AI drawing analysis (GPT-5.2 Vision)
+- Smart vendor matching algorithm
+- 21 machine categories with conditional dimensions
+- Email notifications (Resend)
+- Secure drawing viewer
+- Comprehensive Admin Panel
+
+## Test Reports
+- iteration_1-7: Previous features
+- iteration_8: Payment Terms (89% backend, 100% frontend)
+
+## Test Credentials
+- **Admin**: admin@offoadex.com / admin123  
+- **Buyer**: buyer@offoadex.com / buyer123
+
+## Prioritized Backlog
+
+### P1 - High Priority (Next)
+- AI Voice Agent for machine availability check
+- Revenue analytics charts
+- Vendor capacity calendar
+
+### P2 - Medium Priority
+- Bulk machine import (CSV)
+- WhatsApp/SMS notifications
+- Repeat order feature
+
+### P3 - Future
+- Instant AI auto-quote
+- ERP integration API
+- Multi-currency support
+
+## Architecture Overview
+- **Frontend**: React 19 + Tailwind CSS + Shadcn UI
+- **Backend**: FastAPI (Python)
+- **Database**: MongoDB
+- **AI**: OpenAI GPT-5.2 Vision (via Emergent LLM Key)
+- **Auth**: JWT + Emergent Google OAuth
+- **Payments**: Stripe (test mode)
+- **Email**: Resend API
+
 ## User Personas
 1. **Buyer** - Engineers/procurement teams sourcing manufacturing services
 2. **Vendor** - Machine shops/manufacturers offering services
