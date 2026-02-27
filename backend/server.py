@@ -2224,6 +2224,270 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     
     return {"message": "Status updated", "status": new_status}
 
+# ============== VENDOR RATING SYSTEM ==============
+
+@api_router.post("/orders/{order_id}/rate")
+async def rate_vendor(order_id: str, rating: RatingCreate, user: dict = Depends(get_current_user)):
+    """Rate a vendor after order completion - buyers only"""
+    if user["role"] != UserRole.BUYER:
+        raise HTTPException(status_code=403, detail="Only buyers can rate vendors")
+    
+    order = await db.orders.find_one({"order_id": order_id, "buyer_id": user["user_id"]}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Only allow rating for delivered or completed orders
+    if order["status"] not in [OrderStatus.DELIVERED, OrderStatus.COMPLETED]:
+        raise HTTPException(status_code=400, detail="Can only rate after order is delivered")
+    
+    # Check if already rated
+    existing_rating = await db.ratings.find_one({"order_id": order_id})
+    if existing_rating:
+        raise HTTPException(status_code=400, detail="Order already rated")
+    
+    # Validate ratings
+    for r in [rating.overall_rating, rating.quality_rating, rating.communication_rating, rating.delivery_rating]:
+        if r < 1 or r > 5:
+            raise HTTPException(status_code=400, detail="Ratings must be between 1 and 5")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Get RFQ info for context
+    rfq = await db.rfqs.find_one({"rfq_id": order["rfq_id"]}, {"_id": 0, "title": 1})
+    
+    rating_doc = {
+        "rating_id": f"rating_{uuid.uuid4().hex[:12]}",
+        "order_id": order_id,
+        "rfq_id": order["rfq_id"],
+        "rfq_title": rfq.get("title", "") if rfq else "",
+        "vendor_id": order["vendor_id"],
+        "buyer_id": user["user_id"],
+        "buyer_name": user.get("name", user.get("company_name", "Anonymous")),
+        "overall_rating": rating.overall_rating,
+        "quality_rating": rating.quality_rating,
+        "communication_rating": rating.communication_rating,
+        "delivery_rating": rating.delivery_rating,
+        "review_text": rating.review_text,
+        "would_recommend": rating.would_recommend,
+        "created_at": now
+    }
+    
+    await db.ratings.insert_one(rating_doc)
+    
+    # Update vendor's average rating
+    all_ratings = await db.ratings.find({"vendor_id": order["vendor_id"]}, {"_id": 0}).to_list(1000)
+    avg_rating = sum(r["overall_rating"] for r in all_ratings) / len(all_ratings)
+    
+    await db.vendors.update_one(
+        {"vendor_id": order["vendor_id"]},
+        {"$set": {"rating": round(avg_rating, 2), "total_reviews": len(all_ratings)}}
+    )
+    
+    # Mark order as completed and rated
+    await db.orders.update_one(
+        {"order_id": order_id},
+        {
+            "$set": {"status": OrderStatus.COMPLETED, "is_rated": True, "updated_at": now},
+            "$push": {"tracking_updates": {"status": "completed", "timestamp": now, "note": "Order rated by buyer"}}
+        }
+    )
+    
+    return {"message": "Rating submitted", "rating_id": rating_doc["rating_id"]}
+
+@api_router.get("/vendors/{vendor_id}/ratings")
+async def get_vendor_ratings(vendor_id: str, limit: int = 20):
+    """Get ratings for a vendor - public endpoint"""
+    ratings = await db.ratings.find(
+        {"vendor_id": vendor_id}, 
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(limit)
+    
+    # Calculate stats
+    if ratings:
+        stats = {
+            "total_reviews": len(ratings),
+            "average_overall": round(sum(r["overall_rating"] for r in ratings) / len(ratings), 2),
+            "average_quality": round(sum(r["quality_rating"] for r in ratings) / len(ratings), 2),
+            "average_communication": round(sum(r["communication_rating"] for r in ratings) / len(ratings), 2),
+            "average_delivery": round(sum(r["delivery_rating"] for r in ratings) / len(ratings), 2),
+            "recommendation_rate": round(sum(1 for r in ratings if r["would_recommend"]) / len(ratings) * 100, 1)
+        }
+    else:
+        stats = {
+            "total_reviews": 0,
+            "average_overall": 0,
+            "average_quality": 0,
+            "average_communication": 0,
+            "average_delivery": 0,
+            "recommendation_rate": 0
+        }
+    
+    return {"ratings": ratings, "stats": stats}
+
+@api_router.get("/orders/{order_id}/rating")
+async def get_order_rating(order_id: str, user: dict = Depends(get_current_user)):
+    """Check if an order has been rated"""
+    rating = await db.ratings.find_one({"order_id": order_id}, {"_id": 0})
+    return {"rated": rating is not None, "rating": rating}
+
+# ============== ENHANCED ORDER MANAGEMENT ==============
+
+@api_router.get("/orders/{order_id}/details")
+async def get_order_details(order_id: str, user: dict = Depends(get_current_user)):
+    """Get full order details with related info"""
+    order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Get vendor info
+    vendor = await db.vendors.find_one({"vendor_id": order["vendor_id"]}, {"_id": 0})
+    
+    # Get quote info
+    quote = await db.quotes.find_one({"quote_id": order["quote_id"]}, {"_id": 0})
+    
+    # Get RFQ info
+    rfq = await db.rfqs.find_one({"rfq_id": order["rfq_id"]}, {"_id": 0})
+    
+    # Get buyer info
+    buyer = await db.users.find_one({"user_id": order["buyer_id"]}, {"_id": 0, "password_hash": 0})
+    
+    # Get rating if exists
+    rating = await db.ratings.find_one({"order_id": order_id}, {"_id": 0})
+    
+    return {
+        "order": order,
+        "vendor": {
+            "vendor_id": vendor.get("vendor_id") if vendor else None,
+            "company_name": vendor.get("company_name") if vendor else "Unknown",
+            "rating": vendor.get("rating", 0) if vendor else 0,
+            "email": vendor.get("contact_email") if vendor else None,
+            "phone": vendor.get("contact_phone") if vendor else None,
+            "address": f"{vendor.get('city', '')}, {vendor.get('country', '')}".strip(", ") if vendor else ""
+        },
+        "buyer": {
+            "user_id": buyer.get("user_id") if buyer else None,
+            "name": buyer.get("name", buyer.get("company_name", "Unknown")) if buyer else "Unknown",
+            "email": buyer.get("email") if buyer else None
+        },
+        "quote": {
+            "price": quote.get("price") if quote else 0,
+            "lead_time_days": quote.get("lead_time_days") if quote else 0,
+            "notes": quote.get("notes") if quote else ""
+        },
+        "rfq": {
+            "rfq_id": rfq.get("rfq_id") if rfq else None,
+            "title": rfq.get("title") if rfq else "Unknown",
+            "material_type": rfq.get("material_type") if rfq else "",
+            "quantity": rfq.get("quantity", 1) if rfq else 1
+        },
+        "rating": rating,
+        "is_rated": rating is not None
+    }
+
+@api_router.post("/orders/{order_id}/confirm-delivery")
+async def confirm_delivery(order_id: str, user: dict = Depends(get_current_user)):
+    """Buyer confirms delivery - triggers ability to rate"""
+    if user["role"] != UserRole.BUYER:
+        raise HTTPException(status_code=403, detail="Only buyers can confirm delivery")
+    
+    order = await db.orders.find_one({"order_id": order_id, "buyer_id": user["user_id"]}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order["status"] not in [OrderStatus.DISPATCHED, OrderStatus.DELIVERED]:
+        raise HTTPException(status_code=400, detail="Order must be dispatched or delivered to confirm")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    await db.orders.update_one(
+        {"order_id": order_id},
+        {
+            "$set": {"status": OrderStatus.DELIVERED, "delivery_confirmed": True, "delivered_at": now, "updated_at": now},
+            "$push": {"tracking_updates": {"status": "delivered", "timestamp": now, "note": "Delivery confirmed by buyer"}}
+        }
+    )
+    
+    # Send email to vendor
+    try:
+        vendor = await db.vendors.find_one({"vendor_id": order["vendor_id"]}, {"_id": 0})
+        if vendor and vendor.get("contact_email"):
+            await send_email(
+                to_email=vendor["contact_email"],
+                template_key="order_status_update",
+                data={
+                    "order_id": order_id,
+                    "status": "Delivered",
+                    "app_url": f"{os.environ.get('CORS_ORIGINS', '').split(',')[0]}/orders/{order_id}"
+                }
+            )
+    except Exception as e:
+        print(f"Email error: {e}")
+    
+    return {"message": "Delivery confirmed", "status": OrderStatus.DELIVERED}
+
+@api_router.post("/orders/{order_id}/add-tracking")
+async def add_tracking_info(order_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Vendor adds tracking info like courier and tracking number"""
+    if user["role"] != UserRole.VENDOR:
+        raise HTTPException(status_code=403, detail="Only vendors can add tracking info")
+    
+    body = await request.json()
+    courier = body.get("courier", "")
+    tracking_number = body.get("tracking_number", "")
+    estimated_delivery = body.get("estimated_delivery", "")
+    note = body.get("note", "")
+    
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    order = await db.orders.find_one({"order_id": order_id, "vendor_id": vendor["vendor_id"]}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    tracking_info = {
+        "courier": courier,
+        "tracking_number": tracking_number,
+        "estimated_delivery": estimated_delivery,
+        "added_at": now
+    }
+    
+    await db.orders.update_one(
+        {"order_id": order_id},
+        {
+            "$set": {
+                "tracking_info": tracking_info,
+                "status": OrderStatus.DISPATCHED,
+                "updated_at": now
+            },
+            "$push": {"tracking_updates": {
+                "status": "dispatched", 
+                "timestamp": now, 
+                "note": f"Shipped via {courier}. Tracking: {tracking_number}. {note}".strip()
+            }}
+        }
+    )
+    
+    # Send email to buyer
+    try:
+        buyer = await db.users.find_one({"user_id": order["buyer_id"]}, {"_id": 0})
+        if buyer and buyer.get("email"):
+            await send_email(
+                to_email=buyer["email"],
+                template_key="order_status_update",
+                data={
+                    "order_id": order_id,
+                    "status": f"Dispatched - Track via {courier}: {tracking_number}",
+                    "app_url": f"{os.environ.get('CORS_ORIGINS', '').split(',')[0]}/orders/{order_id}"
+                }
+            )
+    except Exception as e:
+        print(f"Email error: {e}")
+    
+    return {"message": "Tracking info added", "tracking_info": tracking_info}
+
 # ============== PAYMENT ROUTES ==============
 
 @api_router.post("/payments/checkout")
