@@ -20,52 +20,53 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 ## What's Been Implemented (Feb 2026)
 
 ### Backend (FastAPI)
-- ✅ User authentication (JWT + Google OAuth)
-- ✅ Role-based access control
-- ✅ RFQ CRUD operations
-- ✅ Drawing upload with base64 storage
-- ✅ AI drawing analysis (GPT-5.2 Vision)
-- ✅ Vendor matching algorithm
-- ✅ Quote management
-- ✅ Order creation and tracking
-- ✅ Stripe payment integration
-- ✅ Dashboard statistics APIs
-- ✅ Messaging/Chat APIs
-- ✅ Vendor Full Profile API
-- ✅ **Admin Management APIs** (users, rfqs, quotes, orders, drawings, vendors, ndas)
-- ✅ **Email Notifications** (Resend API integration)
-- ✅ **Drawing View/Download** (token-based browser viewing)
-- ✅ **Admin Vendor Profile Management (NEW - Feb 25)**
-  - GET /api/admin/vendors/{id}/full - Full vendor profile with machines and stats
-  - PUT /api/admin/vendors/{id}/profile - Update vendor profile
-- ✅ **Admin Machine Management (NEW - Feb 25)**
-  - GET /api/admin/machines - List all machines (filter by vendor)
-  - POST /api/admin/machines - Create machine for any vendor
-  - GET /api/admin/machines/{id} - Get machine details
-  - PUT /api/admin/machines/{id} - Update any machine
-  - DELETE /api/admin/machines/{id} - Delete any machine
+- User authentication (JWT + Google OAuth)
+- Role-based access control
+- RFQ CRUD operations
+- Drawing upload with base64 storage
+- AI drawing analysis (GPT-5.2 Vision)
+- **Enhanced Vendor Matching Algorithm v2.0** (Feb 27)
+  - Machine dimension validation (envelope fit check per machine category)
+  - Keyword matching from RFQ title/description
+  - Vendor past experience scoring
+  - Process matching (milling, turning, gear, welding, etc.)
+  - Material compatibility check
+  - Tolerance capability validation
+- Quote management (create, list, accept)
+- Order creation and tracking
+- Stripe payment integration
+- Dashboard statistics APIs
+- Messaging/Chat APIs
+- Vendor Full Profile API
+- Admin Management APIs (users, rfqs, quotes, orders, drawings, vendors, ndas)
+- Email Notifications (Resend API integration)
+- Drawing View/Download (token-based browser viewing)
+- Admin Vendor/Machine Management
 
 ### Frontend (React)
-- ✅ Landing page with hero, features, how-it-works
-- ✅ Login/Register with role selection
-- ✅ Google OAuth integration
-- ✅ Buyer dashboard with stats
-- ✅ Multi-step RFQ creation wizard
-- ✅ RFQ detail with AI analysis display
-- ✅ **Drawing View/Download buttons** on RFQ detail
-- ✅ Vendor dashboard
-- ✅ Vendor profile management
-- ✅ Machine management (CRUD)
-- ✅ Quote submission for vendors
-- ✅ Order detail with payment & tracking
-- ✅ VendorProfileView page
-- ✅ ChatPage (messaging between buyers/vendors)
-- ✅ **Admin Dashboard** (8 tabs)
-- ✅ **Admin Vendor Profile Management (NEW - Feb 25)**
-  - View/Edit vendor profile (company info, certifications, industries, location, rating)
-  - Machines list with CRUD operations
-  - Add Machine dialog with all fields
-  - Edit/Delete machine functionality
+- Landing page with hero, features, how-it-works
+- Login/Register with role selection
+- Google OAuth integration
+- Buyer dashboard with stats
+- Multi-step RFQ creation wizard
+- RFQ detail with AI analysis display
+- Enhanced matched vendors display showing:
+  - Dimension capability
+  - Process matches
+  - Keyword matches
+  - Experience score
+  - Similar jobs count
+- Drawing View/Download buttons on RFQ detail
+- Vendor dashboard
+- Vendor profile management
+- Machine management (CRUD) with 21 categories
+- Quote submission for vendors
+- Quote comparison for buyers
+- Order detail with payment & tracking
+- VendorProfileView page
+- ChatPage (messaging between buyers/vendors)
+- Admin Dashboard (8 tabs)
+- Admin Vendor Profile Management
 
 ### Database Collections
 - users, user_sessions, vendors, machines
@@ -73,18 +74,48 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - payment_transactions, messages, conversations
 - ndas
 
-## Email Notification Triggers
-1. **vendor_matched** - When vendor is matched to an RFQ
-2. **quote_received** - When buyer receives a quote
-3. **quote_accepted** - When vendor's quote is accepted
-4. **order_status_update** - When order status changes
-5. **new_message** - When user receives a message
+## Machine Categories (21 types)
+1. Turning/Lathe (CNC)
+2. Milling (CNC)
+3. Vertical Machining Center (VMC)
+4. Horizontal Machining Center (HMC)
+5. 5-Axis Machining
+6. Vertical Turret Lathe (VTL)
+7. Boring Machine
+8. Drilling/Radial Drilling
+9. Gear Hobbing/Shaping
+10. Grinding (Surface/Cylindrical)
+11. Wire EDM
+12. Sinker EDM
+13. Laser Cutting
+14. Plasma Cutting
+15. Waterjet Cutting
+16. Press Brake/Sheet Metal
+17. Welding (MIG/TIG)
+18. Heat Treatment
+19. CMM/Inspection
+20. Additive Manufacturing
+21. Conventional Machines
+
+## Matching Algorithm Scoring (v2.0)
+| Component | Max Points | Description |
+|-----------|------------|-------------|
+| Dimension Capability | 15 | Machine envelope fits part |
+| Process Matching | 20-30 | Machine type matches required process |
+| Tolerance Capable | 20 | Machine tolerance <= required |
+| Materials Match | 15 | Supported materials include required |
+| Keyword Matches | 10 | Keywords from title/desc match |
+| Experience Score | 20 | Past similar jobs + keywords |
+| Vendor Rating | 10 | Rating * 2 |
+| Total Jobs | 10 | total_jobs / 10 |
+| **Max Total** | **100** | |
 
 ## Test Reports
 - /app/test_reports/iteration_1.json - Chat/Profile features (100% pass)
 - /app/test_reports/iteration_2.json - Admin Panel (100% pass)
 - /app/test_reports/iteration_3.json - Email & Drawings (100% pass)
 - /app/test_reports/iteration_4.json - Admin Vendor/Machine Management (100% pass)
+- /app/test_reports/iteration_5.json - RFQ Matching Algorithm (100% pass - 18 tests)
 
 ## Test Credentials
 - **Admin**: admin@offoadex.com / admin123
@@ -92,32 +123,42 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 ## Prioritized Backlog
 
 ### P0 - Critical (Completed)
-- ✅ Email notifications
-- ✅ Drawing view/download
-- ✅ Full Admin Panel
-- ✅ Admin Vendor/Machine Management
+- Email notifications
+- Drawing view/download
+- Full Admin Panel
+- Admin Vendor/Machine Management
+- Enhanced RFQ Matching Algorithm
 
 ### P1 - High Priority (Next)
-- [ ] Revenue analytics charts on admin dashboard
-- [ ] Vendor capacity calendar
-- [ ] Bulk machine import (CSV)
+- Quote rejection endpoint (allow buyers to reject quotes explicitly)
+- Order Management Module enhancements
+- Revenue analytics charts on admin dashboard
+- Vendor capacity calendar
+- Bulk machine import (CSV)
 
 ### P2 - Medium Priority
-- [ ] WhatsApp/SMS notifications
-- [ ] Repeat order feature
-- [ ] Vendor rating system
-- [ ] Document version control
-- [ ] Mobile responsive improvements
+- WhatsApp/SMS notifications
+- Repeat order feature
+- Vendor rating system after order completion
+- Document version control
+- Mobile responsive improvements
+- Quote comparison view (side-by-side)
 
 ### P3 - Future Features
-- [ ] Instant AI auto-quote
-- [ ] Supply chain financing
-- [ ] ERP integration API
-- [ ] Multi-currency support
-- [ ] Mobile app version
+- Instant AI auto-quote
+- Supply chain financing
+- ERP integration API
+- Multi-currency support
+- Mobile app version
+
+## Known Issues
+- None
+
+## Bug Fixes (Feb 27, 2026)
+- Fixed `AttributeError` in match_vendors when `ai_analysis` is None
 
 ## Next Tasks
-1. Add revenue analytics charts to admin dashboard
-2. Implement vendor capacity calendar
-3. Add vendor rating/review system
-4. Improve mobile responsiveness
+1. Add explicit quote rejection endpoint for buyers
+2. Implement order tracking improvements
+3. Add revenue analytics charts to admin dashboard
+4. Implement vendor capacity calendar
