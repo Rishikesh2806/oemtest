@@ -89,7 +89,9 @@ const RFQDetail = () => {
         rfq_id: rfqId,
         price: parseFloat(quoteForm.price),
         lead_time_days: parseInt(quoteForm.lead_time_days),
-        notes: quoteForm.notes
+        notes: quoteForm.notes,
+        proposed_payment_terms: quoteForm.proposed_payment_terms,
+        payment_terms_notes: quoteForm.payment_terms_notes
       });
       toast.success("Quote submitted successfully");
       setQuoteDialogOpen(false);
