@@ -72,32 +72,44 @@ def get_email_template(template_type: str, data: dict) -> tuple:
     
     templates = {
         "vendor_matched": {
-            "subject": f"New RFQ Match: {data.get('rfq_title', 'New Opportunity')}",
+            "subject": f"🎯 New RFQ Match ({data.get('match_score', 0)}%): {data.get('rfq_title', 'New Opportunity')}",
             "html": f"""
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <div style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); padding: 30px; text-align: center;">
                     <h1 style="color: white; margin: 0;">New RFQ Match!</h1>
+                    <p style="color: rgba(255,255,255,0.9); margin-top: 10px; font-size: 18px;">Match Score: {data.get('match_score', 0)}%</p>
                 </div>
                 <div style="padding: 30px; background: #f8fafc;">
                     <p style="font-size: 16px; color: #334155;">Hello {data.get('vendor_name', 'Vendor')},</p>
-                    <p style="font-size: 16px; color: #334155;">You've been matched to a new RFQ based on your machine capabilities!</p>
+                    <p style="font-size: 16px; color: #334155;">Great news! You've been matched to a new RFQ based on your machine capabilities.</p>
                     
                     <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #f97316;">
                         <h3 style="color: #1e293b; margin-top: 0;">{data.get('rfq_title', 'RFQ')}</h3>
-                        <p style="color: #64748b; margin: 5px 0;"><strong>Material:</strong> {data.get('material', 'N/A')}</p>
-                        <p style="color: #64748b; margin: 5px 0;"><strong>Quantity:</strong> {data.get('quantity', 'N/A')}</p>
-                        <p style="color: #64748b; margin: 5px 0;"><strong>Buyer:</strong> {data.get('buyer_name', 'N/A')}</p>
-                        <p style="color: #64748b; margin: 5px 0;"><strong>Your Match Score:</strong> {data.get('match_score', 'N/A')}%</p>
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr><td style="color: #64748b; padding: 8px 0;"><strong>Material:</strong></td><td style="color: #1e293b;">{data.get('material', 'N/A')}</td></tr>
+                            <tr><td style="color: #64748b; padding: 8px 0;"><strong>Quantity:</strong></td><td style="color: #1e293b;">{data.get('quantity', 'N/A')} units</td></tr>
+                            <tr><td style="color: #64748b; padding: 8px 0;"><strong>Tolerance:</strong></td><td style="color: #1e293b;">±{data.get('tolerance', 'N/A')}mm</td></tr>
+                            <tr><td style="color: #64748b; padding: 8px 0;"><strong>Buyer:</strong></td><td style="color: #1e293b;">{data.get('buyer_name', 'N/A')}</td></tr>
+                        </table>
                     </div>
                     
-                    <p style="font-size: 16px; color: #334155;">Log in to Offloadex to view details and submit your quote.</p>
+                    <div style="background: #ecfdf5; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                        <p style="color: #059669; margin: 0; font-weight: bold;">✓ Why You Matched:</p>
+                        <p style="color: #064e3b; margin: 8px 0 0 0; font-size: 14px;">
+                            <strong>Machines:</strong> {data.get('matching_machines', 'Compatible equipment')}<br/>
+                            <strong>Capabilities:</strong> {data.get('process_matches', 'Matching processes')}
+                        </p>
+                    </div>
+                    
+                    <p style="font-size: 16px; color: #334155;">Log in to Offloadex to view full details and submit your quote.</p>
                     
                     <div style="text-align: center; margin-top: 30px;">
-                        <a href="{data.get('app_url', '#')}" style="background: #f97316; color: white; padding: 12px 30px; text-decoration: none; border-radius: 6px; font-weight: bold;">View RFQ</a>
+                        <a href="{data.get('app_url', '#')}" style="background: #f97316; color: white; padding: 14px 35px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View RFQ & Submit Quote</a>
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
                     <p>Offloadex - AI-Powered Manufacturing Marketplace</p>
+                    <p>You received this because your match score is 50% or higher.</p>
                 </div>
             </div>
             """
