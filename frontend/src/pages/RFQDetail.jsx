@@ -316,6 +316,19 @@ const RFQDetail = () => {
                 <p className="text-slate-900 font-medium mt-1">{rfq.surface_finish || "Not specified"}</p>
               </div>
             </div>
+            
+            {/* Payment Terms Preference */}
+            {rfq.preferred_payment_terms && (
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-xs font-bold uppercase tracking-wider text-blue-700 mb-1">
+                  <CreditCard className="w-3 h-3 inline mr-1" /> Preferred Payment Terms
+                </p>
+                <p className="font-medium text-blue-900">{getPaymentTermLabel(rfq.preferred_payment_terms)}</p>
+                {rfq.payment_terms_notes && (
+                  <p className="text-sm text-blue-700 mt-1">{rfq.payment_terms_notes}</p>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
