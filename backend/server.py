@@ -1486,7 +1486,17 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
 
 @api_router.post("/rfqs/{rfq_id}/match")
 async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
-    """Match RFQ with capable vendors based on AI-extracted drawing data and machine capabilities"""
+    """
+    Enhanced RFQ Matching Algorithm v2.0
+    
+    Matches RFQ with capable vendors based on:
+    1. AI-extracted drawing dimensions and machine envelope validation
+    2. Required manufacturing processes vs machine capabilities
+    3. Material compatibility
+    4. Tolerance capabilities
+    5. Job title/description keyword matching
+    6. Seller past experience with similar jobs
+    """
     rfq = await db.rfqs.find_one({"rfq_id": rfq_id, "buyer_id": user["user_id"]}, {"_id": 0})
     if not rfq:
         raise HTTPException(status_code=404, detail="RFQ not found")
@@ -1507,6 +1517,9 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 "tolerance_capable": True,
                 "dimension_capable": True,
                 "process_matches": ["CNC Milling", "5-Axis Machining"],
+                "keyword_matches": ["CNC", "Milling"],
+                "experience_score": 85,
+                "similar_jobs_count": 45,
                 "location": "Mumbai, India",
                 "rating": 4.8,
                 "total_jobs": 156
@@ -1524,16 +1537,21 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         
         return {"matched_vendors": demo_matches, "total_matches": len(demo_matches)}
     
-    # Extract requirements from AI analysis
+    # ============== EXTRACT RFQ REQUIREMENTS ==============
     ai_analysis = rfq.get("ai_analysis", {})
     dims = ai_analysis.get("overall_dimensions", {})
     recommended_processes = ai_analysis.get("recommended_processes", [])
     
-    # Get max dimension from drawing for machine envelope check
+    # Get part dimensions from AI analysis
+    part_length = dims.get("length") or 0
+    part_width = dims.get("width") or 0
+    part_height = dims.get("height") or 0
+    part_diameter = dims.get("diameter") or ai_analysis.get("max_diameter_mm") or 0
+    
+    # Calculate max dimension for envelope check
     max_dimension = ai_analysis.get("max_dimension_mm")
     if not max_dimension:
-        # Calculate from dimensions
-        dim_values = [dims.get("length"), dims.get("width"), dims.get("height")]
+        dim_values = [part_length, part_width, part_height, part_diameter]
         dim_values = [d for d in dim_values if d]
         max_dimension = max(dim_values) if dim_values else None
     
@@ -1543,8 +1561,44 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     # Extract material from AI if available
     ai_material = (ai_analysis.get("material_specs") or "").lower()
     
-    logger.info(f"Matching RFQ {rfq_id}: dims={dims}, tolerance={required_tolerance}, material={required_material}, max_dim={max_dimension}")
-    logger.info(f"Recommended processes: {recommended_processes}")
+    # ============== EXTRACT JOB KEYWORDS FROM TITLE & DESCRIPTION ==============
+    job_title = rfq.get("title", "").lower()
+    job_description = rfq.get("description", "").lower()
+    
+    # Manufacturing process keywords to match
+    process_keywords = {
+        "turning": ["turn", "lathe", "shaft", "spindle", "axle", "rod", "pin", "bushing", "sleeve", "cylinder"],
+        "milling": ["mill", "pocket", "slot", "profile", "face", "plate", "block", "bracket", "housing"],
+        "drilling": ["drill", "hole", "bore", "tap", "thread"],
+        "grinding": ["grind", "finish", "polish", "surface"],
+        "gear": ["gear", "hobbing", "spline", "sprocket", "rack", "pinion", "cog"],
+        "boring": ["bore", "boring", "ream", "id", "internal"],
+        "welding": ["weld", "fabricat", "join", "assembly"],
+        "sheet_metal": ["sheet", "bend", "press", "punch", "shear", "fold", "brake"],
+        "cutting": ["cut", "laser", "plasma", "waterjet"],
+        "vtl": ["vtl", "vertical turret", "large diameter", "ring", "flange", "disc"],
+        "5axis": ["5-axis", "5 axis", "complex", "contour", "impeller", "blade", "turbine"],
+        "edm": ["edm", "wire cut", "spark", "electrode"],
+        "heat_treatment": ["heat treat", "harden", "temper", "anneal", "quench"],
+        "cnc": ["cnc", "precision", "accurate", "tight tolerance"]
+    }
+    
+    # Find matching keywords from job title and description
+    job_text = f"{job_title} {job_description}"
+    detected_keywords = []
+    detected_processes = []
+    
+    for process, keywords in process_keywords.items():
+        for keyword in keywords:
+            if keyword in job_text:
+                detected_keywords.append(keyword)
+                if process not in detected_processes:
+                    detected_processes.append(process)
+    
+    logger.info(f"Matching RFQ {rfq_id}: dims=L{part_length}xW{part_width}xH{part_height}, dia={part_diameter}")
+    logger.info(f"Required tolerance={required_tolerance}, material={required_material}")
+    logger.info(f"Detected keywords: {detected_keywords}, processes: {detected_processes}")
+    logger.info(f"AI recommended processes: {recommended_processes}")
     
     matched_vendors = []
     
@@ -1558,79 +1612,258 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         if not machines:
             continue
         
+        # ============== GET VENDOR'S PAST EXPERIENCE ==============
+        # Get completed orders for this vendor
+        past_orders = await db.orders.find(
+            {"vendor_id": vendor["vendor_id"], "status": "completed"},
+            {"_id": 0, "rfq_id": 1}
+        ).to_list(200)
+        
+        # Get RFQ details for past orders to analyze experience
+        past_rfq_ids = [o["rfq_id"] for o in past_orders]
+        past_rfqs = await db.rfqs.find(
+            {"rfq_id": {"$in": past_rfq_ids}},
+            {"_id": 0, "title": 1, "description": 1, "material_type": 1, "ai_analysis": 1}
+        ).to_list(200) if past_rfq_ids else []
+        
+        # Analyze similar past jobs
+        similar_jobs_count = 0
+        experience_keywords_matched = []
+        
+        for past_rfq in past_rfqs:
+            past_title = (past_rfq.get("title") or "").lower()
+            past_desc = (past_rfq.get("description") or "").lower()
+            past_material = (past_rfq.get("material_type") or "").lower()
+            past_text = f"{past_title} {past_desc}"
+            
+            # Check if past job is similar based on keywords
+            similarity_score = 0
+            for keyword in detected_keywords:
+                if keyword in past_text:
+                    similarity_score += 1
+                    if keyword not in experience_keywords_matched:
+                        experience_keywords_matched.append(keyword)
+            
+            # Check material match
+            if required_material and required_material in past_material:
+                similarity_score += 2
+            
+            # Check if past job used similar processes
+            past_processes = (past_rfq.get("ai_analysis") or {}).get("recommended_processes", [])
+            for proc in recommended_processes:
+                if any(proc.lower() in p.lower() for p in past_processes):
+                    similarity_score += 1
+            
+            if similarity_score >= 2:
+                similar_jobs_count += 1
+        
+        # Calculate experience score (max 20 points)
+        experience_score = min(similar_jobs_count * 2 + len(experience_keywords_matched), 20)
+        
         # Track capabilities across all machines
         matching_machines = []
         tolerance_capable = False
         materials_match = False
         dimension_capable = False
         process_matches = []
+        keyword_matches = []
         has_suitable_machine = False
         
         for machine in machines:
             machine_type_lower = machine.get("machine_type", "").lower()
-            machine_name = f"{machine['machine_type']} - {machine['brand']} {machine['model']}"
+            machine_category = machine.get("machine_category", "").lower()
+            machine_name = f"{machine.get('machine_type', '')} - {machine.get('brand', '')} {machine.get('model', '')}"
             machine_score = 0
             machine_process_match = False
+            dimension_fit = False
             
-            # CRITICAL: First check if machine type matches required processes
-            # Welding machines should NOT match milling/turning jobs
+            # ============== MACHINE CATEGORY MATCHING ==============
             is_welding_machine = "weld" in machine_type_lower
-            is_cnc_machine = any(k in machine_type_lower for k in ["cnc", "mill", "vmc", "hmc", "turn", "lathe", "drill", "edm", "grind"])
+            is_turning_machine = any(k in machine_type_lower for k in ["lathe", "turn", "vtl"])
+            is_milling_machine = any(k in machine_type_lower for k in ["mill", "vmc", "hmc", "machining center"])
+            is_5axis_machine = "5-axis" in machine_type_lower or "5 axis" in machine_type_lower
+            is_gear_machine = "gear" in machine_type_lower or "hob" in machine_type_lower
+            is_grinding_machine = "grind" in machine_type_lower
+            is_boring_machine = "boring" in machine_type_lower
+            is_edm_machine = "edm" in machine_type_lower
+            is_drilling_machine = "drill" in machine_type_lower
+            is_press_machine = any(k in machine_type_lower for k in ["press", "brake", "sheet"])
+            is_cutting_machine = any(k in machine_type_lower for k in ["laser", "plasma", "waterjet", "cut"])
             
-            # Check if this machine can perform ANY of the recommended processes
-            for process in recommended_processes:
-                process_lower = process.lower()
+            # ============== DIMENSION CAPABILITY CHECK ==============
+            # Check if machine envelope can fit the part based on machine category
+            
+            if is_turning_machine or "turning" in machine_category or "lathe" in machine_category or "vtl" in machine_category:
+                # For lathes/VTLs: check max_diameter and max_length
+                machine_max_dia = machine.get("max_diameter") or machine.get("max_swing") or 0
+                machine_max_len = machine.get("max_length") or 0
+                
+                if part_diameter and machine_max_dia > 0:
+                    if machine_max_dia >= part_diameter * 1.1:  # 10% margin
+                        dimension_fit = True
+                        dimension_capable = True
+                        machine_score += 15
+                
+                if part_length and machine_max_len > 0:
+                    if machine_max_len >= part_length * 1.1:
+                        dimension_fit = True
+                        dimension_capable = True
+                        machine_score += 10
+                        
+            elif is_milling_machine or is_5axis_machine or "milling" in machine_category or "vmc" in machine_category:
+                # For milling machines: check X, Y, Z travels
+                max_x = machine.get("max_x") or machine.get("table_size_x") or 0
+                max_y = machine.get("max_y") or machine.get("table_size_y") or 0
+                max_z = machine.get("max_z") or 0
+                
+                fits_x = max_x >= part_length * 1.1 if part_length and max_x else True
+                fits_y = max_y >= part_width * 1.1 if part_width and max_y else True
+                fits_z = max_z >= part_height * 1.1 if part_height and max_z else True
+                
+                if fits_x and fits_y and fits_z and (max_x or max_y or max_z):
+                    dimension_fit = True
+                    dimension_capable = True
+                    machine_score += 15
+                    
+            elif is_boring_machine or "boring" in machine_category:
+                # For boring machines: check bore diameter capability
+                bore_dia = machine.get("bore_diameter") or machine.get("max_diameter") or 0
+                if part_diameter and bore_dia > 0:
+                    if bore_dia >= part_diameter * 1.1:
+                        dimension_fit = True
+                        dimension_capable = True
+                        machine_score += 15
+                        
+            elif is_gear_machine or "gear" in machine_category:
+                # For gear machines: check max gear diameter and module
+                max_gear_dia = machine.get("max_diameter") or 0
+                if part_diameter and max_gear_dia > 0:
+                    if max_gear_dia >= part_diameter:
+                        dimension_fit = True
+                        dimension_capable = True
+                        machine_score += 15
+            else:
+                # General envelope check
+                max_x = machine.get("max_x") or 0
+                max_y = machine.get("max_y") or 0
+                max_z = machine.get("max_z") or 0
+                max_dia = machine.get("max_diameter") or 0
+                machine_max = max(max_x, max_y, max_z, max_dia)
+                
+                if max_dimension and machine_max >= max_dimension:
+                    dimension_fit = True
+                    dimension_capable = True
+                    machine_score += 15
+            
+            # ============== PROCESS MATCHING ==============
+            # Check if this machine can perform required processes
+            all_processes = recommended_processes + detected_processes
+            
+            for process in all_processes:
+                process_lower = process.lower() if isinstance(process, str) else ""
                 
                 # Milling processes
                 if any(keyword in process_lower for keyword in ["milling", "mill", "face", "pocket", "profile", "slot"]):
-                    if any(k in machine_type_lower for k in ["mill", "vmc", "hmc", "5-axis", "5 axis", "cnc"]) and not is_welding_machine:
+                    if is_milling_machine or is_5axis_machine:
                         machine_process_match = True
-                        if "5-axis" in machine_type_lower or "5 axis" in machine_type_lower:
+                        if is_5axis_machine:
                             machine_score += 30
-                            process_matches.append("5-Axis Milling")
+                            if "5-Axis Milling" not in process_matches:
+                                process_matches.append("5-Axis Milling")
                         else:
                             machine_score += 25
-                            process_matches.append("CNC Milling")
+                            if "CNC Milling" not in process_matches:
+                                process_matches.append("CNC Milling")
                         break
                 
                 # Turning processes
-                elif any(keyword in process_lower for keyword in ["turn", "lathe", "bore", "ream", "facing"]):
-                    if any(k in machine_type_lower for k in ["turn", "lathe"]) and not is_welding_machine:
+                elif any(keyword in process_lower for keyword in ["turn", "lathe", "shaft", "spindle", "axle", "cylinder"]):
+                    if is_turning_machine:
                         machine_process_match = True
                         machine_score += 25
-                        process_matches.append("CNC Turning")
+                        if "CNC Turning" not in process_matches:
+                            process_matches.append("CNC Turning")
+                        break
+                
+                # Gear manufacturing
+                elif any(keyword in process_lower for keyword in ["gear", "hobbing", "spline", "sprocket"]):
+                    if is_gear_machine:
+                        machine_process_match = True
+                        machine_score += 25
+                        if "Gear Manufacturing" not in process_matches:
+                            process_matches.append("Gear Manufacturing")
+                        break
+                
+                # Boring
+                elif any(keyword in process_lower for keyword in ["boring", "bore", "ream"]):
+                    if is_boring_machine or is_turning_machine:
+                        machine_process_match = True
+                        machine_score += 20
+                        if "Boring" not in process_matches:
+                            process_matches.append("Boring")
+                        break
+                
+                # VTL specific
+                elif any(keyword in process_lower for keyword in ["vtl", "vertical turret", "large diameter", "ring", "flange"]):
+                    if "vtl" in machine_type_lower:
+                        machine_process_match = True
+                        machine_score += 25
+                        if "VTL Turning" not in process_matches:
+                            process_matches.append("VTL Turning")
                         break
                 
                 # Drilling/Tapping
                 elif any(keyword in process_lower for keyword in ["drill", "tap", "thread", "hole"]):
-                    if is_cnc_machine and not is_welding_machine:
+                    if is_drilling_machine or is_milling_machine:
                         machine_process_match = True
                         machine_score += 15
-                        process_matches.append("Drilling/Tapping")
+                        if "Drilling/Tapping" not in process_matches:
+                            process_matches.append("Drilling/Tapping")
                         break
                 
                 # Grinding
-                elif any(keyword in process_lower for keyword in ["grind", "surface finish"]):
-                    if "grind" in machine_type_lower and not is_welding_machine:
+                elif any(keyword in process_lower for keyword in ["grind", "surface finish", "polish"]):
+                    if is_grinding_machine:
                         machine_process_match = True
                         machine_score += 20
-                        process_matches.append("Grinding")
+                        if "Grinding" not in process_matches:
+                            process_matches.append("Grinding")
                         break
                 
                 # EDM
                 elif any(keyword in process_lower for keyword in ["edm", "wire cut", "spark"]):
-                    if "edm" in machine_type_lower:
+                    if is_edm_machine:
                         machine_process_match = True
                         machine_score += 20
-                        process_matches.append("EDM")
+                        if "EDM" not in process_matches:
+                            process_matches.append("EDM")
                         break
                 
-                # Welding - only for welding jobs
+                # Welding
                 elif any(keyword in process_lower for keyword in ["weld", "fabricat", "join"]):
                     if is_welding_machine:
                         machine_process_match = True
                         machine_score += 25
-                        process_matches.append("Welding")
+                        if "Welding" not in process_matches:
+                            process_matches.append("Welding")
+                        break
+                
+                # Sheet Metal
+                elif any(keyword in process_lower for keyword in ["sheet", "bend", "press", "punch", "brake"]):
+                    if is_press_machine:
+                        machine_process_match = True
+                        machine_score += 20
+                        if "Sheet Metal" not in process_matches:
+                            process_matches.append("Sheet Metal")
+                        break
+                
+                # Cutting
+                elif any(keyword in process_lower for keyword in ["laser", "plasma", "waterjet", "cut"]):
+                    if is_cutting_machine:
+                        machine_process_match = True
+                        machine_score += 20
+                        if "Laser/Cutting" not in process_matches:
+                            process_matches.append("Laser/Cutting")
                         break
             
             # SKIP this machine if it doesn't match any required process
@@ -1639,16 +1872,14 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             
             has_suitable_machine = True
             
-            # Additional scoring for suitable machines only
-            
-            # TOLERANCE CHECK (+20 points)
-            machine_tolerance = machine.get("tolerance_capability", 1.0)
+            # ============== TOLERANCE CHECK (+20 points) ==============
+            machine_tolerance = machine.get("tolerance") or machine.get("tolerance_capability") or 1.0
             if machine_tolerance <= required_tolerance:
                 tolerance_capable = True
                 machine_score += 20
             
-            # MATERIAL CHECK (+15 points)
-            machine_materials = [m.lower() for m in machine.get("materials_supported", [])]
+            # ============== MATERIAL CHECK (+15 points) ==============
+            machine_materials = [m.lower() for m in (machine.get("materials_supported") or machine.get("materials") or [])]
             material_matched = False
             check_materials = [required_material, ai_material] if ai_material else [required_material]
             for check_mat in check_materials:
@@ -1662,29 +1893,20 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 if material_matched:
                     break
             
-            # DIMENSION/ENVELOPE CHECK (+15 points)
-            if max_dimension:
-                max_x = machine.get("max_x") or 0
-                max_y = machine.get("max_y") or 0
-                max_z = machine.get("max_z") or 0
-                max_dia = machine.get("max_diameter") or 0
-                machine_max = max(max_x, max_y, max_z, max_dia)
-                
-                if machine_max >= max_dimension:
-                    dimension_capable = True
-                    machine_score += 15
-            
-            # EXPERIENCE BONUS (+10 points max)
-            vendor_jobs = vendor.get("total_jobs", 0)
-            vendor_rating = vendor.get("rating", 0)
-            experience_score = min((vendor_jobs / 50) + (vendor_rating * 1.5), 10)
-            machine_score += experience_score
+            # ============== KEYWORD MATCHING BONUS (+10 points max) ==============
+            machine_text = f"{machine_type_lower} {machine_category} {machine.get('brand', '')} {machine.get('model', '')}".lower()
+            for keyword in detected_keywords:
+                if keyword in machine_text and keyword not in keyword_matches:
+                    keyword_matches.append(keyword)
+                    machine_score += 2  # 2 points per keyword match
             
             matching_machines.append({
                 "name": machine_name,
-                "score": machine_score,
+                "category": machine.get("machine_category", ""),
+                "score": min(machine_score, 50),  # Cap individual machine score
                 "tolerance": machine_tolerance,
-                "envelope": f"{machine.get('max_x', 0)}x{machine.get('max_y', 0)}x{machine.get('max_z', 0)}mm"
+                "dimension_fit": dimension_fit,
+                "envelope": f"{machine.get('max_x', 0)}x{machine.get('max_y', 0)}x{machine.get('max_z', 0)}mm" if machine.get('max_x') else f"Ø{machine.get('max_diameter', 0)}x{machine.get('max_length', 0)}mm"
             })
         
         # Only include vendor if they have at least one suitable machine
@@ -1693,12 +1915,30 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             matching_machines.sort(key=lambda x: x["score"], reverse=True)
             best_machine_score = matching_machines[0]["score"]
             
-            # Final score capped at 100
-            final_score = min(int(best_machine_score), 100)
+            # ============== CALCULATE FINAL SCORE ==============
+            # Base score from best machine (max 50)
+            final_score = best_machine_score
+            
+            # Experience bonus (max 20)
+            final_score += experience_score
+            
+            # Vendor rating bonus (max 10)
+            vendor_rating = vendor.get("rating", 0)
+            final_score += min(vendor_rating * 2, 10)
+            
+            # Total jobs bonus (max 10)
+            total_jobs = vendor.get("total_jobs", 0)
+            final_score += min(total_jobs / 10, 10)
+            
+            # Keyword matching bonus (max 10)
+            final_score += min(len(keyword_matches) * 2, 10)
+            
+            # Cap at 100
+            final_score = min(int(final_score), 100)
             
             matched_vendors.append({
                 "vendor_id": vendor["vendor_id"],
-                "user_id": vendor["user_id"],  # Include user_id for chat functionality
+                "user_id": vendor["user_id"],
                 "company_name": vendor["company_name"],
                 "suitability_score": final_score,
                 "matching_machines": [m["name"] for m in matching_machines[:3]],
@@ -1706,7 +1946,10 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 "materials_match": materials_match,
                 "tolerance_capable": tolerance_capable,
                 "dimension_capable": dimension_capable,
-                "process_matches": list(set(process_matches))[:3],
+                "process_matches": list(set(process_matches))[:5],
+                "keyword_matches": keyword_matches[:5],
+                "experience_score": experience_score,
+                "similar_jobs_count": similar_jobs_count,
                 "location": f"{vendor.get('city', '')}, {vendor.get('country', '')}",
                 "rating": vendor.get("rating", 0),
                 "total_jobs": vendor.get("total_jobs", 0),
