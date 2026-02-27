@@ -230,6 +230,11 @@ const AppRouter = () => {
           <BuyerDashboard />
         </ProtectedRoute>
       } />
+      <Route path="/buyer/rfqs" element={
+        <ProtectedRoute allowedRoles={["buyer"]}>
+          <BuyerRFQList />
+        </ProtectedRoute>
+      } />
       <Route path="/buyer/rfq/new" element={
         <ProtectedRoute allowedRoles={["buyer"]}>
           <CreateRFQ />
