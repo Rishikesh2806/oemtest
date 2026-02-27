@@ -294,7 +294,7 @@ const OrderDetail = () => {
             <div className="flex items-start justify-between">
               <div>
                 <CardTitle className="font-heading text-2xl">
-                  Order #{order.order_id.slice(-8)}
+                  {order.po_number ? `PO: ${order.po_number}` : `Order #${order.order_id.slice(-8)}`}
                 </CardTitle>
                 <p className="text-slate-500 mt-1">
                   Created {new Date(order.created_at).toLocaleDateString()}
@@ -358,6 +358,23 @@ const OrderDetail = () => {
                 </p>
                 <p className="text-sm text-slate-500">units</p>
               </div>
+            </div>
+
+            {/* Payment Terms - Finalized */}
+            {order.payment_terms && (
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center gap-2 text-blue-800">
+                  <CreditCard className="w-5 h-5" />
+                  <p className="font-semibold">Payment Terms (Finalized)</p>
+                </div>
+                <p className="text-lg font-medium text-blue-900 mt-1">
+                  {order.payment_terms_label || order.payment_terms}
+                </p>
+                {order.payment_terms_notes && (
+                  <p className="text-sm text-blue-700 mt-1">{order.payment_terms_notes}</p>
+                )}
+              </div>
+            )}
             </div>
 
             {/* Payment Button for Buyer */}
