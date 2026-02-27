@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { 
   Building2, MapPin, Phone, Globe, Mail, Award, Star,
   Wrench, Package, CheckCircle2, ArrowLeft, Loader2,
-  MessageSquare, ExternalLink, Briefcase, TrendingUp
+  MessageSquare, ExternalLink, Briefcase, TrendingUp, ThumbsUp,
+  Quote
 } from "lucide-react";
 
 const VendorProfileView = () => {
@@ -16,10 +17,12 @@ const VendorProfileView = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [vendor, setVendor] = useState(null);
+  const [ratings, setRatings] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchVendor();
+    fetchRatings();
   }, [vendorId]);
 
   const fetchVendor = async () => {
@@ -33,9 +36,31 @@ const VendorProfileView = () => {
     }
   };
 
+  const fetchRatings = async () => {
+    try {
+      const response = await api.get(`/vendors/${vendorId}/ratings`);
+      setRatings(response.data);
+    } catch (error) {
+      console.error("Failed to load ratings:", error);
+    }
+  };
+
   const startChat = () => {
     navigate(`/chat?with=${vendor.user_id}`);
   };
+
+  const StarDisplay = ({ value, size = "sm" }) => (
+    <div className="flex gap-0.5">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <Star 
+          key={star}
+          className={`${size === "sm" ? "w-4 h-4" : "w-5 h-5"} ${
+            star <= value ? "fill-amber-400 text-amber-400" : "text-slate-300"
+          }`}
+        />
+      ))}
+    </div>
+  );
 
   if (loading) {
     return (
