@@ -2047,6 +2047,15 @@ async def submit_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
 
 # ============== QUOTE ROUTES ==============
 
+@api_router.get("/payment-terms")
+async def get_payment_terms():
+    """Get available payment terms options"""
+    return {
+        "terms": [
+            {"value": k, "label": v} for k, v in PAYMENT_TERMS_LABELS.items()
+        ]
+    }
+
 @api_router.post("/quotes", response_model=Quote)
 async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user)):
     vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
@@ -2068,6 +2077,8 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
         "currency": quote.currency,
         "lead_time_days": quote.lead_time_days,
         "notes": quote.notes,
+        "proposed_payment_terms": quote.proposed_payment_terms or "net_30",
+        "payment_terms_notes": quote.payment_terms_notes,
         "is_selected": False,
         "status": "pending",
         "created_at": now.isoformat(),
