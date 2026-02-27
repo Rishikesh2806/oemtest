@@ -397,6 +397,110 @@ const VendorProfileView = () => {
                 </CardContent>
               </Card>
             )}
+
+            {/* Customer Reviews */}
+            {ratings && (
+              <Card className="border-slate-200" data-testid="vendor-ratings-section">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="font-heading text-lg flex items-center gap-2">
+                      <Star className="w-5 h-5 fill-amber-400 text-amber-400" /> Customer Reviews
+                    </CardTitle>
+                    {ratings.stats?.total_reviews > 0 && (
+                      <span className="text-sm text-slate-500">
+                        {ratings.stats.total_reviews} review{ratings.stats.total_reviews !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {ratings.stats?.total_reviews > 0 ? (
+                    <div className="space-y-6">
+                      {/* Rating Summary */}
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg">
+                        <div className="col-span-2 md:col-span-1 text-center">
+                          <p className="text-4xl font-bold text-amber-600">
+                            {ratings.stats.average_overall.toFixed(1)}
+                          </p>
+                          <StarDisplay value={Math.round(ratings.stats.average_overall)} />
+                          <p className="text-xs text-slate-500 mt-1">Overall</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-lg font-semibold">{ratings.stats.average_quality.toFixed(1)}</p>
+                          <p className="text-xs text-slate-500">Quality</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-lg font-semibold">{ratings.stats.average_communication.toFixed(1)}</p>
+                          <p className="text-xs text-slate-500">Communication</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-lg font-semibold">{ratings.stats.average_delivery.toFixed(1)}</p>
+                          <p className="text-xs text-slate-500">Delivery</p>
+                        </div>
+                        <div className="text-center">
+                          <div className="flex items-center justify-center gap-1 text-green-600">
+                            <ThumbsUp className="w-4 h-4" />
+                            <span className="text-lg font-semibold">{ratings.stats.recommendation_rate}%</span>
+                          </div>
+                          <p className="text-xs text-slate-500">Recommend</p>
+                        </div>
+                      </div>
+
+                      {/* Individual Reviews */}
+                      <div className="space-y-4">
+                        {ratings.ratings.slice(0, 5).map((review) => (
+                          <div 
+                            key={review.rating_id}
+                            className="p-4 border border-slate-200 rounded-lg"
+                            data-testid={`review-${review.rating_id}`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <p className="font-medium text-slate-900">{review.buyer_name}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                  {review.rfq_title && `Order: ${review.rfq_title}`}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <StarDisplay value={review.overall_rating} />
+                                <p className="text-xs text-slate-400 mt-1">
+                                  {new Date(review.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                            
+                            {review.review_text && (
+                              <div className="mt-3 pl-4 border-l-2 border-slate-200">
+                                <p className="text-sm text-slate-600 italic">"{review.review_text}"</p>
+                              </div>
+                            )}
+                            
+                            <div className="flex items-center gap-4 mt-3 text-xs text-slate-500">
+                              <span>Quality: {review.quality_rating}/5</span>
+                              <span>Communication: {review.communication_rating}/5</span>
+                              <span>Delivery: {review.delivery_rating}/5</span>
+                              {review.would_recommend && (
+                                <span className="flex items-center gap-1 text-green-600">
+                                  <ThumbsUp className="w-3 h-3" /> Recommended
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <Quote className="w-12 h-12 text-slate-300 mx-auto mb-2" />
+                      <p className="text-slate-500">No reviews yet</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Be the first to work with this vendor!
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
       </div>
