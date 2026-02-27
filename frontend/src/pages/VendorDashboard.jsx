@@ -202,6 +202,9 @@ const VendorDashboard = () => {
           <Card className="border-slate-200">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="font-heading text-lg">Incoming RFQs</CardTitle>
+              <Link to="/vendor/matched-rfqs" className="text-orange-600 hover:text-orange-700 text-sm font-medium flex items-center gap-1">
+                View All <ArrowRight className="w-4 h-4" />
+              </Link>
             </CardHeader>
             <CardContent>
               {stats?.recent_rfqs?.length > 0 ? (
