@@ -3756,6 +3756,64 @@ async def get_buyer_dashboard(user: dict = Depends(get_current_user)):
         "recent_orders": orders[:5]
     }
 
+@api_router.get("/vendor/matched-rfqs")
+async def get_vendor_matched_rfqs(user: dict = Depends(get_current_user)):
+    """Get all RFQs matched to this vendor with quote status"""
+    if user["role"] != UserRole.VENDOR:
+        raise HTTPException(status_code=403, detail="Vendor access required")
+    
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor profile not found")
+    
+    vendor_id = vendor["vendor_id"]
+    
+    # Get all RFQs where this vendor is in matched_vendors
+    matched_rfqs = await db.rfqs.find(
+        {"matched_vendors.vendor_id": vendor_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
+    
+    # Get all quotes by this vendor
+    quotes = await db.quotes.find({"vendor_id": vendor_id}, {"_id": 0}).to_list(500)
+    quotes_by_rfq = {q["rfq_id"]: q for q in quotes}
+    
+    # Enrich RFQs with vendor's quote info and match score
+    enriched_rfqs = []
+    for rfq in matched_rfqs:
+        # Get buyer info
+        buyer = await db.users.find_one({"user_id": rfq.get("buyer_id")}, {"_id": 0, "name": 1, "company_name": 1})
+        
+        # Find this vendor's match info
+        match_info = next((v for v in rfq.get("matched_vendors", []) if v.get("vendor_id") == vendor_id), {})
+        
+        enriched_rfq = {
+            "rfq_id": rfq["rfq_id"],
+            "title": rfq.get("title", "Untitled"),
+            "description": rfq.get("description", ""),
+            "material_type": rfq.get("material_type", ""),
+            "quantity": rfq.get("quantity", 1),
+            "tolerance": rfq.get("tolerance", 0),
+            "surface_finish": rfq.get("surface_finish", ""),
+            "status": rfq.get("status", ""),
+            "created_at": rfq.get("created_at", ""),
+            "deadline": rfq.get("deadline"),
+            "preferred_payment_terms": rfq.get("preferred_payment_terms"),
+            "buyer_id": rfq.get("buyer_id"),
+            "buyer_company": buyer.get("company_name") or buyer.get("name", "Unknown") if buyer else "Unknown",
+            "match_score": match_info.get("suitability_score", 0),
+            "matching_machines": match_info.get("matching_machines", []),
+            "vendor_quote": quotes_by_rfq.get(rfq["rfq_id"])
+        }
+        enriched_rfqs.append(enriched_rfq)
+    
+    return {
+        "rfqs": enriched_rfqs,
+        "total": len(enriched_rfqs),
+        "quoted": len([r for r in enriched_rfqs if r.get("vendor_quote")]),
+        "pending": len([r for r in enriched_rfqs if not r.get("vendor_quote")])
+    }
+
 @api_router.get("/dashboard/vendor")
 async def get_vendor_dashboard(user: dict = Depends(get_current_user)):
     vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
