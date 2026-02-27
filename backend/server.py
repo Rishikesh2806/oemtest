@@ -1970,7 +1970,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications to matched vendors (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://vendor-matching-demo.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://smart-matching-1.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1})
     
     for matched in matched_vendors:
@@ -2042,7 +2042,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://vendor-matching-demo.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://smart-matching-1.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -2132,7 +2132,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor
-    app_url = os.environ.get("APP_URL", "https://vendor-matching-demo.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://smart-matching-1.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
