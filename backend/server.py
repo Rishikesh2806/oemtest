@@ -3070,10 +3070,37 @@ async def admin_update_machine(machine_id: str, request: Request, user: dict = D
     body = await request.json()
     
     # Allowed fields - includes all machine-specific dimension fields
-    allowed_fields = ["name", "machine_type", "machine_category", "brand", "model", "year_purchased", "tolerance",
-                      "max_x", "max_y", "max_z", "max_diameter", "max_length", "max_swing",
-                      "bore_diameter", "outer_diameter", "max_thickness", "tonnage", "max_taper_angle",
-                      "materials", "is_active"]
+    allowed_fields = [
+        "name", "machine_type", "machine_category", "brand", "model", "year_purchased", "tolerance",
+        # Standard dimensions
+        "max_x", "max_y", "max_z", "max_diameter", "max_length", "max_swing",
+        # Boring/Drilling
+        "bore_diameter", "outer_diameter", "spindle_bore", "spindle_travel", "arm_length", "max_depth",
+        # VTL/Table
+        "table_diameter", "table_size_x", "table_size_y", "pallet_size", "max_weight",
+        # Shaping
+        "max_stroke", "stroke",
+        # Gear
+        "max_module", "min_teeth",
+        # 5-Axis
+        "a_axis_range", "c_axis_range",
+        # Sheet Metal/Press
+        "tonnage", "max_thickness",
+        # Laser
+        "laser_power",
+        # Welding
+        "amperage",
+        # Heat Treatment
+        "max_temp",
+        # Inspection
+        "accuracy",
+        # Additive
+        "layer_thickness",
+        # EDM
+        "max_taper_angle",
+        # General
+        "materials", "materials_supported", "is_active"
+    ]
     update_data = {k: v for k, v in body.items() if k in allowed_fields}
     
     if not update_data:
