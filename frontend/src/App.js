@@ -8,6 +8,7 @@ import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import BuyerDashboard from "./pages/BuyerDashboard";
+import BuyerRFQList from "./pages/BuyerRFQList";
 import VendorDashboard from "./pages/VendorDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import CreateRFQ from "./pages/CreateRFQ";
