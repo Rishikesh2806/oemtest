@@ -54,7 +54,9 @@ const CreateRFQ = () => {
     tolerance: 0.1,
     surface_finish: "",
     supply_type: "vendor_material",
-    deadline: ""
+    deadline: "",
+    preferred_payment_terms: "net_30",
+    payment_terms_notes: ""
   });
 
   const handleInputChange = (field, value) => {
