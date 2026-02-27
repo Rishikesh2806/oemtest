@@ -24,6 +24,18 @@ const SURFACE_FINISHES = [
   "Polished", "Brushed", "Chrome Plated", "Zinc Plated", "None"
 ];
 
+const PAYMENT_TERMS = [
+  { value: "net_30", label: "Net 30 Days" },
+  { value: "net_45", label: "Net 45 Days" },
+  { value: "net_60", label: "Net 60 Days" },
+  { value: "50_advance_50_delivery", label: "50% Advance, 50% on Delivery" },
+  { value: "100_advance", label: "100% Advance" },
+  { value: "against_delivery", label: "Payment Against Delivery" },
+  { value: "milestone_based", label: "Milestone-Based Payment" },
+  { value: "letter_of_credit", label: "Letter of Credit (LC)" },
+  { value: "custom", label: "Custom Terms" }
+];
+
 const CreateRFQ = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
