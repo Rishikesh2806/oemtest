@@ -509,6 +509,8 @@ class QuoteCreate(BaseModel):
     currency: str = "USD"
     lead_time_days: int
     notes: Optional[str] = None
+    proposed_payment_terms: Optional[str] = PaymentTerms.NET_30
+    payment_terms_notes: Optional[str] = None
 
 class OrderStatus:
     PENDING_PAYMENT = "pending_payment"
