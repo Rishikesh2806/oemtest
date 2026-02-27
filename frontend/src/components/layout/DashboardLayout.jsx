@@ -50,6 +50,7 @@ const DashboardLayout = ({ children }) => {
 
   const vendorNavItems = [
     { path: "/vendor/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/vendor/matched-rfqs", label: "Matched RFQs", icon: FileText },
     { path: "/vendor/profile", label: "Company Profile", icon: Building2 },
     { path: "/vendor/machines", label: "Machines", icon: Wrench },
     { path: "/vendor/quotes", label: "My Quotes", icon: DollarSign },
