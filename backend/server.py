@@ -2062,12 +2062,32 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
 async def get_quotes_for_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
     quotes = await db.quotes.find({"rfq_id": rfq_id}, {"_id": 0}).to_list(50)
     
-    # Enrich with vendor info
+    # Enrich with detailed vendor info for comparison
     for quote in quotes:
         vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
         if vendor:
             quote["vendor_name"] = vendor.get("company_name", "Unknown")
             quote["vendor_rating"] = vendor.get("rating", 0)
+            quote["vendor_total_jobs"] = vendor.get("total_jobs", 0)
+            quote["vendor_location"] = f"{vendor.get('city', '')}, {vendor.get('country', '')}".strip(", ")
+            quote["vendor_certifications"] = vendor.get("certifications", [])[:3]
+            quote["vendor_id_ref"] = vendor.get("vendor_id")
+            quote["vendor_user_id"] = vendor.get("user_id")
+            
+            # Get vendor's machines for capability info
+            machines = await db.machines.find(
+                {"vendor_id": vendor["vendor_id"], "is_active": True},
+                {"_id": 0, "machine_type": 1, "machine_category": 1, "brand": 1}
+            ).to_list(5)
+            quote["vendor_machines"] = [
+                f"{m.get('machine_type', '')} - {m.get('brand', '')}" 
+                for m in machines
+            ]
+            
+            # Get vendor's quote stats
+            total_quotes = await db.quotes.count_documents({"vendor_id": vendor["vendor_id"]})
+            accepted_quotes = await db.quotes.count_documents({"vendor_id": vendor["vendor_id"], "status": "accepted"})
+            quote["vendor_acceptance_rate"] = round((accepted_quotes / total_quotes * 100) if total_quotes > 0 else 0, 1)
     
     return quotes
 
