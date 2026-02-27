@@ -1538,8 +1538,8 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         return {"matched_vendors": demo_matches, "total_matches": len(demo_matches)}
     
     # ============== EXTRACT RFQ REQUIREMENTS ==============
-    ai_analysis = rfq.get("ai_analysis", {})
-    dims = ai_analysis.get("overall_dimensions", {})
+    ai_analysis = rfq.get("ai_analysis") or {}
+    dims = ai_analysis.get("overall_dimensions") or {}
     recommended_processes = ai_analysis.get("recommended_processes", [])
     
     # Get part dimensions from AI analysis
