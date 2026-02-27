@@ -10,6 +10,7 @@ import RegisterPage from "./pages/RegisterPage";
 import BuyerDashboard from "./pages/BuyerDashboard";
 import BuyerRFQList from "./pages/BuyerRFQList";
 import VendorDashboard from "./pages/VendorDashboard";
+import VendorMatchedRFQs from "./pages/VendorMatchedRFQs";
 import AdminDashboard from "./pages/AdminDashboard";
 import CreateRFQ from "./pages/CreateRFQ";
 import RFQDetail from "./pages/RFQDetail";
