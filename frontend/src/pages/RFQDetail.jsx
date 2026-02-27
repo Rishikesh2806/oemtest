@@ -12,8 +12,10 @@ import { toast } from "sonner";
 import { 
   FileText, Package, Star, MapPin, Loader2, 
   CheckCircle2, Send, DollarSign, Clock, ArrowLeft,
-  Building2, Cpu, Wrench, AlertCircle, Target, MessageSquare, Eye
+  Building2, Cpu, Wrench, AlertCircle, Target, MessageSquare, Eye,
+  BarChart3
 } from "lucide-react";
+import QuoteComparison from "../components/quotes/QuoteComparison";
 
 const RFQDetail = () => {
   const { rfqId } = useParams();
