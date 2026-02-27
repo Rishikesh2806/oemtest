@@ -185,39 +185,81 @@ const RFQDetail = () => {
                       <Send className="w-4 h-4 mr-2" /> Submit Quote
                     </Button>
                   </DialogTrigger>
-                  <DialogContent>
+                  <DialogContent className="max-w-md">
                     <DialogHeader>
                       <DialogTitle>Submit Your Quote</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4 mt-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                            Price (USD) *
+                          </Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={quoteForm.price}
+                            onChange={(e) => setQuoteForm(prev => ({ ...prev, price: e.target.value }))}
+                            placeholder="0.00"
+                            className="mt-1"
+                            data-testid="quote-price-input"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                            Lead Time (Days) *
+                          </Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={quoteForm.lead_time_days}
+                            onChange={(e) => setQuoteForm(prev => ({ ...prev, lead_time_days: e.target.value }))}
+                            placeholder="10"
+                            className="mt-1"
+                            data-testid="quote-leadtime-input"
+                          />
+                        </div>
+                      </div>
+                      
+                      {/* Payment Terms */}
                       <div>
                         <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                          Price (USD) *
+                          <CreditCard className="w-3 h-3 inline mr-1" /> Proposed Payment Terms *
                         </Label>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          value={quoteForm.price}
-                          onChange={(e) => setQuoteForm(prev => ({ ...prev, price: e.target.value }))}
-                          placeholder="0.00"
-                          className="mt-1"
-                          data-testid="quote-price-input"
-                        />
+                        <Select
+                          value={quoteForm.proposed_payment_terms}
+                          onValueChange={(value) => setQuoteForm(prev => ({ ...prev, proposed_payment_terms: value }))}
+                        >
+                          <SelectTrigger className="mt-1" data-testid="quote-payment-terms">
+                            <SelectValue placeholder="Select payment terms" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {PAYMENT_TERMS.map((term) => (
+                              <SelectItem key={term.value} value={term.value}>{term.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {rfq.preferred_payment_terms && (
+                          <p className="text-xs text-slate-500 mt-1">
+                            Buyer prefers: {getPaymentTermLabel(rfq.preferred_payment_terms)}
+                          </p>
+                        )}
                       </div>
-                      <div>
-                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                          Lead Time (Days) *
-                        </Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={quoteForm.lead_time_days}
-                          onChange={(e) => setQuoteForm(prev => ({ ...prev, lead_time_days: e.target.value }))}
-                          placeholder="10"
-                          className="mt-1"
-                          data-testid="quote-leadtime-input"
-                        />
-                      </div>
+                      
+                      {quoteForm.proposed_payment_terms === "custom" && (
+                        <div>
+                          <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                            Custom Payment Terms
+                          </Label>
+                          <Input
+                            value={quoteForm.payment_terms_notes}
+                            onChange={(e) => setQuoteForm(prev => ({ ...prev, payment_terms_notes: e.target.value }))}
+                            placeholder="Describe your payment terms..."
+                            className="mt-1"
+                          />
+                        </div>
+                      )}
+                      
                       <div>
                         <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
                           Notes
@@ -227,6 +269,7 @@ const RFQDetail = () => {
                           onChange={(e) => setQuoteForm(prev => ({ ...prev, notes: e.target.value }))}
                           placeholder="Additional details about your quote..."
                           className="mt-1"
+                          rows={2}
                           data-testid="quote-notes-input"
                         />
                       </div>
