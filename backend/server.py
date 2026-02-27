@@ -528,6 +528,17 @@ class QuoteCreate(BaseModel):
     proposed_payment_terms: Optional[str] = PaymentTerms.NET_30
     payment_terms_notes: Optional[str] = None
 
+# Notification Types
+class NotificationType:
+    RFQ_MATCHED = "rfq_matched"
+    QUOTE_RECEIVED = "quote_received"
+    QUOTE_ACCEPTED = "quote_accepted"
+    QUOTE_REJECTED = "quote_rejected"
+    ORDER_CREATED = "order_created"
+    ORDER_STATUS_UPDATE = "order_status_update"
+    PAYMENT_RECEIVED = "payment_received"
+    MESSAGE_RECEIVED = "message_received"
+
 class OrderStatus:
     PENDING_PAYMENT = "pending_payment"
     PAID = "paid"
