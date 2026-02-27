@@ -2012,11 +2012,14 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         }}
     )
     
-    # Send email notifications to matched vendors (non-blocking)
+    # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
     app_url = os.environ.get("APP_URL", "https://smart-matching-1.preview.emergentagent.com")
-    buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1})
+    buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
+    buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
-    for matched in matched_vendors:
+    qualified_vendors = [v for v in matched_vendors if v.get("suitability_score", 0) >= 50]
+    
+    for matched in qualified_vendors:
         vendor_user = await db.users.find_one({"user_id": matched.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
         if vendor_user and vendor_user.get("email"):
             email_data = {
@@ -2024,14 +2027,22 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 "rfq_title": rfq.get("title", "New RFQ"),
                 "material": rfq.get("material_type", "N/A"),
                 "quantity": rfq.get("quantity", "N/A"),
-                "buyer_name": buyer.get("name", "Buyer") if buyer else "Buyer",
+                "tolerance": rfq.get("tolerance", "N/A"),
+                "buyer_name": buyer_name,
                 "match_score": matched.get("suitability_score", 0),
+                "matching_machines": ", ".join(matched.get("matching_machines", [])[:3]) or "Compatible machines found",
+                "process_matches": ", ".join(matched.get("process_matches", [])[:3]) or "Matching capabilities",
                 "app_url": f"{app_url}/vendor/dashboard"
             }
             subject, html = get_email_template("vendor_matched", email_data)
             asyncio.create_task(send_email_async(vendor_user["email"], subject, html))
     
-    return {"matched_vendors": matched_vendors, "total_matches": len(matched_vendors)}
+    return {
+        "matched_vendors": matched_vendors, 
+        "total_matches": len(matched_vendors),
+        "vendors_notified": len(qualified_vendors),
+        "notification_threshold": "50%"
+    }
 
 @api_router.post("/rfqs/{rfq_id}/submit")
 async def submit_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
