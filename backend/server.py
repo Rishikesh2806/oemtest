@@ -535,6 +535,9 @@ class Order(BaseModel):
     currency: str = "USD"
     status: str = OrderStatus.PENDING_PAYMENT
     payment_status: str = "pending"
+    payment_terms: Optional[str] = None  # Finalized payment terms
+    payment_terms_notes: Optional[str] = None
+    po_number: Optional[str] = None  # Purchase Order number
     tracking_updates: List[Dict[str, Any]] = []
     created_at: str
     updated_at: str
