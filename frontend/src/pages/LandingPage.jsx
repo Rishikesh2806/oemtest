@@ -58,7 +58,7 @@ const LandingPage = () => {
       <nav className="fixed top-0 left-0 right-0 z-50 glass border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <Factory className="w-8 h-8 text-orange-600" />
+            <img src="https://static.prod-images.emergentagent.com/jobs/10fd967d-100a-4ba4-9810-7f001d27333f/images/538e025cbcf1bcc1a8edd395590b4013ce298ebbb676ea7cd077596def05a82f.png" alt="Offloadex Logo" className="w-9 h-9" />
             <span className="font-heading font-bold text-xl text-slate-900">OFFLOADEX</span>
           </Link>
           
