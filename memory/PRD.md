@@ -19,7 +19,36 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 
 ## What's Been Implemented (Feb 2026)
 
-### Payment Terms System (NEW - Feb 27)
+### Quote Detail & Negotiation System (NEW - Feb 28)
+- **GET /api/quotes/{quote_id}** - Detailed quote view with:
+  - Full vendor info (contact, certifications, location, website)
+  - Available machines list
+  - Acceptance rate and job statistics
+  - RFQ reference details
+  - Negotiation history
+- **Negotiation Workflow**:
+  - Buyers can request modifications (price, lead time, payment terms, general)
+  - Vendors receive notifications and can Accept/Counter/Reject
+  - Counter-offer workflow with buyer acceptance
+  - Full negotiation history tracking
+- **New Endpoints**:
+  - POST /api/quotes/{quote_id}/negotiate
+  - POST /api/quotes/{quote_id}/negotiate/{neg_id}/respond
+  - POST /api/quotes/{quote_id}/negotiate/{neg_id}/accept-counter
+  - GET /api/quotes/{quote_id}/negotiations
+- **Frontend Components**:
+  - QuoteDetailModal with tabs (Details, Vendor Info, Negotiations)
+  - VendorNegotiationPanel for vendor responses
+  - Negotiation status badges on quote cards
+
+### Notification System (NEW - Feb 28)
+- In-app notifications with bell icon in header
+- NotificationsPage for viewing all notifications
+- Notification types: RFQ matched, Quote received, Quote accepted, Order status, Messages, Negotiation requests
+- Mark as read, mark all read, delete functionality
+- Real-time badge count with 30-second polling
+
+### Payment Terms System (Feb 27)
 - **9 Payment Term Options**: Net 30/45/60, 50% advance + 50% delivery, 100% advance, Against Delivery, Milestone-Based, Letter of Credit, Custom
 - **RFQ**: Buyer specifies preferred_payment_terms when creating RFQ
 - **Quote**: Vendor proposes payment terms when submitting quote
