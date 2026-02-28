@@ -2299,6 +2299,7 @@ const AdminDashboard = () => {
             onRefresh={fetchUsers}
             onUpdateUser={updateUser}
             onDeleteUser={deleteUser}
+            onCreateUser={createUser}
           />
         )}
         {activeTab === "vendors" && (
@@ -2309,6 +2310,7 @@ const AdminDashboard = () => {
             onApprove={approveVendor}
             onReject={rejectVendor}
             onUpdateVendor={updateVendor}
+            onCreateVendor={createVendor}
           />
         )}
         {activeTab === "rfqs" && (
