@@ -4239,6 +4239,50 @@ async def admin_delete_machine(machine_id: str, user: dict = Depends(get_current
 
 # ============== DASHBOARD STATS ==============
 
+@api_router.get("/buyer/quotes")
+async def get_buyer_quotes(user: dict = Depends(get_current_user)):
+    """Get all quotes received by the buyer across all their RFQs"""
+    if user["role"] != UserRole.BUYER:
+        raise HTTPException(status_code=403, detail="Buyer access required")
+    
+    # Get all RFQs for this buyer
+    rfqs = await db.rfqs.find({"buyer_id": user["user_id"]}, {"_id": 0}).to_list(500)
+    rfq_map = {rfq["rfq_id"]: rfq for rfq in rfqs}
+    rfq_ids = list(rfq_map.keys())
+    
+    if not rfq_ids:
+        return []
+    
+    # Get all quotes for buyer's RFQs
+    quotes = await db.quotes.find(
+        {"rfq_id": {"$in": rfq_ids}},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(1000)
+    
+    # Enrich quotes with vendor and RFQ info
+    enriched_quotes = []
+    for quote in quotes:
+        # Get vendor info
+        vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
+        if vendor:
+            quote["vendor_name"] = vendor.get("company_name", "Unknown")
+            quote["vendor_rating"] = vendor.get("rating", 0)
+            quote["vendor_location"] = f"{vendor.get('city', '')}, {vendor.get('country', '')}".strip(", ")
+            quote["vendor_user_id"] = vendor.get("user_id")
+            
+            # Calculate acceptance rate
+            total_quotes = await db.quotes.count_documents({"vendor_id": vendor["vendor_id"]})
+            accepted_quotes = await db.quotes.count_documents({"vendor_id": vendor["vendor_id"], "status": "accepted"})
+            quote["vendor_acceptance_rate"] = round((accepted_quotes / total_quotes * 100) if total_quotes > 0 else 0, 1)
+        
+        # Add RFQ info
+        rfq = rfq_map.get(quote["rfq_id"], {})
+        quote["rfq_title"] = rfq.get("title", "Untitled RFQ")
+        
+        enriched_quotes.append(quote)
+    
+    return enriched_quotes
+
 @api_router.get("/dashboard/buyer")
 async def get_buyer_dashboard(user: dict = Depends(get_current_user)):
     rfqs = await db.rfqs.find({"buyer_id": user["user_id"]}, {"_id": 0}).to_list(100)
