@@ -1238,7 +1238,7 @@ const NDAsTab = ({ ndas, users, vendors, loading, onRefresh, onCreateNDA, onUpda
 };
 
 // ============== VENDORS TAB ==============
-const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdateVendor }) => {
+const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdateVendor, onCreateVendor }) => {
   const [approvedFilter, setApprovedFilter] = useState("all");
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [vendorProfile, setVendorProfile] = useState(null);
@@ -1246,6 +1246,12 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
   const [profileLoading, setProfileLoading] = useState(false);
   const [editMachine, setEditMachine] = useState(null);
   const [createMachineOpen, setCreateMachineOpen] = useState(false);
+  const [showAddVendorDialog, setShowAddVendorDialog] = useState(false);
+  const [addingVendor, setAddingVendor] = useState(false);
+  const [addVendorForm, setAddVendorForm] = useState({
+    name: "", email: "", password: "", company_name: "", description: "",
+    address: "", city: "", country: "", phone: "", website: ""
+  });
   const [machineCategories, setMachineCategories] = useState({});
   const [machineForm, setMachineForm] = useState({
     name: "", machine_category: "", machine_type: "", brand: "", model: "", 
