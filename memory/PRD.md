@@ -84,6 +84,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 ## Test Reports
 - iteration_1-7: Previous features
 - iteration_8: Payment Terms (89% backend, 100% frontend)
+- iteration_9: Quote Detail & Negotiation (100% backend, code reviewed frontend)
 
 ## Test Credentials
 - **Admin**: admin@offoadex.com / admin123  
