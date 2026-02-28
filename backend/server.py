@@ -3268,6 +3268,123 @@ async def admin_list_users(user: dict = Depends(get_current_user), role: Optiona
     users = await db.users.find(query, {"_id": 0, "password_hash": 0}).to_list(200)
     return users
 
+class AdminUserCreate(BaseModel):
+    email: str
+    password: str
+    name: str
+    role: str = "buyer"
+    company_name: Optional[str] = None
+
+@api_router.post("/admin/users")
+async def admin_create_user(user_data: AdminUserCreate, user: dict = Depends(get_current_user)):
+    """Admin creates a new user"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Check if email already exists
+    existing = await db.users.find_one({"email": user_data.email.lower()})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create user
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    
+    new_user = {
+        "user_id": user_id,
+        "email": user_data.email.lower(),
+        "password_hash": pwd_context.hash(user_data.password),
+        "name": user_data.name,
+        "role": user_data.role,
+        "company_name": user_data.company_name,
+        "created_at": now
+    }
+    
+    await db.users.insert_one(new_user)
+    
+    # If vendor role, create vendor profile
+    if user_data.role == "vendor":
+        vendor_id = f"vendor_{uuid.uuid4().hex[:12]}"
+        vendor_profile = {
+            "vendor_id": vendor_id,
+            "user_id": user_id,
+            "company_name": user_data.company_name or user_data.name,
+            "is_approved": True,
+            "rating": 0,
+            "total_jobs": 0,
+            "created_at": now
+        }
+        await db.vendors.insert_one(vendor_profile)
+    
+    return {"message": "User created successfully", "user_id": user_id}
+
+class AdminVendorCreate(BaseModel):
+    email: str
+    password: str
+    name: str
+    company_name: str
+    description: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    certifications: Optional[List[str]] = []
+    industries: Optional[List[str]] = []
+    materials_handled: Optional[List[str]] = []
+
+@api_router.post("/admin/vendors")
+async def admin_create_vendor(vendor_data: AdminVendorCreate, user: dict = Depends(get_current_user)):
+    """Admin creates a new vendor with user account"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Check if email already exists
+    existing = await db.users.find_one({"email": vendor_data.email.lower()})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create user
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    vendor_id = f"vendor_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    
+    new_user = {
+        "user_id": user_id,
+        "email": vendor_data.email.lower(),
+        "password_hash": pwd_context.hash(vendor_data.password),
+        "name": vendor_data.name,
+        "role": "vendor",
+        "company_name": vendor_data.company_name,
+        "created_at": now
+    }
+    
+    await db.users.insert_one(new_user)
+    
+    # Create vendor profile
+    vendor_profile = {
+        "vendor_id": vendor_id,
+        "user_id": user_id,
+        "company_name": vendor_data.company_name,
+        "description": vendor_data.description,
+        "address": vendor_data.address,
+        "city": vendor_data.city,
+        "country": vendor_data.country,
+        "phone": vendor_data.phone,
+        "website": vendor_data.website,
+        "certifications": vendor_data.certifications or [],
+        "industries": vendor_data.industries or [],
+        "materials_handled": vendor_data.materials_handled or [],
+        "is_approved": True,
+        "rating": 0,
+        "total_jobs": 0,
+        "created_at": now
+    }
+    
+    await db.vendors.insert_one(vendor_profile)
+    
+    return {"message": "Vendor created successfully", "user_id": user_id, "vendor_id": vendor_id}
+
 @api_router.get("/admin/users/{user_id}")
 async def admin_get_user(user_id: str, user: dict = Depends(get_current_user)):
     """Get user details"""
