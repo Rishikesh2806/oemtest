@@ -2189,10 +2189,25 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
             "vendor_name": vendor.get("company_name", "Vendor"),
             "price": f"{quote.price:.2f}",
             "lead_time": quote.lead_time_days,
-            "app_url": f"{app_url}/rfq/{quote.rfq_id}"
+            "app_url": f"{app_url}/buyer/rfq/{quote.rfq_id}"
         }
         subject, html = get_email_template("quote_received", email_data)
         asyncio.create_task(send_email_async(buyer["email"], subject, html))
+    
+    # Create in-app notification for buyer
+    await create_notification(
+        user_id=rfq["buyer_id"],
+        notification_type=NotificationType.QUOTE_RECEIVED,
+        title=f"New Quote from {vendor.get('company_name', 'Vendor')}",
+        message=f"${quote.price:,.2f} for {rfq.get('title', 'your RFQ')[:30]} - {quote.lead_time_days} days lead time",
+        data={
+            "rfq_id": quote.rfq_id,
+            "quote_id": quote_id,
+            "vendor_name": vendor.get("company_name"),
+            "price": quote.price,
+            "link": f"/buyer/rfq/{quote.rfq_id}"
+        }
+    )
     
     return Quote(**quote_doc)
 
