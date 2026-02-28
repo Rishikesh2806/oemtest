@@ -45,6 +45,8 @@ const DashboardLayout = ({ children }) => {
 
   const buyerNavItems = [
     { path: "/buyer/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/buyer/rfqs", label: "My RFQs", icon: FileText },
+    { path: "/buyer/quotes", label: "Received Quotes", icon: DollarSign },
     { path: "/buyer/rfq/new", label: "New RFQ", icon: FileText },
     { path: "/chat", label: "Messages", icon: MessageSquare, badge: unreadCount },
   ];
