@@ -14,59 +14,70 @@ The platform must support a complete workflow: RFQ -> AI Analysis -> Vendor Matc
 **User's preferred language**: English
 
 **what currently exists?**
-A full-stack application with a React frontend and FastAPI backend. It includes JWT authentication for Buyer, Vendor, and Admin roles. Core features implemented include RFQ submission with AI drawing analysis (GPT-5.2), vendor matching, and basic chat/profile viewing.
+A full-stack application with a React frontend and FastAPI backend using MongoDB. The application has been rebranded to **Offloadex** with a new logo. It supports JWT authentication for Buyer, Vendor, and Admin roles.
 
-A comprehensive Admin Panel allows full CRUD management of users, vendors, RFQs, quotes, orders, drawings, and NDAs. Email notifications are integrated via Resend for key workflow events. A secure drawing viewer is in place.
-
-Most significantly, a dynamic machine management system has been built for both Admins and Vendors. It features 21 machine categories (e.g., VMC, VTL, Gear Hobbing) with conditional dimension fields specific to each category (e.g., a Lathe requires Max Diameter and Max Length, while a Milling machine requires X/Y/Z Travel).
+Core implemented features include:
+-   **RFQ Matching:** A comprehensive algorithm that validates machine dimensions, uses keyword matching, and considers vendor experience.
+-   **Quotation Workflow:** Vendors can submit quotes, and buyers can view, compare, and accept them. A Quote Comparison UI has been implemented.
+-   **Order Management:** Accepting a quote generates a PO. Order status tracking is implemented.
+-   **Payment Terms:** A full workflow for proposing and finalizing payment terms from RFQ to Purchase Order.
+-   **Vendor Rating System:** Buyers can rate vendors after an order is completed, and ratings are displayed on vendor profiles.
+-   **Admin Panel:** Full CRUD management of users, vendors, RFQs, etc.
+-   **Vendor/Buyer Dashboards:** Role-specific dashboards with dedicated pages for managing RFQs (e.g., My RFQs for buyers, Matched RFQs for vendors).
+-   **AI & Comms:** GPT-5.2 for drawing analysis and Resend for email notifications.
 
 **Last working item**:
--   Last item agent was working: The agent was about to start enhancing the RFQ matching algorithm based on a new user request. The goal was to make the matching smarter by incorporating machine capability validation, keyword matching from the RFQ title/description, and considering a vendor's past experience.
--   Status: NOT STARTED
+-   Last item agent was working: The agent began implementing a comprehensive notification system, including in-app notifications and enhanced email alerts for key events (new matched RFQs, quotes, chat messages, etc.).
+-   Status: IN PROGRESS
 -   Agent Testing Done: N
--   Which testing method agent to use? backend testing agent
+-   Which testing method agent to use? both
 -   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   No pending issues.
+-   **Issue 1: Complete the notification system implementation (Priority: P0)**
+    -   **Attempted fixes:** N/A (new feature).
+    -   **Next debug checklist:** The agent has already added the  model, a  helper function, and API endpoints () to . Triggers have been added to the  and  endpoints. The next steps are:
+        1.  Integrate  calls into the remaining key business logic flows:
+            -   Quote acceptance ()
+            -   Order status updates ()
+            -   New chat messages ()
+        2.  Build the frontend notification component (a bell icon in the header/sidebar).
+        3.  Create a dedicated notifications page to view all notifications.
+        4.  Implement real-time fetching or polling for new notifications.
+    -   **Why fix this issue and what will be achieved with the fix?** To provide real-time updates to users about important events, improving user engagement and workflow efficiency.
+    -   **Status:** IN PROGRESS
+    -   **Is recurring issue?** N
+    -   **Should Test frontend/backend/both after fix?** both
+    -   **Blocked on other issue:** None
 
 **In progress Task List**:
--   Task 1: Enhance the RFQ Matching Algorithm (Priority: P0)
-    -   Where to resume: The agent has analyzed the existing  function in  and planned the changes. The next step is to implement the new logic.
-    -   What will be achieved with this?: A more accurate and intelligent vendor matching system that validates machine dimensions against part dimensions, uses keywords from the buyer's request, and factors in vendor experience.
-    -   Status: NOT STARTED
-    -   Should Test frontend/backend/both after fix?: backend
-    -   Blocked on something: No.
+-   **Task 1: Implement the Notification System (Priority: P0)**
+    -   **Where to resume:** Continue adding notification triggers to backend endpoints as outlined in All Pending/In progress Issue list. Then, proceed to build the frontend components for displaying notifications.
+    -   **What will be achieved with this?** A complete in-app and email notification system for a better user experience.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** both
+    -   **Blocked on something:** No
 
 **Upcoming and Future Tasks**
-**Upcoming Tasks (Core MVP):**
--   **Quotation Module (P0):**
-    -   Allow vendors to submit detailed quotations against matched RFQs.
-    -   Allow buyers to view, compare, and accept/reject quotations.
--   **Order Management Module (P1):**
-    -   Convert an accepted quotation into a formal Purchase Order.
-    -   Implement an order tracking system with status updates (e.g., In Production, Dispatched, Delivered).
--   **Payment Integration (P1):**
-    -   Integrate Stripe to handle escrow payments.
-    -   Funds should be held in escrow upon order placement and released to the vendor upon delivery confirmation.
+**Upcoming Tasks:**
+-   **AI Voice Agent (P1):** Implement an AI voice agent for vendors to check machine availability for recent RFQs (user request).
+-   **Payment Integration (P1):** Integrate Stripe to handle escrow payments.
 
-**Future Tasks (Phase 2):**
+**Future Tasks:**
 -   Instant AI auto-quote for simple parts.
--   Vendor rating and performance scorecard system.
 -   API for ERP integration.
--   Email/WhatsApp notifications for key events.
 -   Capacity forecasting for vendors.
 
 **Completed work in this session**
--   **Vendor Communication Features:** Completed and tested the View Profile and Chat features. Fixed a bug where the vendor's  was not available on the frontend for initiating a chat.
--   **Comprehensive Admin Panel:** Built a full-featured admin dashboard with a tabbed interface for managing Users, Vendors, RFQs, Quotes, Orders, Drawings, and NDAs.
--   **Email Notifications:** Integrated Resend to send emails for key events (vendor matched, quote submitted, quote accepted).
--   **Drawing Viewer:** Implemented a secure endpoint and frontend UI for viewing and downloading engineering drawings.
--   **Advanced Machine Management:**
-    -   Implemented a dynamic machine category system for both Admins and Vendors.
-    -   The system uses conditional input fields based on the selected machine category (e.g., Turning/Lathe shows fields for length/diameter, while Milling shows X/Y/Z travel).
-    -   Expanded the machine categories to 21 types, including VTL, VMC, Gear Hobbing, Conventional Machines, etc., as requested by the user.
--   **Admin Vendor/Machine Management:** Empowered admins to fully manage vendor profiles and their associated machines directly from the admin panel.
+-   **RFQ Matching Algorithm Fix:** Verified the existing algorithm was complete and fixed a bug where  could be .
+-   **Quote Comparison Feature:** Implemented a new UI for buyers to compare multiple quotes side-by-side, highlighting best price, fastest delivery, and top-rated vendor.
+-   **Vendor Rating & Order Management:** Implemented a vendor rating system and enhanced the order management workflow.
+-   **Branding Update:** Changed the brand name to Offloadex, generated a new logo, and updated it across the entire application.
+-   **Payment Terms Workflow:** Added functionality to define and negotiate payment terms throughout the RFQ, quotation, and order process.
+-   **Buyer RFQ List Page:** Fixed a broken View All link by creating a dedicated My RFQs page for buyers.
+-   **Vendor Matched RFQs Page:** Created a new page for vendors to view, filter, and manage all their matched RFQs.
+-   **Vendor Notification Enhancement:** Updated the RFQ matching logic to only notify vendors with a 50%+ match score via email.
+-   **Vendor Dashboard Fix:** Investigated and confirmed the Incoming RFQs section on the vendor dashboard was working correctly.
 
 **Earlier issues found/mentioned but not fixed**
 -   None.
@@ -81,72 +92,82 @@ Most significantly, a dynamic machine management system has been built for both 
 -   **Backend:** FastAPI
 -   **Frontend:** React (functional components, hooks)
 -   **Database:** MongoDB
--   **AI Integration:** OpenAI GPT-5.2 (Vision API) for drawing analysis.
--   **Email:** Resend API for transactional emails.
+-   **AI Integration:** OpenAI GPT-5.2 (Vision API)
+-   **Email:** Resend API
 -   **Authentication:** JWT
 
 **key DB schema**
 -   **users:** {email, password_hash, role, company_name}
--   **vendors:** {user_id, profile_info, certifications, industries, rating, address}
--   **machines:** {vendor_id, name, category, type, brand, model, materials, **plus conditional dimension fields like** , , , , etc.}
--   **rfqs:** {buyer_id, title, status, description, drawing_url, ai_analysis_data}
--   **chat_messages:** {sender_id, receiver_id, message, timestamp}
+-   **vendors:** {user_id, profile_info, certifications, rating, completed_jobs, acceptance_rate}
+-   **machines:** {vendor_id, category, dimensions...}
+-   **rfqs:** {buyer_id, title, status, **preferred_payment_terms**}
+-   **quotes:** {rfq_id, vendor_id, price, lead_time, **proposed_payment_terms**}
+-   **orders:** {rfq_id, buyer_id, vendor_id, status, **final_payment_terms**, po_number}
+-   **ratings:** {order_id, rater_id, vendor_id, score, review, timestamp}
+-   **notifications:** {user_id, message, link, read, timestamp}
 
 **changes in tech stack**
--   The application was implemented with **MongoDB**, which deviates from the original **PostgreSQL** requirement in the problem statement.
+-   The application uses **MongoDB**, deviating from the original **PostgreSQL** requirement.
 
 **All files of reference**
--   : Heavily modified to include all new backend logic for the admin panel, email notifications, drawing viewer, and the advanced machine category system. It is now a large monolith.
--   : Completely rewritten to be a comprehensive, tab-based management interface. It contains the logic for managing all entities and the new vendor/machine UI.
--   : Updated to include the new machine management component.
--   : The machine management component used on the vendor dashboard.
--   : Updated to include View Drawing and Download Drawing buttons.
+-   : Heavily modified to add logic for quote comparison, vendor ratings, order enhancements, payment terms, and the new notification system.
+-   : Updated to integrate the  component.
+-   : New component for side-by-side quote comparison.
+-   : Updated to show PO numbers, payment terms, and include the vendor rating submission UI.
+-   : Updated to display vendor ratings and reviews.
+-   : New page for buyers to view all their RFQs.
+-   : New page for vendors to manage all matched RFQs.
 
 **Areas that need refactoring**:
--   The  file has become a monolith containing all API routes, Pydantic models, and business logic. It should be broken down into a more scalable structure (e.g., , , ).
+-   The  file is a large monolith and should be broken down into a more scalable structure (e.g., , , ).
 
 **key api endpoints**
--   : GET endpoint that returns the list of all machine categories and their associated conditional dimension fields.
--   : GET/PUT endpoints for admin to manage vendor profiles.
--   : Full CRUD endpoints for admin to manage a vendor's machines.
--   : Secure GET endpoint to view/download a drawing file. Supports token in header or query param.
+-   : Enhanced to return rich vendor data for comparison.
+-   : POST endpoint for buyers to submit a rating.
+-   : GET endpoint to fetch all ratings for a vendor.
+-   : GET endpoint for the buyer's RFQ list page.
+-   : GET endpoint for the vendor's matched RFQs page.
+-   : GET/POST endpoints for managing in-app notifications.
 
 **Critical Info for New Agent**
--   **Database Mismatch:** The project uses MongoDB, not PostgreSQL as requested in the initial spec.
--   **Monolithic Backend:** The  file contains the entire backend. This will become difficult to maintain. A key future task should be to refactor it.
--   **Machine Categories:** The machine management system is now based on a category model with conditional dimension fields. This logic is present in both the backend () and frontend (, ).
+-   **Database Mismatch:** The project uses MongoDB, not PostgreSQL. This is a known deviation.
+-   **Monolithic Backend:**  contains the entire backend. Refactoring should be a future priority.
+-   **In-Progress Feature:** The agent was in the middle of implementing the notification system. The backend models and some triggers are in place, but the work needs to be completed on both the backend (more triggers) and frontend (UI components).
 
 **documents and test reports created in this job**
--   : Updated with completed tasks.
--   Multiple test reports were generated by the testing agent (e.g., , , etc.), confirming the functionality of new features.
+-   : Updated with all completed features.
+-   Multiple test reports in  confirming the functionality of quote comparison, ratings, and payment terms features.
 
 **Last 10 User Messages and any pending HUMAN messages**
--   **user:** Rectify recommended process, allow admin to manage profile and machines in vendor profile
-    -   *Status:* **Completed**. Agent implemented full admin management of vendor profiles and machines.
--   **user:** Test if admin has ability to manage vendor machines
-    -   *Status:* **Completed**. Agent performed thorough API and UI tests, confirming full functionality.
--   **user:** Add ability to add machine category with relevant conditional job dimension fields.
-    -   *Status:* **Completed**. Agent implemented the dynamic machine category system.
--   **user:** Make same changes to vendor section
-    -   *Status:* **Completed**. Agent updated the vendor dashboard to use the same machine category system.
--   **user:** Add more machines like VTL, CONVENTIONAL MACHINES, SHAPING, GEAR HOBBING, VMC ETC.
-    -   *Status:* **Completed**. Agent expanded the machine category list to 21 types.
--   **user:** add machine capability matching in the RFQ matching algorithm - so it validates that vendor machines can actually handle the part dimensions extracted from the drawing and use the details or description, job name given by buyer also for matching in the RFQ matching algorithm and use seller past experience of selling similar items the RFQ matching algorithm
-    -   *Status:* **Pending (Next Action)**. This is the current .
+1.  **user:** add ai voice agent to know if machine at vendor is available for recent matching RFQs
+    -   Status: **Pending**. Acknowledged but not started.
+2.  **user:** Where to see the quotation comparison.
+    -   Status: **Completed**. Agent provided instructions and a screenshot.
+3.  **user:** update payment condition in RFQ , quotation and order sections. After negotiation payment shall be finalized and reflected in PO ,
+    -   Status: **Completed**. Agent implemented the full payment terms workflow.
+4.  **user:** RECENT RFQs View All is not redirecting correctly. send 50% matched RFQs to venders
+    -   Status: **Completed**. Agent created a new RFQ list page and updated the vendor notification logic.
+5.  **user:** not updating in Incoming RFQs see example of vendor simpson munro india pvt ltd
+    -   Status: **Completed**. Agent investigated and confirmed the feature was working correctly.
+6.  **user:** enable to view and manage all matched RFQs in vendor panel
+    -   Status: **Completed**. Agent built a new Matched RFQs page for vendors.
+7.  **user:** Yes (to implement notification system)
+    -   Status: **In Progress**. Agent started implementation.
+8.  **user:** proceed (with notification system backend)
+    -   Status: **In Progress**. Agent continued backend implementation.
 
 **Project Health Check:**
 -   **Broken:** None.
 -   **Mocked:**
     -   Stripe payment integration.
-    -   Quotation and Order Management modules are not yet implemented.
 
 **3rd Party Integrations**
 -   **OpenAI GPT-5.2 (Vision):** Used for AI drawing analysis. Uses Emergent LLM Key.
--   **Resend:** Used for sending transactional emails. Requires a user-provided API key, which was added to .
--   **Stripe:** Planned for payments. Will require user-provided test keys.
+-   **Resend:** Used for sending transactional emails. Requires a user-provided API key.
+-   **Stripe:** Planned for payments.
 
 **Testing status**
--   Testing agent used after significant changes: YES. The testing agent was used multiple times to verify the admin panel, email notifications, and machine management features.
+-   Testing agent used after significant changes: YES. The testing agent was used to verify the quote comparison, rating system, and payment terms features.
 -   Troubleshoot agent used after agent stuck in loop: NO
 -   Test files created: []
 -   Known regressions: None.
@@ -155,8 +176,12 @@ Most significantly, a dynamic machine management system has been built for both 
 -   **Admin:**
     -   Email: 
     -   Password: 
--   **Buyer/Vendor:** Can be registered through the UI. A new test vendor was created during the session.
+-   **Buyer:**
+    -   Email: 
+    -   Password: 
+-   **Vendor (Simpson Munro):**
+    -   Email: 
+    -   Password: 
 
 **What agent forgot to execute**
--   The original problem statement specified a **PostgreSQL** database, but the implementation uses **MongoDB**. This decision was inherited from a previous session.
--   The agent has not yet started the core **Quotation, Order Management, and Payment** modules, which are critical for the MVP. These are next on the roadmap after the current task.</analysis>
+-   The AI voice agent feature requested by the user is the next high-priority task after completing the notification system.</analysis>
