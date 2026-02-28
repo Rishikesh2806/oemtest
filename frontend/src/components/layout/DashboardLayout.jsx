@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth, api } from "../../App";
 import { Button } from "../ui/button";
+import NotificationBell from "../NotificationBell";
 import { 
   Factory, LayoutDashboard, FileText, Package, Settings, 
   LogOut, Menu, X, Wrench, Building2, Users, DollarSign,
@@ -114,18 +115,7 @@ const DashboardLayout = ({ children }) => {
             <span className="font-heading font-bold text-slate-900">OFFLOADEX</span>
           </Link>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg">
-                <Bell className="w-5 h-5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64">
-              <div className="p-3 text-center text-slate-500 text-sm">
-                No new notifications
-              </div>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <NotificationBell />
         </div>
       </header>
 
@@ -195,18 +185,7 @@ const DashboardLayout = ({ children }) => {
           </div>
 
           <div className="flex items-center gap-4">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg relative">
-                  <Bell className="w-5 h-5" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                <div className="p-3 text-center text-slate-500 text-sm">
-                  No new notifications
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <NotificationBell />
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
