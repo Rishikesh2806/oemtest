@@ -9,6 +9,7 @@ import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import BuyerDashboard from "./pages/BuyerDashboard";
 import BuyerRFQList from "./pages/BuyerRFQList";
+import BuyerQuotes from "./pages/BuyerQuotes";
 import VendorDashboard from "./pages/VendorDashboard";
 import VendorMatchedRFQs from "./pages/VendorMatchedRFQs";
 import AdminDashboard from "./pages/AdminDashboard";
