@@ -1,11 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "../App";
+import { useAuth, api } from "../App";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { toast } from "sonner";
-import { Factory, Mail, Lock, User, ArrowRight, Building2, ShoppingCart } from "lucide-react";
+import { 
+  Factory, Mail, Lock, User, ArrowRight, Building2, ShoppingCart, 
+  Search, Loader2, CheckCircle2, MapPin, Phone, Globe, FileText
+} from "lucide-react";
 
 const RegisterPage = () => {
   const [searchParams] = useSearchParams();
@@ -17,12 +20,92 @@ const RegisterPage = () => {
   const { register, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
+  // Vendor-specific fields
+  const [gstin, setGstin] = useState("");
+  const [gstinVerified, setGstinVerified] = useState(false);
+  const [gstinLoading, setGstinLoading] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [tradeName, setTradeName] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [pincode, setPincode] = useState("");
+  const [phone, setPhone] = useState("");
+  const [gstinStatus, setGstinStatus] = useState("");
+
+  const verifyGstin = async () => {
+    if (!gstin || gstin.length !== 15) {
+      toast.error("Please enter a valid 15-character GSTIN");
+      return;
+    }
+
+    setGstinLoading(true);
+    try {
+      const response = await api.get(`/gstin/verify/${gstin}`);
+      const data = response.data;
+
+      if (data.valid) {
+        setGstinVerified(true);
+        setCompanyName(data.legal_name || data.trade_name || "");
+        setTradeName(data.trade_name || "");
+        setAddress(data.address || "");
+        setCity(data.city || "");
+        setState(data.state || "");
+        setPincode(data.pincode || "");
+        setGstinStatus(data.status || "");
+        
+        // Auto-fill name if empty
+        if (!name && data.legal_name) {
+          setName(data.legal_name);
+        }
+        
+        toast.success("GSTIN verified successfully!");
+      } else {
+        setGstinVerified(false);
+        toast.error(data.error || "GSTIN verification failed");
+      }
+    } catch (error) {
+      setGstinVerified(false);
+      toast.error("Failed to verify GSTIN. Please try again.");
+    } finally {
+      setGstinLoading(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const user = await register(name, email, password, role);
+      // For vendors, include additional fields
+      const userData = {
+        name,
+        email,
+        password,
+        role,
+        ...(role === "vendor" && {
+          gstin,
+          company_name: companyName,
+          trade_name: tradeName,
+          address,
+          city,
+          state,
+          pincode,
+          phone
+        })
+      };
+
+      const user = await register(userData.name, userData.email, userData.password, userData.role, {
+        gstin: userData.gstin,
+        company_name: userData.company_name,
+        trade_name: userData.trade_name,
+        address: userData.address,
+        city: userData.city,
+        state: userData.state,
+        pincode: userData.pincode,
+        phone: userData.phone
+      });
+      
       toast.success("Account created successfully!");
       
       if (user.role === "vendor") {
@@ -56,7 +139,7 @@ const RegisterPage = () => {
       </div>
 
       {/* Right Panel - Form */}
-      <div className="flex-1 flex items-center justify-center px-6 py-12">
+      <div className="flex-1 flex items-center justify-center px-6 py-12 overflow-y-auto">
         <div className="w-full max-w-md">
           <Link to="/" className="flex items-center gap-2 mb-8">
             <img src="/logo.png" alt="MachinoMatch Logo" className="w-9 h-9" />
@@ -70,7 +153,11 @@ const RegisterPage = () => {
           <div className="grid grid-cols-2 gap-4 mb-8">
             <button
               type="button"
-              onClick={() => setRole("buyer")}
+              onClick={() => {
+                setRole("buyer");
+                setGstinVerified(false);
+                setGstin("");
+              }}
               className={`p-4 rounded-lg border-2 transition-all ${
                 role === "buyer" 
                   ? "border-orange-600 bg-orange-50" 
@@ -103,9 +190,130 @@ const RegisterPage = () => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
+            {/* GSTIN Verification for Vendors */}
+            {role === "vendor" && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-4">
+                <div className="flex items-center gap-2 text-blue-800">
+                  <FileText className="w-5 h-5" />
+                  <span className="font-medium">Quick Registration with GSTIN</span>
+                </div>
+                
+                <div>
+                  <Label htmlFor="gstin" className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    GSTIN Number
+                  </Label>
+                  <div className="flex gap-2 mt-1">
+                    <div className="relative flex-1">
+                      <Input
+                        id="gstin"
+                        type="text"
+                        value={gstin}
+                        onChange={(e) => {
+                          setGstin(e.target.value.toUpperCase());
+                          setGstinVerified(false);
+                        }}
+                        placeholder="e.g., 27AABCU9603R1ZM"
+                        maxLength={15}
+                        className={`h-12 bg-white border-slate-200 uppercase ${
+                          gstinVerified ? "border-green-500 bg-green-50" : ""
+                        }`}
+                        data-testid="gstin-input"
+                      />
+                      {gstinVerified && (
+                        <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-600" />
+                      )}
+                    </div>
+                    <Button
+                      type="button"
+                      onClick={verifyGstin}
+                      disabled={gstinLoading || gstin.length !== 15}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      {gstinLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Search className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-1">Enter GSTIN to auto-fill company details</p>
+                </div>
+
+                {/* Verified Company Details */}
+                {gstinVerified && (
+                  <div className="space-y-3 pt-3 border-t border-blue-200">
+                    <div className="flex items-center gap-2 text-green-700">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span className="text-sm font-medium">GSTIN Verified - {gstinStatus}</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-xs text-slate-500">Legal Name</Label>
+                        <Input
+                          value={companyName}
+                          onChange={(e) => setCompanyName(e.target.value)}
+                          className="h-10 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-slate-500">Trade Name</Label>
+                        <Input
+                          value={tradeName}
+                          onChange={(e) => setTradeName(e.target.value)}
+                          className="h-10 text-sm"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <Label className="text-xs text-slate-500">Address</Label>
+                        <Input
+                          value={address}
+                          onChange={(e) => setAddress(e.target.value)}
+                          className="h-10 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-slate-500">City</Label>
+                        <Input
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          className="h-10 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-slate-500">State</Label>
+                        <Input
+                          value={state}
+                          onChange={(e) => setState(e.target.value)}
+                          className="h-10 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-slate-500">Pincode</Label>
+                        <Input
+                          value={pincode}
+                          onChange={(e) => setPincode(e.target.value)}
+                          className="h-10 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs text-slate-500">Phone</Label>
+                        <Input
+                          value={phone}
+                          onChange={(e) => setPhone(e.target.value)}
+                          placeholder="+91 "
+                          className="h-10 text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div>
               <Label htmlFor="name" className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Full Name
+                {role === "vendor" ? "Contact Person Name" : "Full Name"}
               </Label>
               <div className="relative mt-1">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -114,7 +322,7 @@ const RegisterPage = () => {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="John Smith"
+                  placeholder={role === "vendor" ? "Contact person name" : "John Smith"}
                   className="pl-10 h-12 bg-white border-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                   data-testid="register-name-input"
                   required
@@ -164,31 +372,34 @@ const RegisterPage = () => {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-12 bg-orange-600 hover:bg-orange-700 font-medium"
+              className="w-full h-12 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 text-white font-bold"
               data-testid="register-submit-btn"
             >
               {loading ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                <>Create Account <ArrowRight className="ml-2 w-4 h-4" /></>
+                <>
+                  Create Account
+                  <ArrowRight className="w-5 h-5 ml-2" />
+                </>
               )}
             </Button>
           </form>
 
           <div className="relative my-8">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-200" />
+              <div className="w-full border-t border-slate-200"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-slate-50 text-slate-500">Or continue with</span>
+              <span className="px-4 bg-slate-50 text-slate-500">or continue with</span>
             </div>
           </div>
 
           <Button
             type="button"
             variant="outline"
-            onClick={loginWithGoogle}
-            className="w-full h-12 border-slate-200 hover:bg-slate-100"
+            onClick={() => loginWithGoogle(role)}
+            className="w-full h-12 border-2 hover:bg-slate-50"
             data-testid="google-register-btn"
           >
             <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
@@ -197,12 +408,12 @@ const RegisterPage = () => {
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
             </svg>
-            Sign up with Google
+            Continue with Google
           </Button>
 
-          <p className="mt-8 text-center text-slate-500">
+          <p className="text-center text-sm text-slate-500 mt-8">
             Already have an account?{" "}
-            <Link to="/login" className="text-orange-600 hover:text-orange-700 font-medium">
+            <Link to="/login" className="text-orange-600 hover:underline font-medium">
               Sign in
             </Link>
           </p>
