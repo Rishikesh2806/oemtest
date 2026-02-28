@@ -829,6 +829,48 @@ const RFQDetail = () => {
                             )}
                           </div>
                         )}
+
+                        {/* Payment Terms & Other Details */}
+                        <div className="mt-3 pt-3 border-t border-slate-100 grid grid-cols-2 gap-2 text-sm">
+                          {quote.proposed_payment_terms && (
+                            <div className="flex items-center gap-2">
+                              <CreditCard className="w-4 h-4 text-slate-400" />
+                              <span className="text-slate-600">
+                                {quote.proposed_payment_terms === "net_30" ? "Net 30 Days" :
+                                 quote.proposed_payment_terms === "net_45" ? "Net 45 Days" :
+                                 quote.proposed_payment_terms === "net_60" ? "Net 60 Days" :
+                                 quote.proposed_payment_terms === "50_advance_50_delivery" ? "50% Advance" :
+                                 quote.proposed_payment_terms === "100_advance" ? "100% Advance" :
+                                 quote.proposed_payment_terms === "against_delivery" ? "Against Delivery" :
+                                 quote.proposed_payment_terms === "milestone_based" ? "Milestone Based" :
+                                 quote.proposed_payment_terms === "letter_of_credit" ? "Letter of Credit" :
+                                 quote.proposed_payment_terms}
+                              </span>
+                            </div>
+                          )}
+                          {quote.currency && (
+                            <div className="flex items-center gap-2">
+                              <DollarSign className="w-4 h-4 text-slate-400" />
+                              <span className="text-slate-600">Currency: {quote.currency}</span>
+                            </div>
+                          )}
+                          {quote.expires_at && (
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-4 h-4 text-slate-400" />
+                              <span className="text-slate-600">
+                                Valid until: {new Date(quote.expires_at).toLocaleDateString()}
+                              </span>
+                            </div>
+                          )}
+                          {quote.vendor_acceptance_rate !== undefined && (
+                            <div className="flex items-center gap-2">
+                              <Target className="w-4 h-4 text-slate-400" />
+                              <span className="text-slate-600">
+                                Acceptance: {quote.vendor_acceptance_rate}%
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       <div className="text-right">
                         <div className="flex items-center gap-1 text-2xl font-bold text-slate-900">
