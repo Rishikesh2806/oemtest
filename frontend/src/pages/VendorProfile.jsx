@@ -81,12 +81,15 @@ const VendorProfile = () => {
   };
 
   const toggleArrayItem = (field, item) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: prev[field].includes(item)
-        ? prev[field].filter(i => i !== item)
-        : [...prev[field], item]
-    }));
+    setFormData(prev => {
+      const currentArray = prev[field] || [];
+      return {
+        ...prev,
+        [field]: currentArray.includes(item)
+          ? currentArray.filter(i => i !== item)
+          : [...currentArray, item]
+      };
+    });
   };
 
   const handleSubmit = async (e) => {
