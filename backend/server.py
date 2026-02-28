@@ -4278,6 +4278,20 @@ async def get_buyer_quotes(user: dict = Depends(get_current_user)):
         # Add RFQ info
         rfq = rfq_map.get(quote["rfq_id"], {})
         quote["rfq_title"] = rfq.get("title", "Untitled RFQ")
+        quote["rfq_material_type"] = rfq.get("material_type")
+        quote["rfq_quantity"] = rfq.get("quantity")
+        quote["rfq_tolerance"] = rfq.get("tolerance")
+        quote["rfq_supply_type"] = rfq.get("supply_type", "vendor_material")
+        quote["rfq_preferred_payment_terms"] = rfq.get("preferred_payment_terms")
+        quote["rfq_status"] = rfq.get("status")
+        
+        # Get latest negotiation for this quote
+        latest_negotiation = await db.quote_negotiations.find_one(
+            {"quote_id": quote["quote_id"]},
+            {"_id": 0}
+        )
+        if latest_negotiation:
+            quote["latest_negotiation"] = latest_negotiation
         
         enriched_quotes.append(quote)
     
