@@ -94,8 +94,8 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check
+- Stripe payment integration (escrow)
 - Revenue analytics charts
-- Vendor capacity calendar
 
 ### P2 - Medium Priority
 - Bulk machine import (CSV)
