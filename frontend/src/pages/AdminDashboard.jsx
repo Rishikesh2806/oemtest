@@ -220,11 +220,14 @@ const OverviewTab = ({ stats, pendingVendors, onApproveVendor, onRejectVendor, o
 );
 
 // ============== USERS TAB ==============
-const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser }) => {
+const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCreateUser }) => {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [editUser, setEditUser] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", role: "" });
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [addForm, setAddForm] = useState({ name: "", email: "", password: "", role: "buyer", company_name: "" });
+  const [adding, setAdding] = useState(false);
   
   const filteredUsers = users.filter(u => {
     const matchesSearch = u.name?.toLowerCase().includes(search.toLowerCase()) || 
@@ -235,12 +238,27 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser }) => 
   
   const handleEdit = (user) => {
     setEditUser(user);
-    setEditForm({ name: user.name, role: user.role });
+    setEditForm({ name: user.name, role: user.role, company_name: user.company_name || "" });
   };
   
   const handleSave = async () => {
     await onUpdateUser(editUser.user_id, editForm);
     setEditUser(null);
+  };
+
+  const handleAddUser = async () => {
+    if (!addForm.email || !addForm.password || !addForm.name) {
+      toast.error("Please fill all required fields");
+      return;
+    }
+    setAdding(true);
+    try {
+      await onCreateUser(addForm);
+      setShowAddDialog(false);
+      setAddForm({ name: "", email: "", password: "", role: "buyer", company_name: "" });
+    } finally {
+      setAdding(false);
+    }
   };
 
   return (
@@ -269,6 +287,9 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser }) => 
         </Select>
         <Button variant="outline" size="sm" onClick={onRefresh}>
           <RefreshCw className="w-4 h-4" />
+        </Button>
+        <Button onClick={() => setShowAddDialog(true)} className="bg-orange-600 hover:bg-orange-700">
+          <Plus className="w-4 h-4 mr-2" /> Add User
         </Button>
       </div>
       
