@@ -20,6 +20,7 @@ import MachineManagement from "./pages/MachineManagement";
 import OrderDetail from "./pages/OrderDetail";
 import QuotesList from "./pages/QuotesList";
 import ChatPage from "./pages/ChatPage";
+import NotificationsPage from "./pages/NotificationsPage";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND_URL}/api`;
@@ -298,6 +299,11 @@ const AppRouter = () => {
       <Route path="/chat/:conversationId" element={
         <ProtectedRoute>
           <ChatPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/notifications" element={
+        <ProtectedRoute>
+          <NotificationsPage />
         </ProtectedRoute>
       } />
       
