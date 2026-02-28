@@ -18,7 +18,7 @@ BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 # Test credentials
 BUYER_EMAIL = "buyer@offoadex.com"
 BUYER_PASSWORD = "buyer123"
-VENDOR_EMAIL = "info@simpsonmunro.com"
+VENDOR_EMAIL = "vendor@offoadex.com"
 VENDOR_PASSWORD = "vendor123"
 ADMIN_EMAIL = "admin@offoadex.com"
 ADMIN_PASSWORD = "admin123"
