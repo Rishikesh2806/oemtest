@@ -14,9 +14,10 @@ import {
   FileText, Package, Star, MapPin, Loader2, 
   CheckCircle2, Send, DollarSign, Clock, ArrowLeft,
   Building2, Cpu, Wrench, AlertCircle, Target, MessageSquare, Eye,
-  BarChart3, CreditCard
+  BarChart3, CreditCard, ExternalLink
 } from "lucide-react";
 import QuoteComparison from "../components/quotes/QuoteComparison";
+import QuoteDetailModal from "../components/QuoteDetailModal";
 
 const PAYMENT_TERMS = [
   { value: "net_30", label: "Net 30 Days" },
