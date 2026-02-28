@@ -4,14 +4,15 @@ import { api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardContent } from "../components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { toast } from "sonner";
+import QuoteDetailModal from "../components/QuoteDetailModal";
 import {
   DollarSign, Clock, Star, MapPin, Building2, Search,
   Filter, Loader2, CheckCircle2, XCircle, AlertCircle,
   FileText, ExternalLink, MessageSquare, CreditCard, RefreshCw,
-  ChevronDown, ChevronRight
+  ChevronDown, ChevronRight, Package, Target, Eye
 } from "lucide-react";
 
 const PAYMENT_TERMS_LABELS = {
@@ -33,6 +34,8 @@ const BuyerQuotes = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const [expandedRFQs, setExpandedRFQs] = useState({});
+  const [selectedQuoteId, setSelectedQuoteId] = useState(null);
+  const [quoteDetailOpen, setQuoteDetailOpen] = useState(false);
 
   useEffect(() => {
     fetchQuotes();
@@ -73,6 +76,11 @@ const BuyerQuotes = () => {
     }));
   };
 
+  const openQuoteDetail = (quoteId) => {
+    setSelectedQuoteId(quoteId);
+    setQuoteDetailOpen(true);
+  };
+
   const getStatusBadge = (status) => {
     switch (status) {
       case "pending":
@@ -101,6 +109,24 @@ const BuyerQuotes = () => {
     }
   };
 
+  const getNegotiationStatusInfo = (quote) => {
+    if (!quote.negotiation_status || quote.negotiation_status === "resolved") {
+      return null;
+    }
+    
+    const neg = quote.latest_negotiation;
+    if (!neg) return null;
+
+    return {
+      status: quote.negotiation_status,
+      type: neg.request_type,
+      requestedPrice: neg.requested_price,
+      counterPrice: neg.counter_price,
+      message: neg.message,
+      response: neg.response
+    };
+  };
+
   // Filter quotes
   const filteredQuotes = quotes.filter(quote => {
     const matchesSearch = 
@@ -110,13 +136,19 @@ const BuyerQuotes = () => {
     return matchesSearch && matchesStatus;
   });
 
-  // Group quotes by RFQ
+  // Group quotes by RFQ with RFQ details
   const groupedQuotes = filteredQuotes.reduce((groups, quote) => {
     const rfqId = quote.rfq_id;
     if (!groups[rfqId]) {
       groups[rfqId] = {
         rfq_id: rfqId,
         rfq_title: quote.rfq_title || "Untitled RFQ",
+        rfq_material_type: quote.rfq_material_type,
+        rfq_quantity: quote.rfq_quantity,
+        rfq_tolerance: quote.rfq_tolerance,
+        rfq_supply_type: quote.rfq_supply_type,
+        rfq_preferred_payment_terms: quote.rfq_preferred_payment_terms,
+        rfq_status: quote.rfq_status,
         quotes: []
       };
     }
@@ -156,7 +188,7 @@ const BuyerQuotes = () => {
     total: quotes.length,
     pending: quotes.filter(q => q.status === "pending").length,
     accepted: quotes.filter(q => q.status === "accepted").length,
-    rejected: quotes.filter(q => q.status === "rejected").length
+    negotiating: quotes.filter(q => q.negotiation_status && q.negotiation_status !== "resolved").length
   };
 
   if (loading) {
@@ -203,10 +235,10 @@ const BuyerQuotes = () => {
               <p className="text-sm text-green-600">Accepted</p>
             </CardContent>
           </Card>
-          <Card className="bg-red-50 border-red-200">
+          <Card className="bg-blue-50 border-blue-200">
             <CardContent className="p-4 text-center">
-              <p className="text-2xl font-bold text-red-700">{stats.rejected}</p>
-              <p className="text-sm text-red-600">Rejected</p>
+              <p className="text-2xl font-bold text-blue-700">{stats.negotiating}</p>
+              <p className="text-sm text-blue-600">In Negotiation</p>
             </CardContent>
           </Card>
         </div>
@@ -277,6 +309,7 @@ const BuyerQuotes = () => {
             {sortedGroups.map((group) => {
               const pendingCount = group.quotes.filter(q => q.status === "pending").length;
               const acceptedCount = group.quotes.filter(q => q.status === "accepted").length;
+              const negotiatingCount = group.quotes.filter(q => q.negotiation_status && q.negotiation_status !== "resolved").length;
               const lowestPrice = Math.min(...group.quotes.map(q => q.price));
               const isExpanded = expandedRFQs[group.rfq_id];
 
@@ -287,34 +320,72 @@ const BuyerQuotes = () => {
                     className="bg-slate-50 p-4 cursor-pointer hover:bg-slate-100 transition-colors"
                     onClick={() => toggleRFQ(group.rfq_id)}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-3">
                         {isExpanded ? (
-                          <ChevronDown className="w-5 h-5 text-slate-500" />
+                          <ChevronDown className="w-5 h-5 text-slate-500 mt-1" />
                         ) : (
-                          <ChevronRight className="w-5 h-5 text-slate-500" />
+                          <ChevronRight className="w-5 h-5 text-slate-500 mt-1" />
                         )}
-                        <FileText className="w-5 h-5 text-orange-600" />
+                        <FileText className="w-5 h-5 text-orange-600 mt-1" />
                         <div>
                           <h3 className="font-semibold text-slate-900">{group.rfq_title}</h3>
-                          <p className="text-sm text-slate-500">
+                          
+                          {/* RFQ Details */}
+                          <div className="flex flex-wrap items-center gap-3 mt-2 text-sm text-slate-500">
+                            {group.rfq_material_type && (
+                              <span className="flex items-center gap-1">
+                                <Package className="w-4 h-4" /> {group.rfq_material_type}
+                              </span>
+                            )}
+                            {group.rfq_quantity && (
+                              <span>Qty: {group.rfq_quantity}</span>
+                            )}
+                            {group.rfq_tolerance && (
+                              <span>±{group.rfq_tolerance}mm</span>
+                            )}
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              group.rfq_supply_type === "buyer_material" 
+                                ? "bg-blue-100 text-blue-700" 
+                                : "bg-orange-100 text-orange-700"
+                            }`}>
+                              {group.rfq_supply_type === "buyer_material" ? "I Supply Material" : "Vendor Supplies"}
+                            </span>
+                          </div>
+                          
+                          {/* Preferred Payment Terms */}
+                          {group.rfq_preferred_payment_terms && (
+                            <div className="flex items-center gap-1 mt-1 text-xs text-blue-600">
+                              <CreditCard className="w-3 h-3" />
+                              Preferred: {PAYMENT_TERMS_LABELS[group.rfq_preferred_payment_terms] || group.rfq_preferred_payment_terms}
+                            </div>
+                          )}
+                          
+                          <p className="text-sm text-slate-500 mt-1">
                             {group.quotes.length} quote{group.quotes.length !== 1 ? 's' : ''} received
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-4">
-                        {pendingCount > 0 && (
-                          <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
-                            {pendingCount} pending
-                          </span>
-                        )}
-                        {acceptedCount > 0 && (
-                          <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
-                            {acceptedCount} accepted
-                          </span>
-                        )}
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <div className="flex flex-wrap gap-2">
+                          {pendingCount > 0 && (
+                            <span className="px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">
+                              {pendingCount} pending
+                            </span>
+                          )}
+                          {acceptedCount > 0 && (
+                            <span className="px-2 py-1 bg-green-100 text-green-700 text-xs font-medium rounded-full">
+                              {acceptedCount} accepted
+                            </span>
+                          )}
+                          {negotiatingCount > 0 && (
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+                              {negotiatingCount} negotiating
+                            </span>
+                          )}
+                        </div>
                         <div className="text-right">
-                          <p className="text-sm text-slate-500">Lowest price</p>
+                          <p className="text-xs text-slate-500">Lowest</p>
                           <p className="font-bold text-slate-900">${lowestPrice.toLocaleString()}</p>
                         </div>
                         <Link 
@@ -332,102 +403,141 @@ const BuyerQuotes = () => {
                   {/* Quotes List - Collapsible */}
                   {isExpanded && (
                     <CardContent className="p-0 divide-y divide-slate-100">
-                      {group.quotes.map((quote) => (
-                        <div 
-                          key={quote.quote_id} 
-                          className="p-4 hover:bg-slate-50 transition-colors"
-                          data-testid={`quote-card-${quote.quote_id}`}
-                        >
-                          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-                            {/* Vendor Info */}
-                            <div className="flex items-center gap-3 flex-1">
-                              <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                <Building2 className="w-5 h-5 text-slate-500" />
-                              </div>
-                              <div>
-                                <h4 className="font-medium text-slate-900">{quote.vendor_name || "Vendor"}</h4>
-                                <div className="flex items-center gap-3 text-sm text-slate-500">
-                                  {quote.vendor_rating > 0 && (
-                                    <span className="flex items-center gap-1">
-                                      <Star className="w-3 h-3 text-amber-500 fill-amber-500" /> 
-                                      {quote.vendor_rating?.toFixed(1)}
+                      {group.quotes.map((quote) => {
+                        const negInfo = getNegotiationStatusInfo(quote);
+                        
+                        return (
+                          <div 
+                            key={quote.quote_id} 
+                            className={`p-4 hover:bg-slate-50 transition-colors ${
+                              negInfo ? "border-l-4 border-l-blue-400" : ""
+                            }`}
+                            data-testid={`quote-card-${quote.quote_id}`}
+                          >
+                            <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+                              {/* Vendor Info */}
+                              <div className="flex items-start gap-3 flex-1">
+                                <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                  <Building2 className="w-5 h-5 text-slate-500" />
+                                </div>
+                                <div className="flex-1">
+                                  <h4 className="font-medium text-slate-900">{quote.vendor_name || "Vendor"}</h4>
+                                  <div className="flex items-center gap-3 text-sm text-slate-500">
+                                    {quote.vendor_rating > 0 && (
+                                      <span className="flex items-center gap-1">
+                                        <Star className="w-3 h-3 text-amber-500 fill-amber-500" /> 
+                                        {quote.vendor_rating?.toFixed(1)}
+                                      </span>
+                                    )}
+                                    {quote.vendor_location && (
+                                      <span className="flex items-center gap-1">
+                                        <MapPin className="w-3 h-3" /> {quote.vendor_location}
+                                      </span>
+                                    )}
+                                    {quote.vendor_acceptance_rate > 0 && (
+                                      <span className="flex items-center gap-1">
+                                        <Target className="w-3 h-3" /> {quote.vendor_acceptance_rate}%
+                                      </span>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Quote Terms */}
+                                  <div className="flex flex-wrap items-center gap-3 mt-2 text-sm">
+                                    {quote.proposed_payment_terms && (
+                                      <span className="flex items-center gap-1 text-slate-600">
+                                        <CreditCard className="w-4 h-4 text-slate-400" />
+                                        {PAYMENT_TERMS_LABELS[quote.proposed_payment_terms] || quote.proposed_payment_terms}
+                                      </span>
+                                    )}
+                                    <span className="flex items-center gap-1 text-slate-600">
+                                      <Clock className="w-4 h-4 text-slate-400" />
+                                      {quote.lead_time_days} days
                                     </span>
-                                  )}
-                                  {quote.vendor_location && (
-                                    <span className="flex items-center gap-1">
-                                      <MapPin className="w-3 h-3" /> {quote.vendor_location}
-                                    </span>
+                                  </div>
+                                  
+                                  {/* Negotiation Info */}
+                                  {negInfo && (
+                                    <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                                      <div className="flex items-center gap-2 mb-2">
+                                        <RefreshCw className="w-4 h-4 text-blue-600" />
+                                        <span className="text-sm font-medium text-blue-800">
+                                          {negInfo.status === "buyer_requested" 
+                                            ? "Negotiation Pending Response" 
+                                            : "Counter Offer Received"}
+                                        </span>
+                                      </div>
+                                      
+                                      {negInfo.status === "buyer_requested" && (
+                                        <div className="text-sm text-blue-700">
+                                          <p>Your request: {negInfo.type === "price" ? "Price adjustment" : negInfo.type === "lead_time" ? "Lead time change" : negInfo.type === "payment_terms" ? "Payment terms" : "General request"}</p>
+                                          {negInfo.requestedPrice && (
+                                            <p>Requested price: <strong>${negInfo.requestedPrice.toLocaleString()}</strong></p>
+                                          )}
+                                        </div>
+                                      )}
+                                      
+                                      {negInfo.status === "vendor_countered" && (
+                                        <div className="text-sm text-blue-700">
+                                          <p className="font-medium">Vendor's counter offer:</p>
+                                          {negInfo.counterPrice && (
+                                            <p>Counter price: <strong>${negInfo.counterPrice.toLocaleString()}</strong></p>
+                                          )}
+                                          {negInfo.response && (
+                                            <p className="italic mt-1">"{negInfo.response}"</p>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               </div>
-                            </div>
 
-                            {/* Quote Details */}
-                            <div className="flex flex-wrap items-center gap-4 text-sm">
-                              {quote.proposed_payment_terms && (
-                                <div className="flex items-center gap-1 text-slate-600">
-                                  <CreditCard className="w-4 h-4 text-slate-400" />
-                                  {PAYMENT_TERMS_LABELS[quote.proposed_payment_terms] || quote.proposed_payment_terms}
+                              {/* Price & Status */}
+                              <div className="flex items-center gap-4">
+                                <div className="text-right">
+                                  <div className="flex items-center gap-1 text-xl font-bold text-slate-900">
+                                    <DollarSign className="w-4 h-4" />
+                                    {quote.price?.toLocaleString()}
+                                  </div>
+                                  <p className="text-xs text-slate-500">{quote.currency || "USD"}</p>
+                                </div>
+                                <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${getStatusBadge(quote.status)}`}>
+                                  {getStatusIcon(quote.status)}
+                                  {quote.status.charAt(0).toUpperCase() + quote.status.slice(1)}
+                                </span>
+                              </div>
+
+                              {/* Actions */}
+                              {quote.status === "pending" && (
+                                <div className="flex flex-wrap gap-2">
+                                  <Button
+                                    onClick={() => openQuoteDetail(quote.quote_id)}
+                                    variant="outline"
+                                    size="sm"
+                                    className="border-orange-300 text-orange-600 hover:bg-orange-50"
+                                  >
+                                    <Eye className="w-4 h-4 mr-1" /> Details & Negotiate
+                                  </Button>
+                                  <Button
+                                    onClick={() => acceptQuote(quote.quote_id)}
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700"
+                                  >
+                                    <CheckCircle2 className="w-4 h-4 mr-1" /> Accept
+                                  </Button>
+                                  {quote.vendor_user_id && (
+                                    <Link to={`/chat?with=${quote.vendor_user_id}&rfq=${quote.rfq_id}`}>
+                                      <Button variant="outline" size="sm">
+                                        <MessageSquare className="w-4 h-4" />
+                                      </Button>
+                                    </Link>
+                                  )}
                                 </div>
                               )}
-                              <div className="flex items-center gap-1 text-slate-600">
-                                <Clock className="w-4 h-4 text-slate-400" />
-                                {quote.lead_time_days} days
-                              </div>
                             </div>
-
-                            {/* Price & Status */}
-                            <div className="flex items-center gap-4">
-                              <div className="text-right">
-                                <div className="flex items-center gap-1 text-xl font-bold text-slate-900">
-                                  <DollarSign className="w-4 h-4" />
-                                  {quote.price?.toLocaleString()}
-                                </div>
-                              </div>
-                              <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${getStatusBadge(quote.status)}`}>
-                                {getStatusIcon(quote.status)}
-                                {quote.status.charAt(0).toUpperCase() + quote.status.slice(1)}
-                              </span>
-                            </div>
-
-                            {/* Actions */}
-                            {quote.status === "pending" && (
-                              <div className="flex gap-2">
-                                <Button
-                                  onClick={() => acceptQuote(quote.quote_id)}
-                                  size="sm"
-                                  className="bg-green-600 hover:bg-green-700"
-                                >
-                                  <CheckCircle2 className="w-4 h-4 mr-1" /> Accept
-                                </Button>
-                                {quote.vendor_user_id && (
-                                  <Link to={`/chat?with=${quote.vendor_user_id}&rfq=${quote.rfq_id}`}>
-                                    <Button variant="outline" size="sm">
-                                      <MessageSquare className="w-4 h-4" />
-                                    </Button>
-                                  </Link>
-                                )}
-                              </div>
-                            )}
                           </div>
-
-                          {/* Negotiation Status */}
-                          {quote.negotiation_status && quote.negotiation_status !== "resolved" && (
-                            <div className="mt-2 ml-13">
-                              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                                quote.negotiation_status === "buyer_requested" 
-                                  ? "bg-amber-100 text-amber-700" 
-                                  : "bg-blue-100 text-blue-700"
-                              }`}>
-                                <RefreshCw className="w-3 h-3" />
-                                {quote.negotiation_status === "buyer_requested" 
-                                  ? "Negotiation Pending" 
-                                  : "Counter Offer Available"}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        );
+                      })}
                     </CardContent>
                   )}
                 </Card>
@@ -443,6 +553,15 @@ const BuyerQuotes = () => {
           </p>
         )}
       </div>
+
+      {/* Quote Detail Modal */}
+      <QuoteDetailModal
+        quoteId={selectedQuoteId}
+        open={quoteDetailOpen}
+        onOpenChange={setQuoteDetailOpen}
+        onQuoteUpdated={fetchQuotes}
+        rfqId={quotes.find(q => q.quote_id === selectedQuoteId)?.rfq_id}
+      />
     </DashboardLayout>
   );
 };
