@@ -1681,6 +1681,24 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
   }
 
   // Vendors List View
+  const handleAddVendor = async () => {
+    if (!addVendorForm.email || !addVendorForm.password || !addVendorForm.name || !addVendorForm.company_name) {
+      toast.error("Please fill all required fields");
+      return;
+    }
+    setAddingVendor(true);
+    try {
+      await onCreateVendor(addVendorForm);
+      setShowAddVendorDialog(false);
+      setAddVendorForm({
+        name: "", email: "", password: "", company_name: "", description: "",
+        address: "", city: "", country: "", phone: "", website: ""
+      });
+    } finally {
+      setAddingVendor(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Filters */}
@@ -1695,9 +1713,14 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
             <SelectItem value="pending">Pending</SelectItem>
           </SelectContent>
         </Select>
-        <Button variant="outline" size="sm" onClick={onRefresh}>
-          <RefreshCw className="w-4 h-4" />
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={onRefresh}>
+            <RefreshCw className="w-4 h-4" />
+          </Button>
+          <Button onClick={() => setShowAddVendorDialog(true)} className="bg-orange-600 hover:bg-orange-700">
+            <Plus className="w-4 h-4 mr-2" /> Add Vendor
+          </Button>
+        </div>
       </div>
       
       {/* Vendors Table */}
