@@ -957,6 +957,125 @@ async def get_vendor_full_profile(vendor_id: str, user: dict = Depends(get_curre
         }
     }
 
+# ============== GSTIN VERIFICATION ==============
+
+@api_router.get("/gstin/verify/{gstin}")
+async def verify_gstin(gstin: str):
+    """Verify GSTIN and fetch company details from GST database"""
+    import httpx
+    
+    # Validate GSTIN format (15 characters)
+    gstin = gstin.upper().strip()
+    if len(gstin) != 15:
+        raise HTTPException(status_code=400, detail="Invalid GSTIN format. GSTIN must be 15 characters.")
+    
+    # GSTIN format: 2 digit state code + 10 digit PAN + 1 digit entity number + 1 Z + 1 checksum
+    gstin_pattern = r"^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$"
+    import re
+    if not re.match(gstin_pattern, gstin):
+        raise HTTPException(status_code=400, detail="Invalid GSTIN format")
+    
+    # State codes mapping
+    state_codes = {
+        "01": "Jammu & Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh",
+        "05": "Uttarakhand", "06": "Haryana", "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh",
+        "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh", "13": "Nagaland", "14": "Manipur",
+        "15": "Mizoram", "16": "Tripura", "17": "Meghalaya", "18": "Assam", "19": "West Bengal",
+        "20": "Jharkhand", "21": "Odisha", "22": "Chhattisgarh", "23": "Madhya Pradesh",
+        "24": "Gujarat", "25": "Daman & Diu", "26": "Dadra & Nagar Haveli", "27": "Maharashtra",
+        "28": "Andhra Pradesh", "29": "Karnataka", "30": "Goa", "31": "Lakshadweep",
+        "32": "Kerala", "33": "Tamil Nadu", "34": "Puducherry", "35": "Andaman & Nicobar",
+        "36": "Telangana", "37": "Andhra Pradesh (New)", "38": "Ladakh"
+    }
+    
+    state_code = gstin[:2]
+    state = state_codes.get(state_code, "Unknown")
+    
+    try:
+        # Try to fetch from public GST API (gstincheck.co.in free API)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            # Using the free API from gstincheck.co.in
+            api_url = f"https://sheet.gstincheck.co.in/check/free/{gstin}"
+            response = await client.get(api_url)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                if data.get("flag"):
+                    # API returned valid data
+                    gst_data = data.get("data", {})
+                    
+                    # Extract address components
+                    principal_place = gst_data.get("pradr", {}).get("addr", {})
+                    address_parts = []
+                    if principal_place.get("bno"):
+                        address_parts.append(principal_place.get("bno"))
+                    if principal_place.get("flno"):
+                        address_parts.append(principal_place.get("flno"))
+                    if principal_place.get("bnm"):
+                        address_parts.append(principal_place.get("bnm"))
+                    if principal_place.get("st"):
+                        address_parts.append(principal_place.get("st"))
+                    if principal_place.get("loc"):
+                        address_parts.append(principal_place.get("loc"))
+                    if principal_place.get("dst"):
+                        address_parts.append(principal_place.get("dst"))
+                    
+                    return {
+                        "valid": True,
+                        "gstin": gstin,
+                        "legal_name": gst_data.get("lgnm", ""),
+                        "trade_name": gst_data.get("tradeNam", ""),
+                        "status": gst_data.get("sts", ""),
+                        "taxpayer_type": gst_data.get("dty", ""),
+                        "state": principal_place.get("stcd") or state,
+                        "city": principal_place.get("dst", ""),
+                        "pincode": principal_place.get("pncd", ""),
+                        "address": ", ".join(filter(None, address_parts)),
+                        "constitution": gst_data.get("ctb", ""),
+                        "registration_date": gst_data.get("rgdt", ""),
+                        "last_updated": gst_data.get("lstupdt", "")
+                    }
+                else:
+                    # GSTIN not found or invalid
+                    return {
+                        "valid": False,
+                        "gstin": gstin,
+                        "error": data.get("message", "GSTIN not found in GST database"),
+                        "state": state
+                    }
+            else:
+                # API error, return basic info from GSTIN structure
+                logger.warning(f"GSTIN API error: {response.status_code}")
+                
+    except Exception as e:
+        logger.error(f"GSTIN verification error: {str(e)}")
+    
+    # Fallback: Extract basic info from GSTIN structure
+    pan = gstin[2:12]
+    entity_type_codes = {
+        "P": "Individual/Proprietor", "F": "Firm/LLP", "C": "Company",
+        "H": "HUF", "A": "AOP", "B": "BOI", "T": "Trust", "G": "Government",
+        "L": "Local Authority", "J": "Artificial Juridical Person"
+    }
+    entity_type = entity_type_codes.get(pan[3], "Business")
+    
+    return {
+        "valid": True,
+        "gstin": gstin,
+        "legal_name": "",
+        "trade_name": "",
+        "status": "Unable to verify online",
+        "taxpayer_type": entity_type,
+        "state": state,
+        "city": "",
+        "pincode": "",
+        "address": "",
+        "constitution": entity_type,
+        "pan": pan,
+        "note": "Basic info extracted from GSTIN. Full details not available."
+    }
+
 # ============== CHAT/MESSAGING ROUTES ==============
 
 class MessageCreate(BaseModel):
