@@ -836,7 +836,18 @@ const RFQDetail = () => {
                     </div>
                     
                     {isBuyer && quote.status === "pending" && (
-                      <div className="mt-4 pt-4 border-t border-slate-200 flex gap-2">
+                      <div className="mt-4 pt-4 border-t border-slate-200 flex flex-wrap gap-2">
+                        <Button
+                          onClick={() => {
+                            setSelectedQuoteId(quote.quote_id);
+                            setQuoteDetailOpen(true);
+                          }}
+                          variant="outline"
+                          className="border-orange-300 text-orange-600 hover:bg-orange-50"
+                          data-testid={`view-quote-detail-${quote.quote_id}`}
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" /> View Details & Negotiate
+                        </Button>
                         <Button
                           onClick={() => acceptQuote(quote.quote_id)}
                           className="bg-green-600 hover:bg-green-700"
@@ -860,11 +871,37 @@ const RFQDetail = () => {
                         )}
                       </div>
                     )}
+
+                    {/* Show negotiation status if any */}
+                    {quote.negotiation_status && quote.negotiation_status !== "resolved" && (
+                      <div className="mt-2 text-sm">
+                        <span className={`px-2 py-1 rounded-full ${
+                          quote.negotiation_status === "buyer_requested" 
+                            ? "bg-amber-100 text-amber-700" 
+                            : "bg-blue-100 text-blue-700"
+                        }`}>
+                          {quote.negotiation_status === "buyer_requested" 
+                            ? "Negotiation Pending" 
+                            : "Counter Offer Available"}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Quote Detail Modal */}
+        {isBuyer && (
+          <QuoteDetailModal
+            quoteId={selectedQuoteId}
+            open={quoteDetailOpen}
+            onOpenChange={setQuoteDetailOpen}
+            onQuoteUpdated={fetchRFQData}
+            rfqId={rfqId}
+          />
         )}
 
         {/* Quote Comparison Dialog */}
