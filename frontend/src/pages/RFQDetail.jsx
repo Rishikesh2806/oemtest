@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import QuoteComparison from "../components/quotes/QuoteComparison";
 import QuoteDetailModal from "../components/QuoteDetailModal";
+import VendorNegotiationPanel from "../components/VendorNegotiationPanel";
 
 const PAYMENT_TERMS = [
   { value: "net_30", label: "Net 30 Days" },
