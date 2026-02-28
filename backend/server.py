@@ -2092,10 +2092,23 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 "match_score": matched.get("suitability_score", 0),
                 "matching_machines": ", ".join(matched.get("matching_machines", [])[:3]) or "Compatible machines found",
                 "process_matches": ", ".join(matched.get("process_matches", [])[:3]) or "Matching capabilities",
-                "app_url": f"{app_url}/vendor/dashboard"
+                "app_url": f"{app_url}/vendor/matched-rfqs"
             }
             subject, html = get_email_template("vendor_matched", email_data)
             asyncio.create_task(send_email_async(vendor_user["email"], subject, html))
+            
+            # Create in-app notification
+            await create_notification(
+                user_id=matched.get("user_id"),
+                notification_type=NotificationType.RFQ_MATCHED,
+                title=f"New RFQ Match: {rfq.get('title', 'Untitled')[:40]}",
+                message=f"You've been matched ({matched.get('suitability_score', 0)}%) to a new RFQ for {rfq.get('material_type', 'Unknown')} - {rfq.get('quantity', 1)} units",
+                data={
+                    "rfq_id": rfq_id,
+                    "match_score": matched.get("suitability_score", 0),
+                    "link": f"/vendor/rfq/{rfq_id}"
+                }
+            )
     
     return {
         "matched_vendors": matched_vendors, 
