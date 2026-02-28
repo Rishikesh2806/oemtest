@@ -56,6 +56,8 @@ const RFQDetail = () => {
   });
 
   const [compareDialogOpen, setCompareDialogOpen] = useState(false);
+  const [selectedQuoteId, setSelectedQuoteId] = useState(null);
+  const [quoteDetailOpen, setQuoteDetailOpen] = useState(false);
 
   useEffect(() => {
     fetchRFQData();
