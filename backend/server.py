@@ -1010,6 +1010,26 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
         upsert=True
     )
     
+    # Create in-app notification for the receiver
+    sender_name = user.get("name", "Someone")
+    app_url = os.environ.get("APP_URL", "https://rfq-forge.preview.emergentagent.com")
+    
+    await create_notification(
+        user_id=message.receiver_id,
+        notification_type=NotificationType.MESSAGE_RECEIVED,
+        title=f"New message from {sender_name}",
+        message=message.content[:100] + ("..." if len(message.content) > 100 else ""),
+        data={"conversation_id": conversation_id, "sender_id": user["user_id"], "rfq_id": message.rfq_id},
+        send_email=True,
+        email_template="new_message",
+        email_data={
+            "sender_name": sender_name,
+            "recipient_name": "User",
+            "message_preview": message.content,
+            "app_url": f"{app_url}/chat/{conversation_id}"
+        }
+    )
+    
     return {"message_id": message_id, "conversation_id": conversation_id}
 
 @api_router.get("/messages/conversations")
@@ -2313,7 +2333,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
         {"$set": {"status": RFQStatus.PO_ISSUED, "updated_at": now}}
     )
     
-    # Send email notification to vendor
+    # Send email notification to vendor and create in-app notification
     app_url = os.environ.get("APP_URL", "https://rfq-forge.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
@@ -2330,6 +2350,15 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
             }
             subject, html = get_email_template("quote_accepted", email_data)
             asyncio.create_task(send_email_async(vendor_user["email"], subject, html))
+        
+        # Create in-app notification for vendor
+        await create_notification(
+            user_id=vendor.get("user_id"),
+            notification_type=NotificationType.QUOTE_ACCEPTED,
+            title="Quote Accepted!",
+            message=f"Your quote for '{rfq.get('title', 'RFQ')}' has been accepted. Order #{po_number}",
+            data={"order_id": order_id, "rfq_id": quote["rfq_id"], "quote_id": quote_id, "po_number": po_number}
+        )
     
     return {"message": "Quote accepted", "order_id": order_id}
 
@@ -2375,6 +2404,56 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
             "$push": {"tracking_updates": {"status": new_status, "timestamp": now, "note": note}}
         }
     )
+    
+    # Determine recipient for notification (buyer or vendor)
+    rfq = await db.rfqs.find_one({"rfq_id": order["rfq_id"]}, {"_id": 0, "title": 1})
+    rfq_title = rfq.get("title", "Order") if rfq else "Order"
+    
+    # Status display names
+    status_labels = {
+        "pending_payment": "Pending Payment",
+        "paid": "Payment Confirmed",
+        "in_production": "In Production",
+        "quality_check": "Quality Check",
+        "dispatched": "Dispatched",
+        "delivered": "Delivered",
+        "completed": "Completed",
+        "cancelled": "Cancelled"
+    }
+    status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
+    
+    # Notify both buyer and vendor about status updates
+    app_url = os.environ.get("APP_URL", "https://rfq-forge.preview.emergentagent.com")
+    
+    # Notify buyer
+    await create_notification(
+        user_id=order["buyer_id"],
+        notification_type=NotificationType.ORDER_STATUS_UPDATE,
+        title=f"Order Status: {status_label}",
+        message=f"Order for '{rfq_title}' is now {status_label}",
+        data={"order_id": order_id, "status": new_status},
+        send_email=True,
+        email_template="order_status_update",
+        email_data={
+            "order_id": order.get("po_number", order_id),
+            "rfq_title": rfq_title,
+            "status": new_status,
+            "note": note,
+            "recipient_name": "Buyer",
+            "app_url": f"{app_url}/orders/{order_id}"
+        }
+    )
+    
+    # Notify vendor
+    vendor = await db.vendors.find_one({"vendor_id": order["vendor_id"]}, {"_id": 0, "user_id": 1})
+    if vendor:
+        await create_notification(
+            user_id=vendor["user_id"],
+            notification_type=NotificationType.ORDER_STATUS_UPDATE,
+            title=f"Order Status: {status_label}",
+            message=f"Order for '{rfq_title}' is now {status_label}",
+            data={"order_id": order_id, "status": new_status}
+        )
     
     return {"message": "Status updated", "status": new_status}
 
