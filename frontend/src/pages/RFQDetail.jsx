@@ -320,6 +320,19 @@ const RFQDetail = () => {
                 <p className="text-slate-900 font-medium mt-1">{rfq.surface_finish || "Not specified"}</p>
               </div>
             </div>
+
+            {/* Material Supply Type */}
+            <div className="mt-4 p-4 bg-slate-50 rounded-lg flex items-center gap-3">
+              <Package className={`w-5 h-5 ${rfq.supply_type === "buyer_material" ? "text-blue-600" : "text-orange-600"}`} />
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Material Supply</p>
+                <p className="font-medium text-slate-900">
+                  {rfq.supply_type === "buyer_material" 
+                    ? "Buyer Supplies Material (Service Only)" 
+                    : "Vendor Supplies Material (Turnkey)"}
+                </p>
+              </div>
+            </div>
             
             {/* Payment Terms Preference */}
             {rfq.preferred_payment_terms && (
