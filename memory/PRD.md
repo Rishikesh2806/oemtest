@@ -249,6 +249,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Fixed email sending in confirm-delivery and add-tracking endpoints
 
 ## Next Tasks
-1. Add revenue analytics charts to admin dashboard
-2. Implement vendor capacity calendar
-3. Add bulk machine import (CSV upload)
+1. AI Voice Agent for vendor machine availability checks
+2. Stripe payment integration (escrow)
+3. Revenue analytics charts on admin dashboard
+4. Backend refactoring (break down server.py monolith)
