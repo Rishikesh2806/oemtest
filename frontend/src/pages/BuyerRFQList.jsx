@@ -138,6 +138,13 @@ const BuyerRFQList = () => {
                             </span>
                             <span>Qty: {rfq.quantity}</span>
                             <span>Tolerance: ±{rfq.tolerance}mm</span>
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                              rfq.supply_type === "buyer_material" 
+                                ? "bg-blue-100 text-blue-700" 
+                                : "bg-orange-100 text-orange-700"
+                            }`}>
+                              {rfq.supply_type === "buyer_material" ? "I Supply Material" : "Vendor Supplies"}
+                            </span>
                           </div>
                           {rfq.description && (
                             <p className="text-sm text-slate-500 mt-2 line-clamp-2">{rfq.description}</p>
