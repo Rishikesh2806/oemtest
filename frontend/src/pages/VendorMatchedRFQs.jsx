@@ -266,6 +266,19 @@ const VendorMatchedRFQs = () => {
                               )}
                             </div>
                             
+                            {/* Material Supply Type */}
+                            <div className="mt-2">
+                              <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                rfq.supply_type === "buyer_material" 
+                                  ? "bg-blue-100 text-blue-700" 
+                                  : "bg-orange-100 text-orange-700"
+                              }`}>
+                                {rfq.supply_type === "buyer_material" 
+                                  ? "Buyer Supplies Material (Service Only)" 
+                                  : "You Supply Material (Turnkey)"}
+                              </span>
+                            </div>
+                            
                             {rfq.description && (
                               <p className="text-sm text-slate-500 mt-2 line-clamp-2">{rfq.description}</p>
                             )}
