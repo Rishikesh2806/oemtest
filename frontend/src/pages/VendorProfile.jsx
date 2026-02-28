@@ -52,7 +52,19 @@ const VendorProfile = () => {
   const fetchProfile = async () => {
     try {
       const response = await api.get("/vendors/profile");
-      setFormData(response.data);
+      // Ensure arrays are properly initialized
+      setFormData({
+        company_name: response.data.company_name || "",
+        description: response.data.description || "",
+        address: response.data.address || "",
+        city: response.data.city || "",
+        country: response.data.country || "",
+        phone: response.data.phone || "",
+        website: response.data.website || "",
+        certifications: response.data.certifications || [],
+        industries: response.data.industries || [],
+        materials_handled: response.data.materials_handled || []
+      });
     } catch (error) {
       if (error.response?.status === 404) {
         setIsNew(true);
