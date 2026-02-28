@@ -211,7 +211,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                 </div>
                 <div style="padding: 30px; background: #f8fafc;">
                     <p style="font-size: 16px; color: #334155;">Hello {data.get('recipient_name', 'User')},</p>
-                    <p style="font-size: 16px; color: #334155;">You have a new message on Offloadex.</p>
+                    <p style="font-size: 16px; color: #334155;">You have a new message on MachinoMatch.</p>
                     
                     <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #8b5cf6;">
                         <p style="color: #64748b; margin: 0 0 10px 0;"><strong>From:</strong> {data.get('sender_name', 'N/A')}</p>
@@ -231,7 +231,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
     }
     
     template = templates.get(template_type, {})
-    return template.get("subject", "Offloadex Notification"), template.get("html", "<p>Notification</p>")
+    return template.get("subject", "MachinoMatch Notification"), template.get("html", "<p>Notification</p>")
 
 # ============== MODELS ==============
 
@@ -4411,7 +4411,7 @@ async def get_vendor_dashboard(user: dict = Depends(get_current_user)):
 
 @api_router.get("/")
 async def root():
-    return {"message": "Offloadex API", "version": "1.0.0"}
+    return {"message": "MachinoMatch API", "version": "1.0.0"}
 
 @api_router.get("/health")
 async def health_check():
