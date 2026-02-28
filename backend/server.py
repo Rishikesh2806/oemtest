@@ -2273,6 +2273,355 @@ async def get_vendor_quotes(user: dict = Depends(get_current_user)):
     quotes = await db.quotes.find({"vendor_id": vendor["vendor_id"]}, {"_id": 0}).to_list(100)
     return quotes
 
+@api_router.get("/quotes/{quote_id}")
+async def get_quote_detail(quote_id: str, user: dict = Depends(get_current_user)):
+    """Get detailed quote information for buyers"""
+    quote = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    
+    # Get RFQ to verify access
+    rfq = await db.rfqs.find_one({"rfq_id": quote["rfq_id"]}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Check authorization - buyer of RFQ or vendor who submitted the quote
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    is_buyer = rfq["buyer_id"] == user["user_id"]
+    is_vendor = vendor and vendor["vendor_id"] == quote["vendor_id"]
+    
+    if not is_buyer and not is_vendor and user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized to view this quote")
+    
+    # Enrich with vendor details
+    quote_vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
+    if quote_vendor:
+        quote["vendor_name"] = quote_vendor.get("company_name", "Unknown")
+        quote["vendor_rating"] = quote_vendor.get("rating", 0)
+        quote["vendor_total_jobs"] = quote_vendor.get("total_jobs", 0)
+        quote["vendor_location"] = f"{quote_vendor.get('city', '')}, {quote_vendor.get('country', '')}".strip(", ")
+        quote["vendor_certifications"] = quote_vendor.get("certifications", [])
+        quote["vendor_industries"] = quote_vendor.get("industries", [])
+        quote["vendor_materials"] = quote_vendor.get("materials_handled", [])
+        quote["vendor_phone"] = quote_vendor.get("phone")
+        quote["vendor_website"] = quote_vendor.get("website")
+        quote["vendor_user_id"] = quote_vendor.get("user_id")
+        
+        # Get vendor user info
+        vendor_user = await db.users.find_one({"user_id": quote_vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
+        if vendor_user:
+            quote["vendor_contact_name"] = vendor_user.get("name")
+            quote["vendor_email"] = vendor_user.get("email")
+        
+        # Get all machines
+        machines = await db.machines.find(
+            {"vendor_id": quote_vendor["vendor_id"], "is_active": True},
+            {"_id": 0}
+        ).to_list(20)
+        quote["vendor_machines"] = machines
+        
+        # Get vendor stats
+        total_quotes = await db.quotes.count_documents({"vendor_id": quote_vendor["vendor_id"]})
+        accepted_quotes = await db.quotes.count_documents({"vendor_id": quote_vendor["vendor_id"], "status": "accepted"})
+        quote["vendor_acceptance_rate"] = round((accepted_quotes / total_quotes * 100) if total_quotes > 0 else 0, 1)
+    
+    # Add RFQ info
+    quote["rfq_title"] = rfq.get("title")
+    quote["rfq_material"] = rfq.get("material_type")
+    quote["rfq_quantity"] = rfq.get("quantity")
+    quote["rfq_tolerance"] = rfq.get("tolerance")
+    quote["rfq_preferred_payment_terms"] = rfq.get("preferred_payment_terms")
+    
+    # Get negotiation history
+    negotiations = await db.quote_negotiations.find(
+        {"quote_id": quote_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    quote["negotiations"] = negotiations
+    
+    return quote
+
+class NegotiationRequest(BaseModel):
+    request_type: str  # "price", "lead_time", "payment_terms", "general"
+    message: str
+    requested_price: Optional[float] = None
+    requested_lead_time: Optional[int] = None
+    requested_payment_terms: Optional[str] = None
+
+@api_router.post("/quotes/{quote_id}/negotiate")
+async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, user: dict = Depends(get_current_user)):
+    """Buyer requests modification/negotiation on a quote"""
+    quote = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    
+    # Only pending quotes can be negotiated
+    if quote["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Only pending quotes can be negotiated")
+    
+    # Verify buyer owns the RFQ
+    rfq = await db.rfqs.find_one({"rfq_id": quote["rfq_id"], "buyer_id": user["user_id"]}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Create negotiation record
+    negotiation_id = f"neg_{uuid.uuid4().hex[:12]}"
+    negotiation_doc = {
+        "negotiation_id": negotiation_id,
+        "quote_id": quote_id,
+        "rfq_id": quote["rfq_id"],
+        "buyer_id": user["user_id"],
+        "buyer_name": user.get("name", "Buyer"),
+        "vendor_id": quote["vendor_id"],
+        "request_type": request.request_type,
+        "message": request.message,
+        "requested_price": request.requested_price,
+        "requested_lead_time": request.requested_lead_time,
+        "requested_payment_terms": request.requested_payment_terms,
+        "original_price": quote["price"],
+        "original_lead_time": quote["lead_time_days"],
+        "original_payment_terms": quote.get("proposed_payment_terms"),
+        "status": "pending",  # pending, accepted, counter_offered, rejected
+        "response": None,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.quote_negotiations.insert_one(negotiation_doc)
+    
+    # Update quote status to indicate negotiation in progress
+    await db.quotes.update_one(
+        {"quote_id": quote_id},
+        {"$set": {"negotiation_status": "buyer_requested", "updated_at": now}}
+    )
+    
+    # Get vendor info for notification
+    vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
+    
+    # Create notification for vendor
+    if vendor:
+        request_type_labels = {
+            "price": "Price Adjustment",
+            "lead_time": "Lead Time Change",
+            "payment_terms": "Payment Terms",
+            "general": "General Request"
+        }
+        await create_notification(
+            user_id=vendor.get("user_id"),
+            notification_type="negotiation_request",
+            title=f"Negotiation Request: {request_type_labels.get(request.request_type, 'Quote')}",
+            message=f"{user.get('name', 'Buyer')} requested changes on quote for '{rfq.get('title', 'RFQ')[:30]}'",
+            data={
+                "quote_id": quote_id,
+                "rfq_id": quote["rfq_id"],
+                "negotiation_id": negotiation_id,
+                "request_type": request.request_type
+            },
+            send_email=True,
+            email_template="new_message",
+            email_data={
+                "sender_name": user.get("name", "Buyer"),
+                "recipient_name": vendor.get("company_name", "Vendor"),
+                "message_preview": f"Negotiation request: {request.message[:150]}",
+                "app_url": f"{os.environ.get('APP_URL', 'https://rfq-forge.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+            }
+        )
+    
+    return {
+        "message": "Negotiation request sent",
+        "negotiation_id": negotiation_id,
+        "status": "pending"
+    }
+
+class NegotiationResponse(BaseModel):
+    action: str  # "accept", "counter", "reject"
+    message: Optional[str] = None
+    counter_price: Optional[float] = None
+    counter_lead_time: Optional[int] = None
+    counter_payment_terms: Optional[str] = None
+
+@api_router.post("/quotes/{quote_id}/negotiate/{negotiation_id}/respond")
+async def respond_to_negotiation(quote_id: str, negotiation_id: str, response: NegotiationResponse, user: dict = Depends(get_current_user)):
+    """Vendor responds to a negotiation request"""
+    quote = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor or vendor["vendor_id"] != quote["vendor_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    negotiation = await db.quote_negotiations.find_one(
+        {"negotiation_id": negotiation_id, "quote_id": quote_id},
+        {"_id": 0}
+    )
+    if not negotiation:
+        raise HTTPException(status_code=404, detail="Negotiation not found")
+    
+    if negotiation["status"] != "pending":
+        raise HTTPException(status_code=400, detail="Negotiation already resolved")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Update negotiation based on action
+    if response.action == "accept":
+        # Accept the buyer's requested changes
+        update_quote = {}
+        if negotiation.get("requested_price"):
+            update_quote["price"] = negotiation["requested_price"]
+        if negotiation.get("requested_lead_time"):
+            update_quote["lead_time_days"] = negotiation["requested_lead_time"]
+        if negotiation.get("requested_payment_terms"):
+            update_quote["proposed_payment_terms"] = negotiation["requested_payment_terms"]
+        
+        if update_quote:
+            update_quote["updated_at"] = now
+            update_quote["negotiation_status"] = "resolved"
+            await db.quotes.update_one({"quote_id": quote_id}, {"$set": update_quote})
+        
+        await db.quote_negotiations.update_one(
+            {"negotiation_id": negotiation_id},
+            {"$set": {
+                "status": "accepted",
+                "response": response.message,
+                "updated_at": now
+            }}
+        )
+        status_msg = "accepted"
+        
+    elif response.action == "counter":
+        # Vendor makes a counter offer
+        await db.quote_negotiations.update_one(
+            {"negotiation_id": negotiation_id},
+            {"$set": {
+                "status": "counter_offered",
+                "response": response.message,
+                "counter_price": response.counter_price,
+                "counter_lead_time": response.counter_lead_time,
+                "counter_payment_terms": response.counter_payment_terms,
+                "updated_at": now
+            }}
+        )
+        await db.quotes.update_one(
+            {"quote_id": quote_id},
+            {"$set": {"negotiation_status": "vendor_countered", "updated_at": now}}
+        )
+        status_msg = "counter offered"
+        
+    else:  # reject
+        await db.quote_negotiations.update_one(
+            {"negotiation_id": negotiation_id},
+            {"$set": {
+                "status": "rejected",
+                "response": response.message,
+                "updated_at": now
+            }}
+        )
+        await db.quotes.update_one(
+            {"quote_id": quote_id},
+            {"$set": {"negotiation_status": "resolved", "updated_at": now}}
+        )
+        status_msg = "rejected"
+    
+    # Notify buyer
+    rfq = await db.rfqs.find_one({"rfq_id": quote["rfq_id"]}, {"_id": 0})
+    await create_notification(
+        user_id=negotiation["buyer_id"],
+        notification_type="negotiation_response",
+        title=f"Vendor {status_msg} your request",
+        message=f"{vendor.get('company_name', 'Vendor')} has {status_msg} your negotiation request for '{rfq.get('title', 'RFQ')[:30]}'",
+        data={
+            "quote_id": quote_id,
+            "rfq_id": quote["rfq_id"],
+            "negotiation_id": negotiation_id,
+            "action": response.action
+        }
+    )
+    
+    return {
+        "message": f"Negotiation {status_msg}",
+        "status": response.action
+    }
+
+@api_router.post("/quotes/{quote_id}/negotiate/{negotiation_id}/accept-counter")
+async def accept_counter_offer(quote_id: str, negotiation_id: str, user: dict = Depends(get_current_user)):
+    """Buyer accepts a vendor's counter offer"""
+    quote = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    
+    rfq = await db.rfqs.find_one({"rfq_id": quote["rfq_id"], "buyer_id": user["user_id"]}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    negotiation = await db.quote_negotiations.find_one(
+        {"negotiation_id": negotiation_id, "quote_id": quote_id, "status": "counter_offered"},
+        {"_id": 0}
+    )
+    if not negotiation:
+        raise HTTPException(status_code=404, detail="Counter offer not found")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Apply counter offer to quote
+    update_quote = {"updated_at": now, "negotiation_status": "resolved"}
+    if negotiation.get("counter_price"):
+        update_quote["price"] = negotiation["counter_price"]
+    if negotiation.get("counter_lead_time"):
+        update_quote["lead_time_days"] = negotiation["counter_lead_time"]
+    if negotiation.get("counter_payment_terms"):
+        update_quote["proposed_payment_terms"] = negotiation["counter_payment_terms"]
+    
+    await db.quotes.update_one({"quote_id": quote_id}, {"$set": update_quote})
+    
+    await db.quote_negotiations.update_one(
+        {"negotiation_id": negotiation_id},
+        {"$set": {"status": "counter_accepted", "updated_at": now}}
+    )
+    
+    # Notify vendor
+    vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
+    if vendor:
+        await create_notification(
+            user_id=vendor.get("user_id"),
+            notification_type="negotiation_response",
+            title="Counter Offer Accepted",
+            message=f"{user.get('name', 'Buyer')} accepted your counter offer for '{rfq.get('title', 'RFQ')[:30]}'",
+            data={
+                "quote_id": quote_id,
+                "rfq_id": quote["rfq_id"],
+                "negotiation_id": negotiation_id
+            }
+        )
+    
+    return {"message": "Counter offer accepted", "status": "counter_accepted"}
+
+@api_router.get("/quotes/{quote_id}/negotiations")
+async def get_quote_negotiations(quote_id: str, user: dict = Depends(get_current_user)):
+    """Get all negotiations for a quote"""
+    quote = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    
+    # Check authorization
+    rfq = await db.rfqs.find_one({"rfq_id": quote["rfq_id"]}, {"_id": 0})
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    
+    is_buyer = rfq and rfq["buyer_id"] == user["user_id"]
+    is_vendor = vendor and vendor["vendor_id"] == quote["vendor_id"]
+    
+    if not is_buyer and not is_vendor and user["role"] != "admin":
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    negotiations = await db.quote_negotiations.find(
+        {"quote_id": quote_id},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    
+    return negotiations
+
 @api_router.post("/quotes/{quote_id}/accept")
 async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     quote = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
