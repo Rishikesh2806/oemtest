@@ -2038,6 +2038,30 @@ const AdminDashboard = () => {
     }
   };
 
+  const createUser = async (data) => {
+    try {
+      await api.post("/admin/users", data);
+      toast.success("User created successfully");
+      fetchUsers();
+      fetchInitialData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to create user");
+      throw error;
+    }
+  };
+
+  const createVendor = async (data) => {
+    try {
+      await api.post("/admin/vendors", data);
+      toast.success("Vendor created successfully");
+      fetchVendors();
+      fetchInitialData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to create vendor");
+      throw error;
+    }
+  };
+
   const deleteUser = async (userId) => {
     if (!confirm("Are you sure you want to delete this user?")) return;
     try {
