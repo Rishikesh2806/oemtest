@@ -32,7 +32,7 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 168  # 7 days
 
 # Create the main app
-app = FastAPI(title="Offloadex API", version="1.0.0")
+app = FastAPI(title="MachinoMatch API", version="1.0.0")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -101,14 +101,14 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                         </p>
                     </div>
                     
-                    <p style="font-size: 16px; color: #334155;">Log in to Offloadex to view full details and submit your quote.</p>
+                    <p style="font-size: 16px; color: #334155;">Log in to MachinoMatch to view full details and submit your quote.</p>
                     
                     <div style="text-align: center; margin-top: 30px;">
                         <a href="{data.get('app_url', '#')}" style="background: #f97316; color: white; padding: 14px 35px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View RFQ & Submit Quote</a>
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>Offloadex - AI-Powered Manufacturing Marketplace</p>
+                    <p>MachinoMatch - AI-Powered Manufacturing Marketplace</p>
                     <p>You received this because your match score is 50% or higher.</p>
                 </div>
             </div>
@@ -139,7 +139,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>Offloadex - AI-Powered Manufacturing Marketplace</p>
+                    <p>MachinoMatch - AI-Powered Manufacturing Marketplace</p>
                 </div>
             </div>
             """
@@ -169,7 +169,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>Offloadex - AI-Powered Manufacturing Marketplace</p>
+                    <p>MachinoMatch - AI-Powered Manufacturing Marketplace</p>
                 </div>
             </div>
             """
@@ -197,7 +197,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>Offloadex - AI-Powered Manufacturing Marketplace</p>
+                    <p>MachinoMatch - AI-Powered Manufacturing Marketplace</p>
                 </div>
             </div>
             """
@@ -223,7 +223,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>Offloadex - AI-Powered Manufacturing Marketplace</p>
+                    <p>MachinoMatch - AI-Powered Manufacturing Marketplace</p>
                 </div>
             </div>
             """
