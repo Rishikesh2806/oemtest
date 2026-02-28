@@ -362,6 +362,13 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
               />
             </div>
             <div>
+              <Label>Company Name</Label>
+              <Input
+                value={editForm.company_name || ""}
+                onChange={(e) => setEditForm(prev => ({ ...prev, company_name: e.target.value }))}
+              />
+            </div>
+            <div>
               <Label>Role</Label>
               <Select value={editForm.role} onValueChange={(v) => setEditForm(prev => ({ ...prev, role: v }))}>
                 <SelectTrigger>
@@ -376,6 +383,68 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
             </div>
             <Button onClick={handleSave} className="w-full bg-orange-600 hover:bg-orange-700">
               Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add User Dialog */}
+      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New User</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div>
+              <Label>Name *</Label>
+              <Input
+                value={addForm.name}
+                onChange={(e) => setAddForm(prev => ({ ...prev, name: e.target.value }))}
+                placeholder="Full name"
+              />
+            </div>
+            <div>
+              <Label>Email *</Label>
+              <Input
+                type="email"
+                value={addForm.email}
+                onChange={(e) => setAddForm(prev => ({ ...prev, email: e.target.value }))}
+                placeholder="email@example.com"
+              />
+            </div>
+            <div>
+              <Label>Password *</Label>
+              <Input
+                type="password"
+                value={addForm.password}
+                onChange={(e) => setAddForm(prev => ({ ...prev, password: e.target.value }))}
+                placeholder="Minimum 6 characters"
+              />
+            </div>
+            <div>
+              <Label>Role</Label>
+              <Select value={addForm.role} onValueChange={(v) => setAddForm(prev => ({ ...prev, role: v }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="buyer">Buyer</SelectItem>
+                  <SelectItem value="vendor">Vendor</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Company Name</Label>
+              <Input
+                value={addForm.company_name}
+                onChange={(e) => setAddForm(prev => ({ ...prev, company_name: e.target.value }))}
+                placeholder="Company name (optional)"
+              />
+            </div>
+            <Button onClick={handleAddUser} disabled={adding} className="w-full bg-orange-600 hover:bg-orange-700">
+              {adding ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+              Create User
             </Button>
           </div>
         </DialogContent>
