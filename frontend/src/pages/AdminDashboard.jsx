@@ -1787,6 +1787,106 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
           )}
         </CardContent>
       </Card>
+
+      {/* Add Vendor Dialog */}
+      <Dialog open={showAddVendorDialog} onOpenChange={setShowAddVendorDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Add New Vendor</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Contact Name *</Label>
+                <Input
+                  value={addVendorForm.name}
+                  onChange={(e) => setAddVendorForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Full name"
+                />
+              </div>
+              <div>
+                <Label>Company Name *</Label>
+                <Input
+                  value={addVendorForm.company_name}
+                  onChange={(e) => setAddVendorForm(prev => ({ ...prev, company_name: e.target.value }))}
+                  placeholder="Company name"
+                />
+              </div>
+              <div>
+                <Label>Email *</Label>
+                <Input
+                  type="email"
+                  value={addVendorForm.email}
+                  onChange={(e) => setAddVendorForm(prev => ({ ...prev, email: e.target.value }))}
+                  placeholder="email@company.com"
+                />
+              </div>
+              <div>
+                <Label>Password *</Label>
+                <Input
+                  type="password"
+                  value={addVendorForm.password}
+                  onChange={(e) => setAddVendorForm(prev => ({ ...prev, password: e.target.value }))}
+                  placeholder="Minimum 6 characters"
+                />
+              </div>
+              <div>
+                <Label>Phone</Label>
+                <Input
+                  value={addVendorForm.phone}
+                  onChange={(e) => setAddVendorForm(prev => ({ ...prev, phone: e.target.value }))}
+                  placeholder="+1 234 567 8900"
+                />
+              </div>
+              <div>
+                <Label>Website</Label>
+                <Input
+                  value={addVendorForm.website}
+                  onChange={(e) => setAddVendorForm(prev => ({ ...prev, website: e.target.value }))}
+                  placeholder="https://company.com"
+                />
+              </div>
+              <div>
+                <Label>City</Label>
+                <Input
+                  value={addVendorForm.city}
+                  onChange={(e) => setAddVendorForm(prev => ({ ...prev, city: e.target.value }))}
+                  placeholder="City"
+                />
+              </div>
+              <div>
+                <Label>Country</Label>
+                <Input
+                  value={addVendorForm.country}
+                  onChange={(e) => setAddVendorForm(prev => ({ ...prev, country: e.target.value }))}
+                  placeholder="Country"
+                />
+              </div>
+              <div className="col-span-2">
+                <Label>Address</Label>
+                <Input
+                  value={addVendorForm.address}
+                  onChange={(e) => setAddVendorForm(prev => ({ ...prev, address: e.target.value }))}
+                  placeholder="Street address"
+                />
+              </div>
+              <div className="col-span-2">
+                <Label>Description</Label>
+                <Textarea
+                  value={addVendorForm.description}
+                  onChange={(e) => setAddVendorForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Brief description of capabilities..."
+                  rows={3}
+                />
+              </div>
+            </div>
+            <Button onClick={handleAddVendor} disabled={addingVendor} className="w-full bg-orange-600 hover:bg-orange-700">
+              {addingVendor ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
+              Create Vendor
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
