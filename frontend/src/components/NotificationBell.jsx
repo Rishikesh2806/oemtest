@@ -99,6 +99,14 @@ const NotificationBell = () => {
         if (data.conversation_id) navigate(`/chat/${data.conversation_id}`);
         else navigate("/chat");
         break;
+      case "negotiation_request":
+        // Vendor receives this - navigate to the RFQ where they can respond
+        if (data.rfq_id) navigate(`/vendor/rfq/${data.rfq_id}`);
+        break;
+      case "negotiation_response":
+        // Buyer receives this - navigate to the RFQ to see the response
+        if (data.rfq_id) navigate(`/buyer/rfq/${data.rfq_id}`);
+        break;
       default:
         break;
     }
