@@ -750,6 +750,14 @@ const RFQDetail = () => {
           </Card>
         )}
 
+        {/* Vendor Negotiation Panel - Shows pending negotiation requests for vendors */}
+        {isVendor && quotes.length > 0 && quotes[0]?.quote_id && (
+          <VendorNegotiationPanel 
+            quoteId={quotes[0].quote_id} 
+            onNegotiationResolved={fetchRFQData}
+          />
+        )}
+
         {/* Quotes */}
         {quotes.length > 0 && (
           <Card className="border-slate-200">
