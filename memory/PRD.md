@@ -1,8 +1,8 @@
-# Offloadex.com - AI-Powered Manufacturing Marketplace PRD
+# MachinoMatch - AI-Powered Manufacturing Marketplace PRD
 
 ## Brand
-- **Name**: Offloadex
-- **Logo**: https://static.prod-images.emergentagent.com/jobs/10fd967d-100a-4ba4-9810-7f001d27333f/images/538e025cbcf1bcc1a8edd395590b4013ce298ebbb676ea7cd077596def05a82f.png
+- **Name**: MachinoMatch (formerly Offloadex)
+- **Logo**: /logo.png
 - **Tagline**: Precision Manufacturing on Demand
 
 ## Original Problem Statement
@@ -14,62 +14,45 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - **Database**: MongoDB
 - **AI**: OpenAI GPT-5.2 Vision (via Emergent LLM Key)
 - **Auth**: JWT + Emergent Google OAuth
-- **Payments**: Stripe (test mode)
+- **Payments**: Stripe (test mode) - planned
 - **Email**: Resend API
 
-## What's Been Implemented (Feb 2026)
+## What's Been Implemented
 
-### Quote Detail & Negotiation System (NEW - Feb 28)
-- **GET /api/quotes/{quote_id}** - Detailed quote view with:
-  - Full vendor info (contact, certifications, location, website)
-  - Available machines list
-  - Acceptance rate and job statistics
-  - RFQ reference details
-  - Negotiation history
-- **Negotiation Workflow**:
-  - Buyers can request modifications (price, lead time, payment terms, general)
-  - Vendors receive notifications and can Accept/Counter/Reject
-  - Counter-offer workflow with buyer acceptance
-  - Full negotiation history tracking
-- **New Endpoints**:
-  - POST /api/quotes/{quote_id}/negotiate
-  - POST /api/quotes/{quote_id}/negotiate/{neg_id}/respond
-  - POST /api/quotes/{quote_id}/negotiate/{neg_id}/accept-counter
-  - GET /api/quotes/{quote_id}/negotiations
-- **Frontend Components**:
-  - QuoteDetailModal with tabs (Details, Vendor Info, Negotiations)
-  - VendorNegotiationPanel for vendor responses
-  - Negotiation status badges on quote cards
+### Manual Dimension Input Feature (NEW - Mar 2, 2026)
+- **PUT /api/rfqs/{rfq_id}/dimensions** - Update dimensions manually when AI can't extract them
+- **Enhanced POST /api/rfqs/{rfq_id}/analyze** - Now returns `dimensions_missing` flag and `missing_fields` object
+- **CreateRFQ Step 4 UI Enhancement**:
+  - Shows AI-extracted specs after analysis
+  - Highlights missing dimensions in red/amber
+  - Provides input fields for Length, Width, Height, Weight
+  - "Save Dimensions" button to update before vendor matching
+  - Disables "Find Matching Vendors" until dimensions are provided
+- Ensures accurate vendor matching by requiring dimensions
 
-### Notification System (NEW - Feb 28)
-- In-app notifications with bell icon in header
+### GSTIN Integration for Vendor Registration (Mar 2, 2026)
+- **GET /api/gstin/verify/{gstin}** - Verifies GSTIN and fetches company details
+- RegisterPage auto-fills vendor profile fields from GSTIN data
+- Extracts: Legal Name, Trade Name, Address, City, State, Pincode
+
+### Notification System Fixes (Mar 2, 2026)
+- Fixed redirect for `negotiation_request` notifications (vendors go to RFQ page)
+- Fixed redirect for `negotiation_response` notifications (buyers go to RFQ page)
+- Updated NotificationBell.jsx and NotificationsPage.jsx
+
+### Quote Detail & Negotiation System (Feb 28, 2026)
+- Full negotiation workflow (request, accept, counter, reject)
+- QuoteDetailModal with tabs (Details, Vendor Info, Negotiations)
+- VendorNegotiationPanel for vendor responses
+
+### Notification System (Feb 28, 2026)
+- In-app notifications with bell icon
 - NotificationsPage for viewing all notifications
-- Notification types: RFQ matched, Quote received, Quote accepted, Order status, Messages, Negotiation requests
-- Mark as read, mark all read, delete functionality
 - Real-time badge count with 30-second polling
 
-### Payment Terms System (Feb 27)
-- **9 Payment Term Options**: Net 30/45/60, 50% advance + 50% delivery, 100% advance, Against Delivery, Milestone-Based, Letter of Credit, Custom
-- **RFQ**: Buyer specifies preferred_payment_terms when creating RFQ
-- **Quote**: Vendor proposes payment terms when submitting quote
-- **Order/PO**: Finalized payment terms reflected in Purchase Order
-- **PO Number Format**: PO-YYYYMMDD-XXXXXX
-
-### Vendor Rating System
-- 4-category rating (Overall, Quality, Communication, Delivery)
-- Auto-updates vendor average rating
-- Reviews displayed on VendorProfileView
-
-### Enhanced Order Management
-- Full order lifecycle tracking
-- Confirm delivery by buyer
-- Add tracking info by vendor
-- Status timeline visualization
-
-### Quote Comparison
-- Side-by-side comparison dialog
-- Best Price, Fastest, Top Rated badges
-- Payment terms comparison
+### Payment Terms System (Feb 27, 2026)
+- 9 Payment Term Options
+- RFQ, Quote, and Order payment terms flow
 
 ### Core Features
 - User authentication (JWT + Google OAuth)
@@ -78,19 +61,26 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Smart vendor matching algorithm
 - 21 machine categories with conditional dimensions
 - Email notifications (Resend)
-- Secure drawing viewer
 - Comprehensive Admin Panel
 
 ## Test Reports
-- iteration_1-7: Previous features
-- iteration_8: Payment Terms (89% backend, 100% frontend)
-- iteration_9: Quote Detail & Negotiation (100% backend, code reviewed frontend)
+- /app/test_reports/iteration_1-9.json - Previous features
+- /app/test_reports/iteration_10.json - Dimension Input Feature (100% pass)
 
 ## Test Credentials
-- **Admin**: admin@offoadex.com / admin123  
+- **Admin**: admin@offoadex.com / admin123
 - **Buyer**: buyer@offoadex.com / buyer123
+- **Vendor**: info@simpsonmunro.com / vendor123
 
 ## Prioritized Backlog
+
+### P0 - Critical (Completed)
+- Manual dimension input in RFQ creation ✓
+- GSTIN verification for vendor registration ✓
+- Notification redirect fixes ✓
+- Quote negotiation workflow ✓
+- Notification system ✓
+- Payment terms ✓
 
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check
@@ -106,150 +96,19 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Instant AI auto-quote
 - ERP integration API
 - Multi-currency support
+- Backend refactoring (break down server.py monolith)
 
-## Architecture Overview
-- **Frontend**: React 19 + Tailwind CSS + Shadcn UI
-- **Backend**: FastAPI (Python)
-- **Database**: MongoDB
-- **AI**: OpenAI GPT-5.2 Vision (via Emergent LLM Key)
-- **Auth**: JWT + Emergent Google OAuth
-- **Payments**: Stripe (test mode)
-- **Email**: Resend API
+## Key API Endpoints
+- PUT /api/rfqs/{rfq_id}/dimensions - Update manual dimensions
+- GET /api/gstin/verify/{gstin} - Verify GSTIN
+- POST /api/quotes/{quote_id}/negotiate - Start negotiation
+- GET /api/notifications - Get notifications
 
-## User Personas
-1. **Buyer** - Engineers/procurement teams sourcing manufacturing services
-2. **Vendor** - Machine shops/manufacturers offering services
-3. **Admin** - Platform administrators with full CRUD access to all data
+## Known Issues
+- External GSTIN API (gstincheck.co.in) may occasionally return errors
 
-## What's Been Implemented (Feb 2026)
-
-### Backend (FastAPI)
-- User authentication (JWT + Google OAuth)
-- Role-based access control
-- RFQ CRUD operations
-- Drawing upload with base64 storage
-- AI drawing analysis (GPT-5.2 Vision)
-- **Enhanced Vendor Matching Algorithm v2.0**
-  - Machine dimension validation
-  - Keyword matching from RFQ title/description
-  - Vendor past experience scoring
-  - Process, material, tolerance matching
-- Quote management (create, list, accept)
-- **Enriched Quotes API** - Returns vendor machines, certifications, acceptance_rate
-- **Vendor Rating System** (Feb 27) - NEW
-  - POST /api/orders/{order_id}/rate - Submit rating (1-5 scale for overall, quality, communication, delivery)
-  - GET /api/vendors/{vendor_id}/ratings - Get ratings with stats
-  - GET /api/orders/{order_id}/rating - Check if order rated
-  - Auto-updates vendor average rating
-- **Enhanced Order Management** (Feb 27) - NEW
-  - GET /api/orders/{order_id}/details - Full order details with vendor, buyer, quote, rfq
-  - POST /api/orders/{order_id}/confirm-delivery - Buyer confirms delivery
-  - POST /api/orders/{order_id}/add-tracking - Vendor adds shipping info
-- Stripe payment integration
-- Dashboard statistics APIs
-- Messaging/Chat APIs
-- Admin Management APIs
-- Email Notifications (Resend)
-- Drawing View/Download
-
-### Frontend (React)
-- Landing page with hero, features, how-it-works
-- Login/Register with role selection
-- Google OAuth integration
-- Buyer/Vendor dashboards
-- Multi-step RFQ creation wizard
-- RFQ detail with AI analysis display
-- Enhanced matched vendors display
-- Drawing View/Download buttons
-- Machine management (CRUD) with 21 categories
-- **Quote Comparison Feature** - Side-by-side comparison with badges
-- **Enhanced OrderDetail Page** (Feb 27) - NEW
-  - Rating dialog with star ratings for overall/quality/communication/delivery
-  - Tracking info display
-  - Confirm Delivery button for buyers
-  - Add Tracking dialog for vendors
-  - Your Rating section when rated
-- **VendorProfileView with Reviews** (Feb 27) - NEW
-  - Customer Reviews section
-  - Rating stats (overall, quality, communication, delivery, recommendation rate)
-  - Individual review display with buyer info, review text, scores
-- ChatPage (messaging)
-- Admin Dashboard (8 tabs)
-
-### Database Collections
+## Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders
 - payment_transactions, messages, conversations
-- ndas, **ratings** (NEW)
-
-## Rating System
-- **Rating Categories**: Overall, Quality, Communication, Delivery (1-5 stars)
-- **Validation**: Buyer role only, Delivered/Completed orders only, One rating per order
-- **Review**: Optional text review + "Would Recommend" flag
-- **Stats**: Averages for each category + recommendation percentage
-
-## Order Status Flow
-1. pending_payment - Quote accepted, awaiting payment
-2. paid - Payment confirmed
-3. in_production - Vendor started production
-4. quality_check - Quality inspection in progress
-5. dispatched - Shipped with tracking info
-6. delivered - Delivery confirmed by buyer
-7. completed - Order rated and closed
-
-## Test Reports
-- /app/test_reports/iteration_1.json - Chat/Profile features (100% pass)
-- /app/test_reports/iteration_2.json - Admin Panel (100% pass)
-- /app/test_reports/iteration_3.json - Email & Drawings (100% pass)
-- /app/test_reports/iteration_4.json - Admin Vendor/Machine Management (100% pass)
-- /app/test_reports/iteration_5.json - RFQ Matching Algorithm (100% pass - 18 tests)
-- /app/test_reports/iteration_6.json - Quote Comparison (100% pass - 15 tests)
-- /app/test_reports/iteration_7.json - Rating & Order Management (100% pass - 16 tests)
-
-## Test Credentials
-- **Admin**: admin@offoadex.com / admin123
-- **Buyer**: buyer@offoadex.com / buyer123
-
-## Prioritized Backlog
-
-### P0 - Critical (Completed)
-- Email notifications
-- Drawing view/download
-- Full Admin Panel
-- Admin Vendor/Machine Management
-- Enhanced RFQ Matching Algorithm
-- Quote Comparison Feature
-- Vendor Rating System
-- Enhanced Order Management
-
-### P1 - High Priority (Next)
-- Revenue analytics charts on admin dashboard
-- Vendor capacity calendar
-- Bulk machine import (CSV)
-- Quote rejection endpoint (explicit reject)
-
-### P2 - Medium Priority
-- WhatsApp/SMS notifications
-- Repeat order feature
-- Document version control
-- Mobile responsive improvements
-
-### P3 - Future Features
-- Instant AI auto-quote
-- Supply chain financing
-- ERP integration API
-- Multi-currency support
-- Mobile app version
-
-## Known Issues
-- None
-
-## Bug Fixes (Feb 27, 2026)
-- Fixed `AttributeError` in match_vendors when `ai_analysis` is None
-- Fixed email sending in confirm-delivery and add-tracking endpoints
-
-## Next Tasks
-1. AI Voice Agent for vendor machine availability checks
-2. Stripe payment integration (escrow)
-3. Revenue analytics charts on admin dashboard
-4. Backend refactoring (break down server.py monolith)
+- notifications, ratings
