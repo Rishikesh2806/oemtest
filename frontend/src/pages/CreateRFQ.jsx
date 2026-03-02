@@ -8,11 +8,12 @@ import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Checkbox } from "../components/ui/checkbox";
 import { toast } from "sonner";
 import { 
   Upload, FileText, ArrowRight, ArrowLeft, 
   CheckCircle2, Loader2, X, Cpu, Target, Package,
-  AlertTriangle, Ruler, Scale
+  AlertTriangle, Ruler, Scale, MapPin, Truck, Globe
 } from "lucide-react";
 
 const MATERIALS = [
@@ -143,8 +144,38 @@ const CreateRFQ = () => {
     supply_type: "vendor_material",
     deadline: "",
     preferred_payment_terms: "net_30",
-    payment_terms_notes: ""
+    payment_terms_notes: "",
+    // Delivery location
+    delivery_address: "",
+    delivery_city: "",
+    delivery_state: "",
+    delivery_country: "India",
+    delivery_pincode: "",
+    incoterms: "EXW",
+    // Preferred vendor locations
+    preferred_vendor_countries: [],
+    preferred_vendor_cities: []
   });
+
+  // Incoterms options
+  const INCOTERMS_OPTIONS = [
+    { value: "EXW", label: "EXW - Ex Works" },
+    { value: "FCA", label: "FCA - Free Carrier" },
+    { value: "FOB", label: "FOB - Free on Board" },
+    { value: "CFR", label: "CFR - Cost and Freight" },
+    { value: "CIF", label: "CIF - Cost, Insurance and Freight" },
+    { value: "CPT", label: "CPT - Carriage Paid To" },
+    { value: "CIP", label: "CIP - Carriage and Insurance Paid To" },
+    { value: "DAP", label: "DAP - Delivered at Place" },
+    { value: "DPU", label: "DPU - Delivered at Place Unloaded" },
+    { value: "DDP", label: "DDP - Delivered Duty Paid" }
+  ];
+
+  // Country options for vendor preferences
+  const COUNTRY_OPTIONS = [
+    "India", "China", "Taiwan", "Japan", "South Korea", "Germany", 
+    "USA", "UK", "Italy", "Vietnam", "Thailand", "Malaysia", "Indonesia"
+  ];
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -537,6 +568,161 @@ const CreateRFQ = () => {
                     data-testid="payment-notes-textarea"
                   />
                 )}
+              </div>
+
+              {/* Delivery Location Section */}
+              <div className="pt-6 border-t border-slate-200">
+                <div className="flex items-center gap-2 mb-4">
+                  <Truck className="w-5 h-5 text-orange-600" />
+                  <h3 className="font-semibold text-slate-900">Delivery Location</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Delivery Address
+                    </Label>
+                    <div className="relative mt-1">
+                      <MapPin className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      <Textarea
+                        value={formData.delivery_address}
+                        onChange={(e) => handleInputChange("delivery_address", e.target.value)}
+                        placeholder="Street address, building, floor, etc."
+                        className="pl-10"
+                        rows={2}
+                        data-testid="delivery-address"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">City</Label>
+                    <Input
+                      value={formData.delivery_city}
+                      onChange={(e) => handleInputChange("delivery_city", e.target.value)}
+                      placeholder="City"
+                      className="mt-1"
+                      data-testid="delivery-city"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">State</Label>
+                    <Input
+                      value={formData.delivery_state}
+                      onChange={(e) => handleInputChange("delivery_state", e.target.value)}
+                      placeholder="State/Province"
+                      className="mt-1"
+                      data-testid="delivery-state"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Country</Label>
+                    <Select
+                      value={formData.delivery_country}
+                      onValueChange={(value) => handleInputChange("delivery_country", value)}
+                    >
+                      <SelectTrigger className="mt-1" data-testid="delivery-country">
+                        <SelectValue placeholder="Select country" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COUNTRY_OPTIONS.map((country) => (
+                          <SelectItem key={country} value={country}>{country}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">PIN/ZIP Code</Label>
+                    <Input
+                      value={formData.delivery_pincode}
+                      onChange={(e) => handleInputChange("delivery_pincode", e.target.value)}
+                      placeholder="PIN Code"
+                      className="mt-1"
+                      data-testid="delivery-pincode"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Incoterms Section */}
+              <div className="pt-6 border-t border-slate-200">
+                <div className="flex items-center gap-2 mb-4">
+                  <Globe className="w-5 h-5 text-orange-600" />
+                  <h3 className="font-semibold text-slate-900">Shipping Terms & Vendor Preferences</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Incoterms
+                    </Label>
+                    <Select
+                      value={formData.incoterms}
+                      onValueChange={(value) => handleInputChange("incoterms", value)}
+                    >
+                      <SelectTrigger className="mt-1" data-testid="incoterms-select">
+                        <SelectValue placeholder="Select incoterms" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INCOTERMS_OPTIONS.map((term) => (
+                          <SelectItem key={term.value} value={term.value}>{term.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Defines responsibility for shipping, insurance, and duties
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Preferred Vendor Countries (Optional)
+                    </Label>
+                    <div className="mt-2 grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border rounded-lg">
+                      {COUNTRY_OPTIONS.map((country) => (
+                        <div key={country} className="flex items-center gap-2">
+                          <Checkbox
+                            id={`country-${country}`}
+                            checked={formData.preferred_vendor_countries.includes(country)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                handleInputChange("preferred_vendor_countries", [...formData.preferred_vendor_countries, country]);
+                              } else {
+                                handleInputChange("preferred_vendor_countries", formData.preferred_vendor_countries.filter(c => c !== country));
+                              }
+                            }}
+                          />
+                          <label htmlFor={`country-${country}`} className="text-sm text-slate-600 cursor-pointer">
+                            {country}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                    {formData.preferred_vendor_countries.length > 0 && (
+                      <p className="text-xs text-orange-600 mt-1">
+                        Selected: {formData.preferred_vendor_countries.join(", ")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="mt-4">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Preferred Vendor Cities (Optional)
+                  </Label>
+                  <Input
+                    value={formData.preferred_vendor_cities.join(", ")}
+                    onChange={(e) => {
+                      const cities = e.target.value.split(",").map(c => c.trim()).filter(c => c);
+                      handleInputChange("preferred_vendor_cities", cities);
+                    }}
+                    placeholder="e.g., Mumbai, Chennai, Bangalore"
+                    className="mt-1"
+                    data-testid="preferred-cities"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    Enter city names separated by commas
+                  </p>
+                </div>
               </div>
 
               <div className="flex justify-end pt-4">

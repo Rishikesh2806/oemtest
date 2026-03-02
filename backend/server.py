@@ -668,6 +668,34 @@ PAYMENT_TERMS_LABELS = {
     "custom": "Custom Terms"
 }
 
+# Incoterms options
+class Incoterms:
+    EXW = "EXW"  # Ex Works
+    FCA = "FCA"  # Free Carrier
+    FAS = "FAS"  # Free Alongside Ship
+    FOB = "FOB"  # Free on Board
+    CFR = "CFR"  # Cost and Freight
+    CIF = "CIF"  # Cost, Insurance and Freight
+    CPT = "CPT"  # Carriage Paid To
+    CIP = "CIP"  # Carriage and Insurance Paid To
+    DAP = "DAP"  # Delivered at Place
+    DPU = "DPU"  # Delivered at Place Unloaded
+    DDP = "DDP"  # Delivered Duty Paid
+
+INCOTERMS_LABELS = {
+    "EXW": "EXW - Ex Works",
+    "FCA": "FCA - Free Carrier",
+    "FAS": "FAS - Free Alongside Ship",
+    "FOB": "FOB - Free on Board",
+    "CFR": "CFR - Cost and Freight",
+    "CIF": "CIF - Cost, Insurance and Freight",
+    "CPT": "CPT - Carriage Paid To",
+    "CIP": "CIP - Carriage and Insurance Paid To",
+    "DAP": "DAP - Delivered at Place",
+    "DPU": "DPU - Delivered at Place Unloaded",
+    "DDP": "DDP - Delivered Duty Paid"
+}
+
 class RFQCreate(BaseModel):
     title: str
     description: Optional[str] = None
@@ -679,6 +707,15 @@ class RFQCreate(BaseModel):
     deadline: Optional[str] = None
     preferred_payment_terms: Optional[str] = PaymentTerms.NET_30
     payment_terms_notes: Optional[str] = None
+    # New fields for delivery and vendor preferences
+    delivery_address: Optional[str] = None
+    delivery_city: Optional[str] = None
+    delivery_state: Optional[str] = None
+    delivery_country: Optional[str] = None
+    delivery_pincode: Optional[str] = None
+    incoterms: Optional[str] = Incoterms.EXW
+    preferred_vendor_countries: Optional[List[str]] = None  # List of preferred countries
+    preferred_vendor_cities: Optional[List[str]] = None  # List of preferred cities
 
 class Drawing(BaseModel):
     model_config = ConfigDict(extra="ignore")
