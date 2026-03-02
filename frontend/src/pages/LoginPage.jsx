@@ -11,7 +11,7 @@ const LoginPage = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { login, loginWithGoogle } = useAuth();
+  const { login, loginWithGoogle, updateUser } = useAuth();
   const navigate = useNavigate();
   
   // 2FA state
@@ -19,6 +19,19 @@ const LoginPage = () => {
   const [otp, setOtp] = useState("");
   const [emailHint, setEmailHint] = useState("");
   const [resending, setResending] = useState(false);
+
+  const handleLoginSuccess = (userData) => {
+    updateUser(userData);
+    toast.success("Welcome back!");
+    
+    if (userData.role === "vendor") {
+      navigate("/vendor/dashboard");
+    } else if (userData.role === "admin") {
+      navigate("/admin/dashboard");
+    } else {
+      navigate("/buyer/dashboard");
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,20 +49,12 @@ const LoginPage = () => {
         return;
       }
       
-      // Normal login flow
+      // Normal login flow - store token and update auth state
       const { access_token, user } = response.data;
       localStorage.setItem("token", access_token);
       localStorage.setItem("user", JSON.stringify(user));
       
-      toast.success("Welcome back!");
-      
-      if (user.role === "vendor") {
-        navigate("/vendor/dashboard");
-      } else if (user.role === "admin") {
-        navigate("/admin/dashboard");
-      } else {
-        navigate("/buyer/dashboard");
-      }
+      handleLoginSuccess(user);
     } catch (error) {
       toast.error(error.response?.data?.detail || "Invalid credentials");
     } finally {
@@ -72,15 +77,7 @@ const LoginPage = () => {
       localStorage.setItem("token", access_token);
       localStorage.setItem("user", JSON.stringify(user));
       
-      toast.success("Welcome back!");
-      
-      if (user.role === "vendor") {
-        navigate("/vendor/dashboard");
-      } else if (user.role === "admin") {
-        navigate("/admin/dashboard");
-      } else {
-        navigate("/buyer/dashboard");
-      }
+      handleLoginSuccess(user);
     } catch (error) {
       toast.error(error.response?.data?.detail || "Invalid verification code");
     } finally {
