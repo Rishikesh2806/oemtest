@@ -58,6 +58,20 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 
 ## What's Been Implemented
 
+### Vendor Location Preference Matching (NEW - Mar 2, 2026)
+- **Enhanced RFQ Creation**: Buyers can specify:
+  - Delivery Location (address, city, state, country, pincode)
+  - Incoterms (EXW, FOB, CIF, etc.)
+  - Preferred Vendor Countries (list)
+  - Preferred Vendor Cities (list)
+- **Smart Location Scoring in Vendor Matching**:
+  - +15 points for vendors in preferred cities
+  - +10 points for vendors in preferred countries
+  - Returns `location_match` ('city', 'country', or null) per vendor
+  - Returns `location_score` per vendor
+- **RFQ Detail View for Vendors**: Shows all delivery and shipping preference info
+- **Test Report**: /app/test_reports/iteration_11.json (100% pass)
+
 ### Manual Dimension Input Feature (NEW - Mar 2, 2026)
 - **PUT /api/rfqs/{rfq_id}/dimensions** - Update dimensions manually when AI can't extract them
 - **Enhanced POST /api/rfqs/{rfq_id}/analyze** - Now returns `dimensions_missing` flag and `missing_fields` object
@@ -105,15 +119,17 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 ## Test Reports
 - /app/test_reports/iteration_1-9.json - Previous features
 - /app/test_reports/iteration_10.json - Dimension Input Feature (100% pass)
+- /app/test_reports/iteration_11.json - Vendor Location Matching (100% pass)
 
 ## Test Credentials
 - **Admin**: admin@offoadex.com / admin123
-- **Buyer**: buyer@offoadex.com / buyer123
-- **Vendor**: info@simpsonmunro.com / vendor123
+- **Test Buyer**: testbuyer_loc@test.com / SecureP@ss#7291
+- **Test Vendor**: testvendor_loc@test.com / SecureV@nd0r#729
 
 ## Prioritized Backlog
 
 ### P0 - Critical (Completed)
+- Vendor location preference matching ✓
 - Manual dimension input in RFQ creation ✓
 - GSTIN verification for vendor registration ✓
 - Notification redirect fixes ✓
@@ -138,6 +154,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Backend refactoring (break down server.py monolith)
 
 ## Key API Endpoints
+- POST /api/rfqs/{rfq_id}/match - Smart vendor matching with location scoring
 - PUT /api/rfqs/{rfq_id}/dimensions - Update manual dimensions
 - GET /api/gstin/verify/{gstin} - Verify GSTIN
 - POST /api/quotes/{quote_id}/negotiate - Start negotiation
