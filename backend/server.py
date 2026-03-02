@@ -32,7 +32,7 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 168  # 7 days
 
 # Create the main app
-app = FastAPI(title="MachinoMatch API", version="1.0.0")
+app = FastAPI(title="OEMLinker API", version="1.0.0")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -101,14 +101,14 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                         </p>
                     </div>
                     
-                    <p style="font-size: 16px; color: #334155;">Log in to MachinoMatch to view full details and submit your quote.</p>
+                    <p style="font-size: 16px; color: #334155;">Log in to OEMLinker to view full details and submit your quote.</p>
                     
                     <div style="text-align: center; margin-top: 30px;">
                         <a href="{data.get('app_url', '#')}" style="background: #f97316; color: white; padding: 14px 35px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">View RFQ & Submit Quote</a>
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>MachinoMatch - AI-Powered Manufacturing Marketplace</p>
+                    <p>OEMLinker - AI-Powered Manufacturing Marketplace</p>
                     <p>You received this because your match score is 50% or higher.</p>
                 </div>
             </div>
@@ -139,7 +139,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>MachinoMatch - AI-Powered Manufacturing Marketplace</p>
+                    <p>OEMLinker - AI-Powered Manufacturing Marketplace</p>
                 </div>
             </div>
             """
@@ -169,7 +169,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>MachinoMatch - AI-Powered Manufacturing Marketplace</p>
+                    <p>OEMLinker - AI-Powered Manufacturing Marketplace</p>
                 </div>
             </div>
             """
@@ -197,7 +197,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>MachinoMatch - AI-Powered Manufacturing Marketplace</p>
+                    <p>OEMLinker - AI-Powered Manufacturing Marketplace</p>
                 </div>
             </div>
             """
@@ -211,7 +211,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                 </div>
                 <div style="padding: 30px; background: #f8fafc;">
                     <p style="font-size: 16px; color: #334155;">Hello {data.get('recipient_name', 'User')},</p>
-                    <p style="font-size: 16px; color: #334155;">You have a new message on MachinoMatch.</p>
+                    <p style="font-size: 16px; color: #334155;">You have a new message on OEMLinker.</p>
                     
                     <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #8b5cf6;">
                         <p style="color: #64748b; margin: 0 0 10px 0;"><strong>From:</strong> {data.get('sender_name', 'N/A')}</p>
@@ -223,7 +223,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     </div>
                 </div>
                 <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
-                    <p>MachinoMatch - AI-Powered Manufacturing Marketplace</p>
+                    <p>OEMLinker - AI-Powered Manufacturing Marketplace</p>
                 </div>
             </div>
             """
@@ -231,7 +231,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
     }
     
     template = templates.get(template_type, {})
-    return template.get("subject", "MachinoMatch Notification"), template.get("html", "<p>Notification</p>")
+    return template.get("subject", "OEMLinker Notification"), template.get("html", "<p>Notification</p>")
 
 # ============== MODELS ==============
 
@@ -5016,7 +5016,7 @@ async def get_vendor_dashboard(user: dict = Depends(get_current_user)):
 
 @api_router.get("/")
 async def root():
-    return {"message": "MachinoMatch API", "version": "1.0.0"}
+    return {"message": "OEMLinker API", "version": "1.0.0"}
 
 @api_router.get("/health")
 async def health_check():

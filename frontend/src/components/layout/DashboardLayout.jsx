@@ -113,8 +113,8 @@ const DashboardLayout = ({ children }) => {
           </button>
           
           <Link to="/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="MachinoMatch Logo" className="w-8 h-8" />
-            <span className="font-heading font-bold text-slate-900">MACHINOMATCH</span>
+            <img src="/logo.png" alt="OEMLinker Logo" className="w-8 h-8" />
+            <span className="font-heading font-bold text-slate-900">OEMLINKER</span>
           </Link>
 
           <NotificationBell />
@@ -129,8 +129,8 @@ const DashboardLayout = ({ children }) => {
           {/* Logo */}
           <div className="p-6 border-b border-slate-800">
             <Link to="/" className="flex items-center gap-2">
-              <img src="/logo.png" alt="MachinoMatch Logo" className="w-9 h-9" />
-              <span className="font-heading font-bold text-xl text-white">MACHINOMATCH</span>
+              <img src="/logo.png" alt="OEMLinker Logo" className="w-9 h-9" />
+              <span className="font-heading font-bold text-xl text-white">OEMLINKER</span>
             </Link>
           </div>
 

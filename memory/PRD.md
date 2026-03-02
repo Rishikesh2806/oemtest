@@ -1,7 +1,8 @@
-# MachinoMatch - AI-Powered Manufacturing Marketplace PRD
+# OEMLinker - AI-Powered Manufacturing Marketplace PRD
 
 ## Brand
-- **Name**: MachinoMatch (formerly Offloadex)
+- **Name**: OEMLinker (formerly MachinoMatch/Offloadex)
+- **Domain**: oemlinker.com
 - **Logo**: /logo.png
 - **Tagline**: Precision Manufacturing on Demand
 

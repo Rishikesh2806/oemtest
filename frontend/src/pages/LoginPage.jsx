@@ -42,8 +42,8 @@ const LoginPage = () => {
       <div className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md">
           <Link to="/" className="flex items-center gap-2 mb-8">
-            <img src="/logo.png" alt="MachinoMatch Logo" className="w-9 h-9" />
-            <span className="font-heading font-bold text-xl text-slate-900">MACHINOMATCH</span>
+            <img src="/logo.png" alt="OEMLinker Logo" className="w-9 h-9" />
+            <span className="font-heading font-bold text-xl text-slate-900">OEMLINKER</span>
           </Link>
 
           <h1 className="font-heading text-3xl font-bold text-slate-900 mb-2">Welcome back</h1>
