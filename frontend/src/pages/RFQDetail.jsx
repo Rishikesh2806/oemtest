@@ -727,6 +727,16 @@ const RFQDetail = () => {
                           
                           {/* Capability Badges */}
                           <div className="flex flex-wrap gap-2 mt-3">
+                            {vendor.location_match && (
+                              <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded ${
+                                vendor.location_match === 'city' 
+                                  ? 'bg-purple-100 text-purple-700' 
+                                  : 'bg-indigo-100 text-indigo-700'
+                              }`}>
+                                <MapPin className="w-3 h-3" /> 
+                                {vendor.location_match === 'city' ? 'Preferred City' : 'Preferred Country'}
+                              </span>
+                            )}
                             {vendor.tolerance_capable && (
                               <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
                                 <CheckCircle2 className="w-3 h-3" /> Tolerance Capable
