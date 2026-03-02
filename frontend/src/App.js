@@ -7,6 +7,8 @@ import { Toaster } from "./components/ui/sonner";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import BuyerDashboard from "./pages/BuyerDashboard";
 import BuyerRFQList from "./pages/BuyerRFQList";
 import BuyerQuotes from "./pages/BuyerQuotes";
@@ -223,6 +225,8 @@ const AppRouter = () => {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       
       {/* Generic dashboard redirect */}
       <Route path="/dashboard" element={<DashboardRedirect />} />
