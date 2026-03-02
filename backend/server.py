@@ -1131,7 +1131,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://rfq-forge.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-forge-1.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -1694,7 +1694,24 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             }}
         )
         
-        return {"message": "Analysis complete", "analysis": ai_analysis}
+        # Check if dimensions are missing
+        dims = ai_analysis.get("overall_dimensions", {})
+        dimensions_missing = not all([
+            dims.get("length") and dims.get("length") > 0,
+            dims.get("width") and dims.get("width") > 0,
+            dims.get("height") and dims.get("height") > 0
+        ])
+        
+        return {
+            "message": "Analysis complete", 
+            "analysis": ai_analysis,
+            "dimensions_missing": dimensions_missing,
+            "missing_fields": {
+                "length": not (dims.get("length") and dims.get("length") > 0),
+                "width": not (dims.get("width") and dims.get("width") > 0),
+                "height": not (dims.get("height") and dims.get("height") > 0)
+            }
+        }
         
     except Exception as e:
         logger.error(f"AI analysis error: {str(e)}")
@@ -1722,7 +1739,76 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             }}
         )
         
-        return {"message": "Analysis complete with fallback", "analysis": fallback_analysis}
+        return {
+            "message": "Analysis complete with fallback", 
+            "analysis": fallback_analysis,
+            "dimensions_missing": True,
+            "missing_fields": {"length": True, "width": True, "height": True}
+        }
+
+# ============== MANUAL DIMENSIONS UPDATE ==============
+
+class ManualDimensions(BaseModel):
+    length: Optional[float] = None
+    width: Optional[float] = None
+    height: Optional[float] = None
+    weight: Optional[float] = None  # Optional weight in kg
+
+@api_router.put("/rfqs/{rfq_id}/dimensions")
+async def update_rfq_dimensions(
+    rfq_id: str, 
+    dimensions: ManualDimensions,
+    user: dict = Depends(get_current_user)
+):
+    """Update RFQ dimensions manually when AI couldn't extract them from drawing"""
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id, "buyer_id": user["user_id"]}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Get current AI analysis or create empty one
+    ai_analysis = rfq.get("ai_analysis") or {}
+    overall_dimensions = ai_analysis.get("overall_dimensions") or {}
+    
+    # Update dimensions with provided values (keep existing if not provided)
+    if dimensions.length is not None:
+        overall_dimensions["length"] = dimensions.length
+    if dimensions.width is not None:
+        overall_dimensions["width"] = dimensions.width
+    if dimensions.height is not None:
+        overall_dimensions["height"] = dimensions.height
+    overall_dimensions["unit"] = "mm"
+    
+    # Add weight if provided
+    if dimensions.weight is not None:
+        ai_analysis["weight_kg"] = dimensions.weight
+    
+    # Calculate max dimension for envelope matching
+    dim_values = [
+        overall_dimensions.get("length") or 0,
+        overall_dimensions.get("width") or 0,
+        overall_dimensions.get("height") or 0
+    ]
+    ai_analysis["max_dimension_mm"] = max(dim_values) if any(dim_values) else None
+    ai_analysis["overall_dimensions"] = overall_dimensions
+    ai_analysis["dimensions_manually_updated"] = True
+    
+    # Update the RFQ
+    await db.rfqs.update_one(
+        {"rfq_id": rfq_id},
+        {"$set": {
+            "ai_analysis": ai_analysis,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    logger.info(f"Dimensions updated for RFQ {rfq_id}: L={overall_dimensions.get('length')}, W={overall_dimensions.get('width')}, H={overall_dimensions.get('height')}")
+    
+    return {
+        "message": "Dimensions updated successfully",
+        "overall_dimensions": overall_dimensions,
+        "max_dimension_mm": ai_analysis.get("max_dimension_mm")
+    }
+
 
 # ============== VENDOR MATCHING ==============
 
@@ -2212,7 +2298,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://rfq-forge.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-forge-1.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -2319,7 +2405,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://rfq-forge.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-forge-1.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -2544,7 +2630,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://rfq-forge.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://rfq-forge-1.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -2802,7 +2888,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://rfq-forge.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-forge-1.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -2891,7 +2977,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://rfq-forge.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-forge-1.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(

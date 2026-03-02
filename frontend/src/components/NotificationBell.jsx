@@ -126,6 +126,9 @@ const NotificationBell = () => {
         return <Package className="w-4 h-4 text-blue-500" />;
       case "message_received":
         return <MessageSquare className="w-4 h-4 text-purple-500" />;
+      case "negotiation_request":
+      case "negotiation_response":
+        return <DollarSign className="w-4 h-4 text-amber-500" />;
       default:
         return <Bell className="w-4 h-4 text-slate-400" />;
     }

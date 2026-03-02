@@ -107,6 +107,14 @@ const NotificationsPage = () => {
         if (data.conversation_id) navigate(`/chat/${data.conversation_id}`);
         else navigate("/chat");
         break;
+      case "negotiation_request":
+        // Vendor receives this - navigate to the RFQ where they can respond
+        if (data.rfq_id) navigate(`/vendor/rfq/${data.rfq_id}`);
+        break;
+      case "negotiation_response":
+        // Buyer receives this - navigate to the RFQ to see the response
+        if (data.rfq_id) navigate(`/buyer/rfq/${data.rfq_id}`);
+        break;
       default:
         break;
     }
@@ -124,6 +132,9 @@ const NotificationsPage = () => {
         return <Package className="w-5 h-5 text-blue-500" />;
       case "message_received":
         return <MessageSquare className="w-5 h-5 text-purple-500" />;
+      case "negotiation_request":
+      case "negotiation_response":
+        return <DollarSign className="w-5 h-5 text-amber-500" />;
       default:
         return <Bell className="w-5 h-5 text-slate-400" />;
     }
@@ -137,6 +148,8 @@ const NotificationsPage = () => {
       order_status_update: "Order Update",
       order_created: "New Order",
       message_received: "New Message",
+      negotiation_request: "Negotiation Request",
+      negotiation_response: "Negotiation Response",
     };
     return labels[type] || "Notification";
   };
