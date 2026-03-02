@@ -5,6 +5,7 @@
 - **Domain**: oemlinker.com
 - **Logo**: /logo.png
 - **Tagline**: Precision Manufacturing on Demand
+- **Email**: notifications@oemlinker.com
 
 ## Original Problem Statement
 Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometry where buyers upload engineering drawings and RFQs, and vendors are automatically matched based on machine capability, past work, and technical suitability. Platform should intelligently read engineering drawings and extract dimensions/tolerances.
@@ -14,9 +15,46 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - **Backend**: FastAPI (Python)
 - **Database**: MongoDB
 - **AI**: OpenAI GPT-5.2 Vision (via Emergent LLM Key)
-- **Auth**: JWT + Emergent Google OAuth
+- **Auth**: JWT + Emergent Google OAuth + 2FA Email OTP
 - **Payments**: Stripe (test mode) - planned
 - **Email**: Resend API
+
+## Security Features Implemented (Mar 2, 2026)
+
+### Password Security
+- Strong password requirements (8+ chars, upper/lower, digit, special)
+- Password strength indicator (Weak → Fair → Good → Strong)
+- Common pattern detection blocks weak passwords
+- Show/hide password toggle
+
+### Login Protection
+- Rate limiting: Max 5 failed attempts per 5 minutes
+- Account lockout: 15-minute lockout after exceeding attempts
+- Prevents user enumeration with generic error messages
+- IP logging for all login attempts
+
+### Two-Factor Authentication (2FA)
+- Email OTP verification (6-digit code)
+- 10-minute OTP expiry
+- Max 3 OTP attempts before reset required
+- Enable/disable 2FA from account settings
+- Resend OTP functionality
+
+### Password Management
+- `POST /api/auth/change-password` - Change password (requires current password)
+- `POST /api/auth/forgot-password` - Request reset email
+- `POST /api/auth/reset-password` - Reset with token (1-hour expiry)
+
+### Security Alerts (Email Notifications)
+- Password changed alert with IP and timestamp
+- Password reset alert with IP and timestamp
+- 2FA enabled/disabled notification
+
+### 2FA Endpoints
+- `POST /api/auth/verify-otp` - Verify OTP and complete login
+- `POST /api/auth/resend-otp` - Resend OTP code
+- `POST /api/auth/2fa/toggle` - Enable/disable 2FA
+- `GET /api/auth/2fa/status` - Get current 2FA status
 
 ## What's Been Implemented
 

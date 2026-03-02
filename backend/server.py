@@ -55,6 +55,51 @@ login_attempts = defaultdict(list)  # {email: [(timestamp, success), ...]}
 register_attempts = defaultdict(list)  # {ip: [timestamp, ...]}
 locked_accounts = {}  # {email: unlock_timestamp}
 
+# 2FA OTP Settings
+OTP_LENGTH = 6
+OTP_EXPIRY_MINUTES = 10
+otp_storage = {}  # {email: {"otp": str, "expires_at": datetime, "attempts": int}}
+MAX_OTP_ATTEMPTS = 3
+
+def generate_otp() -> str:
+    """Generate a secure 6-digit OTP"""
+    return ''.join([str(secrets.randbelow(10)) for _ in range(OTP_LENGTH)])
+
+def store_otp(email: str, otp: str):
+    """Store OTP with expiration"""
+    otp_storage[email] = {
+        "otp_hash": hash_token(otp),
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=OTP_EXPIRY_MINUTES),
+        "attempts": 0
+    }
+
+def verify_otp(email: str, otp: str) -> tuple[bool, str]:
+    """Verify OTP and return (success, message)"""
+    if email not in otp_storage:
+        return False, "No OTP found. Please request a new one."
+    
+    stored = otp_storage[email]
+    
+    # Check expiration
+    if datetime.now(timezone.utc) > stored["expires_at"]:
+        del otp_storage[email]
+        return False, "OTP has expired. Please request a new one."
+    
+    # Check attempts
+    if stored["attempts"] >= MAX_OTP_ATTEMPTS:
+        del otp_storage[email]
+        return False, "Too many failed attempts. Please request a new OTP."
+    
+    # Verify OTP
+    if hash_token(otp) != stored["otp_hash"]:
+        otp_storage[email]["attempts"] += 1
+        remaining = MAX_OTP_ATTEMPTS - otp_storage[email]["attempts"]
+        return False, f"Invalid OTP. {remaining} attempts remaining."
+    
+    # Success - remove OTP
+    del otp_storage[email]
+    return True, "OTP verified successfully"
+
 # Security utility functions
 def is_account_locked(email: str) -> bool:
     """Check if account is locked due to too many failed attempts"""
@@ -891,7 +936,7 @@ async def register(user_data: UserCreate, request: Request):
         )
     )
 
-@api_router.post("/auth/login", response_model=TokenResponse)
+@api_router.post("/auth/login")
 async def login(login_data: LoginRequest, request: Request):
     # Get client IP for logging
     client_ip = request.client.host if request.client else "unknown"
@@ -934,7 +979,41 @@ async def login(login_data: LoginRequest, request: Request):
         logger.warning(f"Failed login attempt for: {email} from IP: {client_ip}")
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    # Successful login - record and reset failed attempts
+    # Check if 2FA is enabled
+    security_settings = user.get("security_settings", {})
+    two_factor_enabled = security_settings.get("two_factor_enabled", False)
+    
+    if two_factor_enabled:
+        # Generate and send OTP
+        otp = generate_otp()
+        store_otp(email, otp)
+        
+        # Send OTP email
+        otp_html = f'''
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #1e40af;">🔐 Your Login Verification Code</h2>
+            <p>Hello {user.get("name", "User")},</p>
+            <p>Your one-time verification code is:</p>
+            <div style="background-color: #f8fafc; border-radius: 8px; padding: 24px; margin: 20px 0; text-align: center;">
+                <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1e40af;">{otp}</span>
+            </div>
+            <p style="color: #666;">This code expires in {OTP_EXPIRY_MINUTES} minutes.</p>
+            <p style="color: #dc2626; font-size: 14px;"><strong>If you didn't request this code, please ignore this email and secure your account.</strong></p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="color: #999; font-size: 12px;">OEMLinker - AI-Powered Manufacturing Marketplace</p>
+        </div>
+        '''
+        asyncio.create_task(send_email_async(email, "🔐 Your OEMLinker Login Code", otp_html))
+        
+        logger.info(f"2FA OTP sent to: {email} from IP: {client_ip}")
+        
+        return {
+            "requires_2fa": True,
+            "message": "Verification code sent to your email",
+            "email_hint": f"{email[:3]}***{email[email.index('@'):]}"
+        }
+    
+    # No 2FA - proceed with normal login
     record_login_attempt(email, True)
     
     # Update user login info
@@ -966,6 +1045,157 @@ async def login(login_data: LoginRequest, request: Request):
             created_at=user["created_at"]
         )
     )
+
+# ============== 2FA ENDPOINTS ==============
+
+class OTPVerifyRequest(BaseModel):
+    email: EmailStr
+    otp: str
+    password: str  # Re-verify password for security
+
+@api_router.post("/auth/verify-otp")
+async def verify_otp_endpoint(otp_data: OTPVerifyRequest, request: Request):
+    """Verify OTP and complete login"""
+    client_ip = request.client.host if request.client else "unknown"
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+    
+    email = sanitize_input(otp_data.email.lower().strip())
+    
+    # Find user and verify password again
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user or not verify_password(otp_data.password, user.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    # Verify OTP
+    success, message = verify_otp(email, otp_data.otp)
+    if not success:
+        logger.warning(f"Failed OTP verification for: {email} from IP: {client_ip} - {message}")
+        raise HTTPException(status_code=400, detail=message)
+    
+    # OTP verified - complete login
+    record_login_attempt(email, True)
+    
+    await db.users.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "last_login": datetime.now(timezone.utc).isoformat(),
+                "last_login_ip": client_ip,
+                "failed_login_attempts": 0
+            },
+            "$inc": {"login_count": 1}
+        }
+    )
+    
+    logger.info(f"Successful 2FA login: {email} from IP: {client_ip}")
+    
+    token = create_jwt_token(user["user_id"], user["email"], user["role"])
+    
+    return TokenResponse(
+        access_token=token,
+        user=UserResponse(
+            user_id=user["user_id"],
+            email=user["email"],
+            name=user["name"],
+            role=user["role"],
+            picture=user.get("picture"),
+            company_name=user.get("company_name"),
+            created_at=user["created_at"]
+        )
+    )
+
+@api_router.post("/auth/resend-otp")
+async def resend_otp(request: Request):
+    """Resend OTP for 2FA"""
+    body = await request.json()
+    email = sanitize_input(body.get("email", "").lower().strip())
+    
+    if not email:
+        raise HTTPException(status_code=400, detail="Email is required")
+    
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not user:
+        # Don't reveal if user exists
+        return {"message": "If an account exists, a new code has been sent."}
+    
+    # Generate and send new OTP
+    otp = generate_otp()
+    store_otp(email, otp)
+    
+    otp_html = f'''
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1e40af;">🔐 Your New Login Verification Code</h2>
+        <p>Hello {user.get("name", "User")},</p>
+        <p>Your new one-time verification code is:</p>
+        <div style="background-color: #f8fafc; border-radius: 8px; padding: 24px; margin: 20px 0; text-align: center;">
+            <span style="font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1e40af;">{otp}</span>
+        </div>
+        <p style="color: #666;">This code expires in {OTP_EXPIRY_MINUTES} minutes.</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px;">OEMLinker - AI-Powered Manufacturing Marketplace</p>
+    </div>
+    '''
+    asyncio.create_task(send_email_async(email, "🔐 Your New OEMLinker Login Code", otp_html))
+    
+    return {"message": "A new verification code has been sent to your email."}
+
+class TwoFactorToggle(BaseModel):
+    enable: bool
+    password: str  # Require password to change 2FA settings
+
+@api_router.post("/auth/2fa/toggle")
+async def toggle_2fa(
+    toggle_data: TwoFactorToggle, 
+    request: Request,
+    user: dict = Depends(get_current_user)
+):
+    """Enable or disable 2FA for the user"""
+    client_ip = request.client.host if request.client else "unknown"
+    
+    # Verify password
+    db_user = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not db_user or not verify_password(toggle_data.password, db_user.get("password_hash", "")):
+        raise HTTPException(status_code=400, detail="Invalid password")
+    
+    # Update 2FA setting
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"security_settings.two_factor_enabled": toggle_data.enable}}
+    )
+    
+    action = "enabled" if toggle_data.enable else "disabled"
+    
+    # Send notification email
+    alert_html = f'''
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: {'#f0fdf4' if toggle_data.enable else '#fef2f2'}; border-left: 4px solid {'#22c55e' if toggle_data.enable else '#ef4444'}; padding: 16px; margin-bottom: 20px;">
+            <h2 style="color: {'#166534' if toggle_data.enable else '#dc2626'}; margin: 0 0 8px 0;">🔐 Two-Factor Authentication {action.capitalize()}</h2>
+        </div>
+        <p>Hello {db_user.get("name", "User")},</p>
+        <p>Two-factor authentication has been <strong>{action}</strong> for your OEMLinker account.</p>
+        {'<p style="color: #166534;">Your account is now more secure. You will receive a verification code via email each time you log in.</p>' if toggle_data.enable else '<p style="color: #dc2626;"><strong>Warning:</strong> Your account is now less secure. Consider re-enabling 2FA for better protection.</p>'}
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px;">OEMLinker - AI-Powered Manufacturing Marketplace</p>
+    </div>
+    '''
+    asyncio.create_task(send_email_async(user["email"], f"🔐 2FA {action.capitalize()} - Security Update", alert_html))
+    
+    logger.info(f"2FA {action} for user: {user['email']} from IP: {client_ip}")
+    
+    return {"message": f"Two-factor authentication has been {action}", "two_factor_enabled": toggle_data.enable}
+
+@api_router.get("/auth/2fa/status")
+async def get_2fa_status(user: dict = Depends(get_current_user)):
+    """Get current 2FA status for the user"""
+    db_user = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    security_settings = db_user.get("security_settings", {}) if db_user else {}
+    
+    return {
+        "two_factor_enabled": security_settings.get("two_factor_enabled", False),
+        "password_changed_at": security_settings.get("password_changed_at")
+    }
 
 @api_router.post("/auth/session")
 async def exchange_session(request: Request, response: Response):
@@ -1100,9 +1330,15 @@ class PasswordResetConfirm(BaseModel):
 @api_router.post("/auth/change-password")
 async def change_password(
     password_data: PasswordChangeRequest, 
+    request: Request,
     user: dict = Depends(get_current_user)
 ):
     """Change password for authenticated user"""
+    client_ip = request.client.host if request.client else "unknown"
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+    
     # Verify current password
     db_user = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
     if not db_user:
@@ -1117,21 +1353,43 @@ async def change_password(
         raise HTTPException(status_code=400, detail="New password must be different from current password")
     
     # Update password
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     await db.users.update_one(
         {"user_id": user["user_id"]},
         {
             "$set": {
                 "password_hash": hash_password(password_data.new_password),
-                "security_settings.password_changed_at": now
+                "security_settings.password_changed_at": now.isoformat()
             }
         }
     )
     
-    # Invalidate all existing sessions except current (force re-login on other devices)
-    # This is a security measure after password change
+    # Send security alert email
+    alert_html = f'''
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 16px; margin-bottom: 20px;">
+            <h2 style="color: #dc2626; margin: 0 0 8px 0;">🔐 Security Alert</h2>
+            <p style="color: #7f1d1d; margin: 0;">Your password was changed</p>
+        </div>
+        <p>Hello {db_user.get("name", "User")},</p>
+        <p>Your OEMLinker account password was successfully changed.</p>
+        <div style="background-color: #f8fafc; border-radius: 8px; padding: 16px; margin: 20px 0;">
+            <p style="margin: 0 0 8px 0;"><strong>Time:</strong> {now.strftime("%B %d, %Y at %I:%M %p UTC")}</p>
+            <p style="margin: 0;"><strong>IP Address:</strong> {client_ip}</p>
+        </div>
+        <p style="color: #dc2626; font-weight: bold;">If you did not make this change, please:</p>
+        <ol style="color: #666;">
+            <li>Reset your password immediately</li>
+            <li>Contact our support team</li>
+            <li>Review your account activity</li>
+        </ol>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px;">OEMLinker - AI-Powered Manufacturing Marketplace</p>
+    </div>
+    '''
+    asyncio.create_task(send_email_async(user["email"], "🔐 Password Changed - Security Alert", alert_html))
     
-    logger.info(f"Password changed successfully for user: {user['email']}")
+    logger.info(f"Password changed successfully for user: {user['email']} from IP: {client_ip}")
     return {"message": "Password changed successfully"}
 
 @api_router.post("/auth/forgot-password")
@@ -1189,6 +1447,10 @@ async def forgot_password(reset_request: PasswordResetRequest, request: Request)
 async def reset_password(reset_data: PasswordResetConfirm, request: Request):
     """Reset password using token from email"""
     client_ip = request.client.host if request.client else "unknown"
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+    
     token_hash = hash_token(reset_data.token)
     
     # Find valid reset token
@@ -1209,15 +1471,18 @@ async def reset_password(reset_data: PasswordResetConfirm, request: Request):
     
     email = reset_record["email"]
     
+    # Get user for email
+    db_user = await db.users.find_one({"email": email}, {"_id": 0})
+    
     # Update password
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
     result = await db.users.update_one(
         {"email": email},
         {
             "$set": {
                 "password_hash": hash_password(reset_data.new_password),
                 "failed_login_attempts": 0,
-                "security_settings.password_changed_at": now
+                "security_settings.password_changed_at": now.isoformat()
             }
         }
     )
@@ -1234,6 +1499,32 @@ async def reset_password(reset_data: PasswordResetConfirm, request: Request):
     # Remove from locked accounts if locked
     if email in locked_accounts:
         del locked_accounts[email]
+    
+    # Send security alert email
+    user_name = db_user.get("name", "User") if db_user else "User"
+    alert_html = f'''
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 16px; margin-bottom: 20px;">
+            <h2 style="color: #dc2626; margin: 0 0 8px 0;">🔐 Security Alert</h2>
+            <p style="color: #7f1d1d; margin: 0;">Your password was reset</p>
+        </div>
+        <p>Hello {user_name},</p>
+        <p>Your OEMLinker account password was successfully reset using the password recovery process.</p>
+        <div style="background-color: #f8fafc; border-radius: 8px; padding: 16px; margin: 20px 0;">
+            <p style="margin: 0 0 8px 0;"><strong>Time:</strong> {now.strftime("%B %d, %Y at %I:%M %p UTC")}</p>
+            <p style="margin: 0;"><strong>IP Address:</strong> {client_ip}</p>
+        </div>
+        <p style="color: #dc2626; font-weight: bold;">If you did not request this password reset:</p>
+        <ol style="color: #666;">
+            <li>Your email account may be compromised</li>
+            <li>Contact our support team immediately</li>
+            <li>Secure your email account</li>
+        </ol>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px;">OEMLinker - AI-Powered Manufacturing Marketplace</p>
+    </div>
+    '''
+    asyncio.create_task(send_email_async(email, "🔐 Password Reset - Security Alert", alert_html))
     
     logger.info(f"Password reset successfully for: {email} from IP: {client_ip}")
     return {"message": "Password has been reset successfully. You can now log in with your new password."}
