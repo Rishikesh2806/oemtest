@@ -1915,7 +1915,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://rfq-forge-1.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-5.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -3325,6 +3325,30 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             # Keyword matching bonus (max 10)
             final_score += min(len(keyword_matches) * 2, 10)
             
+            # ============== LOCATION PREFERENCE SCORING (max 15) ==============
+            location_score = 0
+            location_match_type = None
+            vendor_country = (vendor.get("country") or "").lower().strip()
+            vendor_city = (vendor.get("city") or "").lower().strip()
+            
+            # Get RFQ's preferred locations
+            preferred_countries = [c.lower().strip() for c in (rfq.get("preferred_vendor_countries") or [])]
+            preferred_cities = [c.lower().strip() for c in (rfq.get("preferred_vendor_cities") or [])]
+            
+            # City match takes priority (more specific = higher bonus)
+            if preferred_cities and vendor_city:
+                if vendor_city in preferred_cities:
+                    location_score = 15  # Full bonus for exact city match
+                    location_match_type = "city"
+            
+            # Country match (if no city match)
+            if location_score == 0 and preferred_countries and vendor_country:
+                if vendor_country in preferred_countries:
+                    location_score = 10  # Country match bonus
+                    location_match_type = "country"
+            
+            final_score += location_score
+            
             # Cap at 100
             final_score = min(int(final_score), 100)
             
@@ -3345,6 +3369,8 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 "experience_score": experience_score,
                 "similar_jobs_count": similar_jobs_count,
                 "location": f"{vendor.get('city', '')}, {vendor.get('country', '')}",
+                "location_match": location_match_type,  # 'city', 'country', or None
+                "location_score": location_score,
                 "rating": vendor.get("rating", 0),
                 "total_jobs": vendor.get("total_jobs", 0),
                 "certifications": vendor.get("certifications", [])[:3],
@@ -3365,7 +3391,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://rfq-forge-1.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-5.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -3472,7 +3498,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://rfq-forge-1.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-5.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -3697,7 +3723,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://rfq-forge-1.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://rfq-marketplace-5.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -3955,7 +3981,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://rfq-forge-1.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-5.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -4044,7 +4070,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://rfq-forge-1.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-5.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(

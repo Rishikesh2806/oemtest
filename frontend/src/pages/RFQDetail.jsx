@@ -14,7 +14,7 @@ import {
   FileText, Package, Star, MapPin, Loader2, 
   CheckCircle2, Send, DollarSign, Clock, ArrowLeft,
   Building2, Cpu, Wrench, AlertCircle, Target, MessageSquare, Eye,
-  BarChart3, CreditCard, ExternalLink
+  BarChart3, CreditCard, ExternalLink, Truck, Globe
 } from "lucide-react";
 import QuoteComparison from "../components/quotes/QuoteComparison";
 import QuoteDetailModal from "../components/QuoteDetailModal";
@@ -35,6 +35,24 @@ const PAYMENT_TERMS = [
 const getPaymentTermLabel = (value) => {
   const term = PAYMENT_TERMS.find(t => t.value === value);
   return term ? term.label : value;
+};
+
+const INCOTERMS_LABELS = {
+  "EXW": "EXW - Ex Works",
+  "FCA": "FCA - Free Carrier",
+  "FAS": "FAS - Free Alongside Ship",
+  "FOB": "FOB - Free on Board",
+  "CFR": "CFR - Cost and Freight",
+  "CIF": "CIF - Cost, Insurance and Freight",
+  "CPT": "CPT - Carriage Paid To",
+  "CIP": "CIP - Carriage and Insurance Paid To",
+  "DAP": "DAP - Delivered at Place",
+  "DPU": "DPU - Delivered at Place Unloaded",
+  "DDP": "DDP - Delivered Duty Paid"
+};
+
+const getIncotermsLabel = (value) => {
+  return INCOTERMS_LABELS[value] || value || "Not specified";
 };
 
 const RFQDetail = () => {
@@ -344,6 +362,55 @@ const RFQDetail = () => {
                 {rfq.payment_terms_notes && (
                   <p className="text-sm text-blue-700 mt-1">{rfq.payment_terms_notes}</p>
                 )}
+              </div>
+            )}
+
+            {/* Delivery Location */}
+            {(rfq.delivery_address || rfq.delivery_city || rfq.delivery_country) && (
+              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-xs font-bold uppercase tracking-wider text-green-700 mb-2">
+                  <Truck className="w-3 h-3 inline mr-1" /> Delivery Location
+                </p>
+                <div className="space-y-1">
+                  {rfq.delivery_address && (
+                    <p className="text-sm text-green-900">{rfq.delivery_address}</p>
+                  )}
+                  <p className="font-medium text-green-900">
+                    {[rfq.delivery_city, rfq.delivery_state, rfq.delivery_country]
+                      .filter(Boolean)
+                      .join(", ")}
+                    {rfq.delivery_pincode && ` - ${rfq.delivery_pincode}`}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Incoterms & Vendor Preferences */}
+            {(rfq.incoterms || (rfq.preferred_vendor_countries && rfq.preferred_vendor_countries.length > 0)) && (
+              <div className="mt-4 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+                <p className="text-xs font-bold uppercase tracking-wider text-purple-700 mb-2">
+                  <Globe className="w-3 h-3 inline mr-1" /> Shipping Terms & Vendor Preferences
+                </p>
+                <div className="grid md:grid-cols-2 gap-4">
+                  {rfq.incoterms && (
+                    <div>
+                      <p className="text-xs text-purple-600 uppercase">Incoterms</p>
+                      <p className="font-medium text-purple-900">{getIncotermsLabel(rfq.incoterms)}</p>
+                    </div>
+                  )}
+                  {rfq.preferred_vendor_countries && rfq.preferred_vendor_countries.length > 0 && (
+                    <div>
+                      <p className="text-xs text-purple-600 uppercase">Preferred Vendor Countries</p>
+                      <p className="font-medium text-purple-900">{rfq.preferred_vendor_countries.join(", ")}</p>
+                    </div>
+                  )}
+                  {rfq.preferred_vendor_cities && rfq.preferred_vendor_cities.length > 0 && (
+                    <div className="md:col-span-2">
+                      <p className="text-xs text-purple-600 uppercase">Preferred Vendor Cities</p>
+                      <p className="font-medium text-purple-900">{rfq.preferred_vendor_cities.join(", ")}</p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </CardContent>

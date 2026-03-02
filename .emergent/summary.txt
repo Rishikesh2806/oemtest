@@ -1,69 +1,82 @@
-<analysis>**original_problem_statement:** The user wants to build a full-stack web application called **MachinoMatch** (originally Offloadex.com), an AI-driven on-demand manufacturing marketplace. The core functionality involves buyers uploading RFQs with engineering drawings (PDF, STEP, etc.). An AI engine should analyze these drawings to extract technical specifications. This data is then used by a smart matching algorithm to connect buyers with the most suitable manufacturing vendors.
+<analysis>**original_problem_statement:** The user wants to build a full-stack web application called **OEMLinker** (originally MachinoMatch), an AI-driven on-demand manufacturing marketplace. The core functionality involves buyers uploading RFQs with engineering drawings. An AI engine analyzes these drawings to extract technical specifications (now geometry-aware), which a smart matching algorithm uses to connect buyers with suitable manufacturing vendors based on capabilities, dimensions, and location.
 
 The platform must support a complete workflow: RFQ -> AI Analysis -> Vendor Matching -> Quotation -> Purchase Order -> Delivery -> Payment. It should handle different user roles (Buyer, Vendor, Admin) and include features like a vendor capability database, dashboards for each role, and a secure escrow payment system.
 
 **PRODUCT REQUIREMENTS:**
 -   **User Roles:** Buyer, Vendor, Admin.
--   **AI Core:** An Intelligence Engine to read drawings (PDF, CAD, etc.) and extract technical specifications.
--   **Matching:** A smart algorithm to match RFQs to vendors.
+-   **AI Core:** An Intelligence Engine to read drawings (PDF, CAD, etc.) and extract technical specifications, aware of part geometry (e.g., cylindrical vs. rectangular).
+-   **Matching:** A smart algorithm to match RFQs to vendors based on machine type, capacity, and location.
 -   **Workflow:** A complete RFQ-to-payment lifecycle management module.
+-   **Security:** Secure user authentication with 2FA, password policies, and rate limiting.
 -   **Commercials:** Escrow payments, platform commissions, and multi-currency support.
 -   **Dashboards:** Dedicated dashboards for buyers, vendors, and admins.
--   **Tech Stack:** React/Next.js frontend, Python (FastAPI) backend, and a PostgreSQL database (currently using MongoDB).
+-   **Tech Stack:** React frontend, Python (FastAPI) backend, and a MongoDB database.
 
 **User's preferred language**: English
 
 **what currently exists?**
-A full-stack application with a React frontend and FastAPI backend using MongoDB. The application is branded as **MachinoMatch** and supports JWT authentication for Buyer, Vendor, and Admin roles.
+A full-stack application rebranded as **OEMLinker** with a React frontend and FastAPI backend using MongoDB. The app features JWT authentication with comprehensive security enhancements, including 2FA via email, password strength policies, account lockout, and forgot/reset password flows.
 
 Key implemented features:
--   **Core Workflows:** RFQ matching, quotation lifecycle (submission, comparison, acceptance), and order management.
--   **Quote Negotiation:** A full-featured system allowing buyers to request modifications and vendors to accept, reject, or counter-offer.
--   **Notification System:** In-app notifications (bell icon, dropdown, dedicated page) and email alerts for key events.
--   **Role-Specific Pages:** Dedicated dashboards and pages for buyers (My RFQs, Received Quotes) and vendors (Matched RFQs).
--   **Admin Panel:** Comprehensive CRUD management of users, vendors, and machines, including the ability to create new users and vendors.
--   **UI/UX Features:** Vendor rating system, material supply options in RFQs, and detailed quote cards.
--   **Integrations:** GPT-5.2 for drawing analysis, Resend for emails, and a GSTIN API for vendor data auto-fill.
+-   **Core Workflows:** RFQ matching, quotation lifecycle, order management, and quote negotiation.
+-   **Geometry-Aware AI:** The AI drawing analysis now intelligently detects part geometry (e.g., cylindrical, rectangular) and extracts appropriate dimensions (e.g., diameter, length).
+-   **Advanced Vendor Matching:** The algorithm matches RFQs to vendors by considering machine type vs. part geometry, dimensional and weight capacity, and vendor location preferences.
+-   **Enhanced RFQ Creation:** RFQs now include fields for Delivery Location, Incoterms, and Preferred Vendor Locations.
+-   **User Profiles:** A dedicated Buyer Profile page allows users to manage personal, company, and security (2FA) settings.
+-   **UI/UX:** The app uses a new, larger SVG logo for OEMLinker.
+-   **Integrations:** GPT-5.2 for drawing analysis, Resend for emails (configured for ), and a GSTIN API.
 
 **Last working item**:
--   Last item agent was working: Implementing a GSTIN API integration to auto-populate vendor details during registration. The agent added the backend endpoint () and started modifying the frontend  to add the verification UI.
+-   Last item agent was working: Enhancing the vendor matching algorithm to use the new Preferred Vendor Locations (countries and cities) specified in an RFQ. The backend logic was added to score and prioritize vendors based on these preferences.
 -   Status: IN PROGRESS
 -   Agent Testing Done: N
--   Which testing method agent to use? both
+-   Which testing method agent to use? backend testing agent
 -   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Complete GSTIN Integration for Vendor Registration (Priority: P0)**
-    -   **Attempted fixes:** A backend endpoint at  has been created to fetch data. Frontend modifications to  have begun.
+-   **Issue 1: Test and Verify Vendor Location Matching (Priority: P0)**
+    -   **Attempted fixes:** The backend logic was added to  in the  endpoint.
     -   **Next debug checklist:**
-        1.  Finalize the UI in  to include the GSTIN input field, a Verify button, and the logic to auto-populate form fields (company name, address) from the API response.
-        2.  Ensure the main registration endpoint () correctly processes the auto-filled vendor information.
-        3.  Test the end-to-end vendor registration flow using a valid GSTIN to confirm it works as expected.
-    -   **Why fix this issue and what will be achieved with the fix?** To streamline vendor onboarding, reduce manual errors, and improve data accuracy.
+        1.  Create an RFQ with specific Preferred Vendor Countries/Cities.
+        2.  Use  or the testing agent to call the  endpoint.
+        3.  Verify that the returned list of vendors is correctly filtered and/or prioritized based on the location preferences.
+    -   **Why fix this issue and what will be achieved with the fix?** To complete the location-based vendor preference feature and ensure it provides more relevant matches for buyers.
     -   **Status:** IN PROGRESS
     -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** both
+    -   **Should Test frontend/backend/both after fix?** backend
     -   **Blocked on other issue:** None
 
--   **Issue 2: Fix Negotiation Notification Redirect (Priority: P1)**
-    -   **Attempted fixes:** The agent identified that the  function in  is missing cases for negotiation-related notifications. The fix was not implemented.
+-   **Issue 2: Display New RFQ Fields for Vendors (Priority: P1)**
+    -   **Attempted fixes:** None. This was missed when adding the new fields.
     -   **Next debug checklist:**
-        1.  Edit .
-        2.  In the  statement within , add cases for  and .
-        3.  Ensure these cases navigate the user to the correct RFQ detail page using the  from the notification object (e.g., ).
-        4.  Verify that the backend creates these notifications with the correct  (which should be the RFQ ID).
-    -   **Why fix this issue and what will be achieved with the fix?** To make notifications actionable, allowing users to navigate directly to the relevant item and improving workflow efficiency.
+        1.  Modify .
+        2.  Check the user's role.
+        3.  When the user is a vendor, display the Delivery Location and Incoterms sections, similar to how they are shown for buyers/admins.
+    -   **Why fix this issue and what will be achieved with the fix?** Vendors need to see the delivery location and shipping terms to provide an accurate quote.
     -   **Status:** NOT STARTED
     -   **Is recurring issue?** N
     -   **Should Test frontend/backend/both after fix?** frontend
     -   **Blocked on other issue:** None
 
+-   **Issue 3: Verify GSTIN Integration for Vendor Registration (Priority: P2)**
+    -   **Attempted fixes:** The agent previously checked  and concluded the code was implemented.
+    -   **Next debug checklist:**
+        1.  Navigate to the registration page and select the Vendor role.
+        2.  Enter a valid test GSTIN and click Verify.
+        3.  Confirm that company details (name, address) are auto-populated correctly.
+        4.  Complete the registration and ensure the vendor is created successfully.
+    -   **Why fix this issue and what will be achieved with the fix?** This was a high-priority item from a previous session that was never fully tested end-to-end. Verification is needed to close the loop.
+    -   **Status:** USER VERIFICATION PENDING
+    -   **Is recurring issue?** N
+    -   **Should Test frontend/backend/both after fix?** frontend
+    -   **Blocked on other issue:** None
+
 **In progress Task List**:
--   **Task 1: Complete GSTIN Integration (Priority: P0)**
-    -   **Where to resume:** Continue implementing the frontend logic in .
-    -   **What will be achieved with this?** A seamless, automated registration process for vendors.
+-   **Task 1: Complete Vendor Location Preference Feature (Priority: P0)**
+    -   **Where to resume:** Testing the  endpoint.
+    -   **What will be achieved with this?** A fully functional vendor matching system that respects buyer location preferences.
     -   **Status:** IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?** both
+    -   **Should Test frontend/backend/both after fix?** backend
     -   **Blocked on something:** No
 
 **Upcoming and Future Tasks**
@@ -75,19 +88,30 @@ Key implemented features:
 -   Instant AI auto-quote for simple parts.
 -   API for ERP integration.
 -   Capacity forecasting for vendors.
--   Refactor the monolithic  into a more scalable structure (e.g., separate files for routes, models, and services).
+-   **Refactor the monolithic ** into a more scalable structure (routes, models, services).
 
 **Completed work in this session**
--   **Quote Negotiation Workflow:** Implemented a complete buyer-vendor negotiation flow (request, accept, counter, reject) with UI components and backend logic. Verified via manual and agent testing.
--   **Notification System:** Implemented a full in-app notification system with a UI bell, dropdown, and a dedicated notifications page.
--   **Dedicated Buyer Quotes Page:** Created a new page () for buyers to view all received quotes, grouped by RFQ title.
--   **Admin Panel Enhancements:** Added functionality for admins to create new users and vendors directly from the admin dashboard.
--   **Rebranding:** Changed the brand name to MachinoMatch, generated a new logo, and updated it across the entire application.
--   **UI Enhancements:** Added material supply options to RFQs and enriched quote cards with more details like payment terms.
--   **Bug Fix:** Fixed a crash on the vendor profile page caused by handling of null/undefined array properties.
+-   **Rebranding:** Fully rebranded the application from MachinoMatch to OEMLinker, including a new SVG logo, app-wide text replacement, and updated email sender domain.
+-   **Security Overhaul:**
+    -   Implemented backend rate limiting, brute-force protection, account lockout, and password history.
+    -   Added a full **Forgot/Reset Password** flow with secure tokens and email notifications.
+    -   Implemented **2FA via email OTP** for login, with options to enable/disable in the user profile.
+    -   Added password change security alert emails.
+    -   Enhanced the registration page with a real-time password strength indicator.
+-   **AI & Matching Enhancements:**
+    -   Made AI drawing analysis geometry-aware to extract relevant dimensions for different part shapes.
+    -   Upgraded the vendor matching algorithm to filter by machine type vs. part geometry, and check dimensional/weight capacity.
+-   **Feature Additions:**
+    -   Created a **Buyer Profile** page with tabs for personal, company, and security settings.
+    -   Added new fields to RFQs: **Delivery Location, Incoterms, and Preferred Vendor Locations**.
+    -   Updated the RFQ detail view to display the new fields for buyers/admins.
+-   **Bug Fixes & Admin:**
+    -   Fixed a critical login redirect bug.
+    -   Addressed user queries about the Emergent LLM Key and custom domain linking.
+    -   Updated the Resend API key.
 
 **Earlier issues found/mentioned but not fixed**
--   None.
+-   The **Made with Emergent badge** cannot be removed via code in the preview environment, as it's injected by a platform script. The solution is to deploy to a custom server or contact support for paid plans.
 
 **Known issue recurrence from previous fork**
 -   None.
@@ -99,74 +123,73 @@ Key implemented features:
 -   **Backend:** FastAPI
 -   **Frontend:** React (functional components, hooks)
 -   **Database:** MongoDB
--   **AI Integration:** OpenAI GPT-5.2 (Vision API)
+-   **Security:** JWT, bcrypt, Rate Limiting (SlowAPIs), 2FA via email, Pwned Passwords validation.
+-   **AI Integration:** OpenAI GPT-5.2 (Vision API) via .
 -   **Email:** Resend API
--   **Authentication:** JWT
 -   **Vendor Verification:** GSTIN Check API
 
 **key DB schema**
--   **quotes:** { ..., **negotiation_history**: [{...}] }
--   **rfqs:** { ..., **material_supply_type**: BUYER_MATERIAL | VENDOR_MATERIAL }
--   **notifications:** {user_id, message, link, read, timestamp, link_id, type}
+-   **users:** 
+-   **rfqs:** 
+-   **password_reset_tokens:** (New collection) 
 
 **changes in tech stack**
--   The application uses **MongoDB**, deviating from the original **PostgreSQL** requirement.
+-   None.
 
 **All files of reference**
--   : Heavily modified to add endpoints for quote negotiation, notifications, admin user creation, and GSTIN verification.
--   : Modified to add GSTIN verification flow.
--   : Updated with Add User and Add Vendor functionality.
--   : New page to list all quotes for a buyer.
--   : Updated to integrate the quote negotiation modal.
--   : New component for the header notification icon.
--   : New page to display all notifications.
--   Numerous files were updated for the MachinoMatch rebranding.
+-   : Heavily modified for security, geometry-aware AI/matching, new RFQ fields, and user profiles.
+-   : Modified for geometry-aware dynamic dimension fields and new RFQ option fields.
+-   : Modified for password strength indicator.
+-   : Modified to handle 2FA and fix login redirect.
+-   : New file for managing user/company/security info.
+-   , : New files for the password reset flow.
+-   Multiple files across the frontend were updated for the OEMLinker rebranding and to use the new larger SVG logo.
 
 **Areas that need refactoring**:
--   The  file is a large monolith and should be broken down into a more scalable structure.
+-   The  file has grown significantly and is a high-priority candidate for being broken down into a proper project structure (e.g., separate directories for routes, models, services, security).
 
 **key api endpoints**
--   : (POST) Start or respond to a quote negotiation.
--   : (GET) Fetch all quotes for the logged-in buyer.
--   : (POST) Create a new user.
--   : (GET) Verify a GSTIN and fetch company data.
--   : (GET, POST) Manage notifications.
+-   , ,  (POST)
+-   , ,  (POST)
+-    (GET, PUT)
+-    (GET) - Updated with new geometry and location matching logic.
 
 **Critical Info for New Agent**
--   **Database Mismatch:** The project uses MongoDB, not PostgreSQL as originally requested. This is a known and accepted deviation.
--   **Monolithic Backend:**  contains the entire backend logic. Refactoring is a future task.
--   **Immediate Priorities:** The agent must first complete the GSTIN integration and then fix the notification redirect bug.
+-   **Rebranding Complete:** The application is now **OEMLinker**. Test users in the database may still have  emails; consider creating new  test users for consistency.
+-   **Monolithic Backend:**  contains all backend logic. Be mindful of this when adding new features. A major refactor is on the backlog.
+-   **Platform Badge:** The Made with Emergent badge **cannot be removed** via code in the development environment. Inform the user of this platform limitation if they ask again.
+-   **Domain Linking:** The user must link their  domain via the Emergent platform's Link domain feature. You cannot do this with code.
 
 **documents and test reports created in this job**
--   : Updated with all recently completed features.
--   Multiple test reports in  confirming the functionality of the quote negotiation feature.
+-   : Updated with all new features and rebranding.
+-   : Confirmed core features were working after the first major implementation wave.
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **user:** change brand name as machinomactch with elegant logo (Status: **Completed**)
-2.  **user:** add gstin api to get vendor details... (Status: **In Progress**)
-3.  **user:** enable admin to add, edit and mange users, vendors, machines (Status: **Completed**)
-4.  **user:** add negotiation and RFQ details in https://rfq-forge-1.preview.emergentagent.com/buyer/quotes (Status: **Completed**)
-5.  **user:** add material supply option in RFQs (Status: **Completed**)
-6.  **user:** group quotes received in RFQ title (Status: **Completed**)
-7.  **user:** test https://rfq-forge-1.preview.emergentagent.com/vendor/profile (Status: **Completed**, bug fixed)
-8.  **user:** create a menu for received quotes in buyer panel (Status: **Completed**)
-9.  **user:** show payment terms and other terms in Received Quotes card (Status: **Completed**)
-10. **user:** in vendor notification negotiation notification not redirecting (Status: **Pending**, bug identified)
+1.  **user:** add company details in buyer profile (Status: **Completed**)
+2.  **user:** remove made with emergent badge from app (Status: **Completed** - Investigated and explained it's a platform limitation)
+3.  **user:** add options in RFQs like delivery location, incoterms, preferred vendors locations (Status: **Completed**)
+4.  **user:** Display delivery/incoterms in RFQ detail view (Status: **Completed**)
+5.  **user:** Use vendor location preferences in matching algorithm (Status: **In Progress**)
+6.  **user:** use this logo (Status: **Completed**)
+7.  **user:** remove site name and use that space with logo in transparent image (Status: **Completed**)
+8.  **user:** make it larger to be visible like text (Status: **Completed**)
+9.  **user:** login not redirecting (Status: **Completed**)
+10. **user:** use this logo (Status: **Completed** - new logo provided)
 
 **Project Health Check:**
 -   **Broken:** None
 -   **Mocked:**
-    -   Stripe payment integration is planned but not implemented.
-    -   AI Voice Agent is planned but not implemented.
+    -   Stripe payment integration.
+    -   AI Voice Agent.
 
 **3rd Party Integrations**
 -   **OpenAI GPT-5.2 (Vision):** Used for AI drawing analysis. Uses Emergent LLM Key.
--   **Resend:** Used for sending transactional emails. Requires a User-provided API key.
--   **GSTIN Check API (gstincheck.co.in):** Free API for vendor data verification.
+-   **Resend:** Used for sending transactional emails. Configured with user key for .
+-   **GSTIN Check API:** Free API for vendor data verification.
 -   **Stripe:** Planned for payments.
 
 **Testing status**
--   Testing agent used after significant changes: YES (for Quote Negotiation).
+-   Testing agent used after significant changes: YES
 -   Troubleshoot agent used after agent stuck in loop: NO
 -   Test files created: []
 -   Known regressions: None.
@@ -181,7 +204,8 @@ Key implemented features:
 -   **Vendor:**
     -   Email: 
     -   Password: 
+*Note: Consider creating new test users with  emails for consistency.*
 
 **What agent forgot to execute**
--   The agent identified the fix for the notification redirect bug but did not implement it before starting the next user request. This remains a pending issue.
--   The AI voice agent feature, requested by the user, has been acknowledged but not started. It is in the upcoming tasks list.</analysis>
+-   The agent did not add the new RFQ fields (Delivery Location, Incoterms) to the **vendor's view** of the RFQ detail page. This is now listed as **Pending Issue 2**.
+-   The agent did not perform a data migration for existing users after the MachinoMatch -> OEMLinker rebrand. Existing user data will still reference the old brand.</analysis>
