@@ -33,8 +33,7 @@ const ForgotPasswordPage = () => {
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6 py-12">
       <div className="w-full max-w-md">
         <Link to="/" className="flex items-center gap-2 mb-8">
-          <img src="/logo.png" alt="OEMLinker Logo" className="w-9 h-9" />
-          <span className="font-heading font-bold text-xl text-slate-900">OEMLINKER</span>
+          <img src="/logo.svg" alt="OEMLinker" className="h-10" />
         </Link>
 
         {!submitted ? (
