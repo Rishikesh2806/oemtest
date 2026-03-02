@@ -1984,25 +1984,63 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     ai_analysis = rfq.get("ai_analysis") or {}
     dims = ai_analysis.get("overall_dimensions") or {}
     recommended_processes = ai_analysis.get("recommended_processes", [])
+    part_geometry = ai_analysis.get("part_geometry", "rectangular")
     
-    # Get part dimensions from AI analysis
+    # Get part dimensions from AI analysis based on geometry
     part_length = dims.get("length") or 0
     part_width = dims.get("width") or 0
     part_height = dims.get("height") or 0
-    part_diameter = dims.get("diameter") or ai_analysis.get("max_diameter_mm") or 0
+    part_diameter = dims.get("diameter") or dims.get("outer_diameter") or ai_analysis.get("max_diameter_mm") or 0
+    part_inner_diameter = dims.get("inner_diameter") or dims.get("bore_diameter") or 0
+    part_thickness = dims.get("thickness") or part_height or 0
+    part_large_diameter = dims.get("large_diameter") or part_diameter or 0
+    part_small_diameter = dims.get("small_diameter") or 0
+    part_taper_angle = dims.get("taper_angle") or 0
+    part_weight = ai_analysis.get("weight_kg") or 0
     
     # Calculate max dimension for envelope check
     max_dimension = ai_analysis.get("max_dimension_mm")
     if not max_dimension:
-        dim_values = [part_length, part_width, part_height, part_diameter]
+        dim_values = [part_length, part_width, part_height, part_diameter, part_large_diameter, part_thickness]
         dim_values = [d for d in dim_values if d]
         max_dimension = max(dim_values) if dim_values else None
+    
+    # Calculate max diameter for turning operations
+    max_diameter = ai_analysis.get("max_diameter_mm") or max(part_diameter, part_large_diameter, part_inner_diameter) or 0
     
     required_tolerance = rfq.get("tolerance", 0.1)
     required_material = rfq.get("material_type", "").lower()
     
     # Extract material from AI if available
     ai_material = (ai_analysis.get("material_specs") or "").lower()
+    
+    # ============== GEOMETRY-BASED PROCESS DETERMINATION ==============
+    # Determine required process types based on part geometry
+    geometry_process_map = {
+        "cylindrical": ["turning", "cnc_turning"],
+        "circular_flat": ["turning", "milling", "vtl"],  # Can be turned or milled depending on size
+        "conical": ["turning", "cnc_turning"],
+        "tube_pipe": ["turning", "boring"],
+        "rectangular": ["milling", "cnc_milling"],
+        "sheet_metal": ["sheet_metal", "press", "cutting"],
+        "complex": ["5axis", "milling"],
+        "spherical": ["turning", "5axis"]
+    }
+    
+    required_process_types = geometry_process_map.get(part_geometry, ["milling"])
+    
+    # Override if specific processes detected from AI analysis
+    for proc in recommended_processes:
+        proc_lower = proc.lower() if isinstance(proc, str) else ""
+        if "turn" in proc_lower or "lathe" in proc_lower:
+            if "turning" not in required_process_types:
+                required_process_types.insert(0, "turning")
+        elif "mill" in proc_lower:
+            if "milling" not in required_process_types:
+                required_process_types.insert(0, "milling")
+        elif "5-axis" in proc_lower or "5 axis" in proc_lower:
+            if "5axis" not in required_process_types:
+                required_process_types.insert(0, "5axis")
     
     # ============== EXTRACT JOB KEYWORDS FROM TITLE & DESCRIPTION ==============
     job_title = rfq.get("title", "").lower()
@@ -2038,8 +2076,9 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 if process not in detected_processes:
                     detected_processes.append(process)
     
-    logger.info(f"Matching RFQ {rfq_id}: dims=L{part_length}xW{part_width}xH{part_height}, dia={part_diameter}")
+    logger.info(f"Matching RFQ {rfq_id}: geometry={part_geometry}, dims=L{part_length}xW{part_width}xH{part_height}, dia={part_diameter}, weight={part_weight}kg")
     logger.info(f"Required tolerance={required_tolerance}, material={required_material}")
+    logger.info(f"Required process types for geometry: {required_process_types}")
     logger.info(f"Detected keywords: {detected_keywords}, processes: {detected_processes}")
     logger.info(f"AI recommended processes: {recommended_processes}")
     
@@ -2069,15 +2108,22 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             {"_id": 0, "title": 1, "description": 1, "material_type": 1, "ai_analysis": 1}
         ).to_list(200) if past_rfq_ids else []
         
-        # Analyze similar past jobs
+        # Analyze similar past jobs (including geometry match)
         similar_jobs_count = 0
         experience_keywords_matched = []
+        geometry_experience = False
         
         for past_rfq in past_rfqs:
             past_title = (past_rfq.get("title") or "").lower()
             past_desc = (past_rfq.get("description") or "").lower()
             past_material = (past_rfq.get("material_type") or "").lower()
             past_text = f"{past_title} {past_desc}"
+            past_geometry = (past_rfq.get("ai_analysis") or {}).get("part_geometry", "")
+            
+            # Check if past job has same geometry
+            if past_geometry == part_geometry:
+                geometry_experience = True
+                similar_jobs_count += 1
             
             # Check if past job is similar based on keywords
             similarity_score = 0
@@ -2102,15 +2148,21 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         
         # Calculate experience score (max 20 points)
         experience_score = min(similar_jobs_count * 2 + len(experience_keywords_matched), 20)
+        if geometry_experience:
+            experience_score += 5  # Bonus for same geometry experience
+        experience_score = min(experience_score, 25)
         
         # Track capabilities across all machines
         matching_machines = []
         tolerance_capable = False
         materials_match = False
         dimension_capable = False
+        weight_capable = False
         process_matches = []
         keyword_matches = []
         has_suitable_machine = False
+        geometry_compatible = False
+        rejection_reasons = []
         
         for machine in machines:
             machine_type_lower = machine.get("machine_type", "").lower()
@@ -2119,11 +2171,13 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             machine_score = 0
             machine_process_match = False
             dimension_fit = False
+            weight_fit = True
+            machine_rejection = None
             
-            # ============== MACHINE CATEGORY MATCHING ==============
+            # ============== MACHINE CATEGORY DETECTION ==============
             is_welding_machine = "weld" in machine_type_lower
             is_turning_machine = any(k in machine_type_lower for k in ["lathe", "turn", "vtl"])
-            is_milling_machine = any(k in machine_type_lower for k in ["mill", "vmc", "hmc", "machining center"])
+            is_milling_machine = any(k in machine_type_lower for k in ["mill", "vmc", "hmc", "machining center"]) and not is_turning_machine
             is_5axis_machine = "5-axis" in machine_type_lower or "5 axis" in machine_type_lower
             is_gear_machine = "gear" in machine_type_lower or "hob" in machine_type_lower
             is_grinding_machine = "grind" in machine_type_lower
@@ -2132,41 +2186,146 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             is_drilling_machine = "drill" in machine_type_lower
             is_press_machine = any(k in machine_type_lower for k in ["press", "brake", "sheet"])
             is_cutting_machine = any(k in machine_type_lower for k in ["laser", "plasma", "waterjet", "cut"])
+            is_vtl_machine = "vtl" in machine_type_lower or "vertical turret" in machine_type_lower
+            
+            # ============== GEOMETRY-MACHINE COMPATIBILITY CHECK ==============
+            # This ensures milling machines don't match turning jobs and vice versa
+            machine_compatible_with_geometry = False
+            
+            if part_geometry in ["cylindrical", "conical", "tube_pipe"]:
+                # These REQUIRE turning machines
+                if is_turning_machine or is_vtl_machine or is_boring_machine:
+                    machine_compatible_with_geometry = True
+                else:
+                    machine_rejection = f"Geometry '{part_geometry}' requires turning machine, not {machine_type_lower}"
+                    
+            elif part_geometry == "circular_flat":
+                # Can be turned (disc/flange) or milled (plate with holes)
+                if is_turning_machine or is_vtl_machine or is_milling_machine or is_5axis_machine:
+                    machine_compatible_with_geometry = True
+                # Prefer VTL for large diameter circular parts
+                if is_vtl_machine and part_diameter > 500:
+                    machine_score += 10  # Bonus for VTL on large parts
+                    
+            elif part_geometry in ["rectangular", "complex"]:
+                # These typically need milling
+                if is_milling_machine or is_5axis_machine:
+                    machine_compatible_with_geometry = True
+                elif is_turning_machine and not any(k in job_title + job_description for k in ["block", "plate", "housing", "bracket"]):
+                    # Allow turning only if job doesn't specifically mention prismatic parts
+                    machine_compatible_with_geometry = True
+                else:
+                    machine_rejection = f"Geometry '{part_geometry}' requires milling machine"
+                    
+            elif part_geometry == "sheet_metal":
+                if is_press_machine or is_cutting_machine:
+                    machine_compatible_with_geometry = True
+                else:
+                    machine_rejection = f"Sheet metal geometry requires press/cutting machine"
+                    
+            elif part_geometry == "spherical":
+                if is_turning_machine or is_5axis_machine:
+                    machine_compatible_with_geometry = True
+                    
+            else:
+                # Unknown geometry - allow all machine types
+                machine_compatible_with_geometry = True
+            
+            if not machine_compatible_with_geometry:
+                if machine_rejection and machine_rejection not in rejection_reasons:
+                    rejection_reasons.append(machine_rejection)
+                continue
+            
+            geometry_compatible = True
+            
+            # ============== WEIGHT CAPACITY CHECK ==============
+            machine_max_weight = machine.get("max_weight") or machine.get("table_load_capacity") or machine.get("max_load") or 0
+            if part_weight > 0 and machine_max_weight > 0:
+                if machine_max_weight >= part_weight * 1.2:  # 20% safety margin
+                    weight_fit = True
+                    weight_capable = True
+                    machine_score += 5
+                else:
+                    weight_fit = False
+                    machine_rejection = f"Weight {part_weight}kg exceeds machine capacity {machine_max_weight}kg"
+                    if machine_rejection not in rejection_reasons:
+                        rejection_reasons.append(machine_rejection)
+                    continue
             
             # ============== DIMENSION CAPABILITY CHECK ==============
-            # Check if machine envelope can fit the part based on machine category
+            # Check if machine envelope can fit the part based on machine category AND geometry
             
-            if is_turning_machine or "turning" in machine_category or "lathe" in machine_category or "vtl" in machine_category:
-                # For lathes/VTLs: check max_diameter and max_length
-                machine_max_dia = machine.get("max_diameter") or machine.get("max_swing") or 0
-                machine_max_len = machine.get("max_length") or 0
+            if is_turning_machine or is_vtl_machine or "turning" in machine_category or "lathe" in machine_category or "vtl" in machine_category:
+                # For lathes/VTLs: check max_diameter (swing) and max_length (between centers)
+                machine_max_dia = machine.get("max_diameter") or machine.get("max_swing") or machine.get("swing_over_bed") or 0
+                machine_max_len = machine.get("max_length") or machine.get("distance_between_centers") or 0
+                machine_bore = machine.get("spindle_bore") or machine.get("bore_diameter") or 0
                 
-                if part_diameter and machine_max_dia > 0:
-                    if machine_max_dia >= part_diameter * 1.1:  # 10% margin
+                # Check diameter capability
+                check_diameter = part_diameter or part_large_diameter or 0
+                if check_diameter > 0 and machine_max_dia > 0:
+                    if machine_max_dia >= check_diameter * 1.1:  # 10% margin
                         dimension_fit = True
                         dimension_capable = True
                         machine_score += 15
+                    else:
+                        machine_rejection = f"Part diameter {check_diameter}mm exceeds machine swing {machine_max_dia}mm"
+                        if machine_rejection not in rejection_reasons:
+                            rejection_reasons.append(machine_rejection)
+                        continue
                 
-                if part_length and machine_max_len > 0:
-                    if machine_max_len >= part_length * 1.1:
+                # Check length capability for cylindrical parts
+                check_length = part_length or 0
+                if check_length > 0 and machine_max_len > 0:
+                    if machine_max_len >= check_length * 1.1:
+                        dimension_fit = True
+                        dimension_capable = True
+                        machine_score += 10
+                    else:
+                        machine_rejection = f"Part length {check_length}mm exceeds machine capacity {machine_max_len}mm"
+                        if machine_rejection not in rejection_reasons:
+                            rejection_reasons.append(machine_rejection)
+                        continue
+                
+                # Check bore through capacity for tube/pipe
+                if part_geometry == "tube_pipe" and part_inner_diameter > 0:
+                    if machine_bore > 0 and machine_bore >= part_inner_diameter:
+                        machine_score += 5  # Bonus for bar work capability
                         dimension_fit = True
                         dimension_capable = True
                         machine_score += 10
                         
             elif is_milling_machine or is_5axis_machine or "milling" in machine_category or "vmc" in machine_category:
                 # For milling machines: check X, Y, Z travels
-                max_x = machine.get("max_x") or machine.get("table_size_x") or 0
-                max_y = machine.get("max_y") or machine.get("table_size_y") or 0
-                max_z = machine.get("max_z") or 0
+                max_x = machine.get("max_x") or machine.get("table_size_x") or machine.get("x_travel") or 0
+                max_y = machine.get("max_y") or machine.get("table_size_y") or machine.get("y_travel") or 0
+                max_z = machine.get("max_z") or machine.get("z_travel") or 0
+                table_load = machine.get("table_load_capacity") or machine.get("max_weight") or 0
                 
-                fits_x = max_x >= part_length * 1.1 if part_length and max_x else True
-                fits_y = max_y >= part_width * 1.1 if part_width and max_y else True
-                fits_z = max_z >= part_height * 1.1 if part_height and max_z else True
+                # Check all three axes
+                dimension_issues = []
+                if part_length and max_x and max_x < part_length * 1.1:
+                    dimension_issues.append(f"X-travel {max_x}mm < part length {part_length}mm")
+                if part_width and max_y and max_y < part_width * 1.1:
+                    dimension_issues.append(f"Y-travel {max_y}mm < part width {part_width}mm")
+                if part_height and max_z and max_z < part_height * 1.1:
+                    dimension_issues.append(f"Z-travel {max_z}mm < part height {part_height}mm")
                 
-                if fits_x and fits_y and fits_z and (max_x or max_y or max_z):
+                if dimension_issues:
+                    machine_rejection = f"Part exceeds machine envelope: {', '.join(dimension_issues)}"
+                    if machine_rejection not in rejection_reasons:
+                        rejection_reasons.append(machine_rejection)
+                    continue
+                
+                # Part fits
+                if max_x or max_y or max_z:
                     dimension_fit = True
                     dimension_capable = True
                     machine_score += 15
+                    
+                # Bonus for 5-axis capability on complex parts
+                if is_5axis_machine and part_geometry == "complex":
+                    machine_score += 10
                     
             elif is_boring_machine or "boring" in machine_category:
                 # For boring machines: check bore diameter capability
@@ -2349,7 +2508,9 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 "score": min(machine_score, 50),  # Cap individual machine score
                 "tolerance": machine_tolerance,
                 "dimension_fit": dimension_fit,
-                "envelope": f"{machine.get('max_x', 0)}x{machine.get('max_y', 0)}x{machine.get('max_z', 0)}mm" if machine.get('max_x') else f"Ø{machine.get('max_diameter', 0)}x{machine.get('max_length', 0)}mm"
+                "weight_fit": weight_fit,
+                "envelope": f"{machine.get('max_x', 0)}x{machine.get('max_y', 0)}x{machine.get('max_z', 0)}mm" if machine.get('max_x') else f"Ø{machine.get('max_diameter', 0)}x{machine.get('max_length', 0)}mm",
+                "max_weight": machine_max_weight
             })
         
         # Only include vendor if they have at least one suitable machine
@@ -2362,8 +2523,12 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             # Base score from best machine (max 50)
             final_score = best_machine_score
             
-            # Experience bonus (max 20)
+            # Experience bonus (max 25)
             final_score += experience_score
+            
+            # Geometry compatibility bonus
+            if geometry_compatible:
+                final_score += 5
             
             # Vendor rating bonus (max 10)
             vendor_rating = vendor.get("rating", 0)
@@ -2389,6 +2554,8 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 "materials_match": materials_match,
                 "tolerance_capable": tolerance_capable,
                 "dimension_capable": dimension_capable,
+                "weight_capable": weight_capable,
+                "geometry_compatible": geometry_compatible,
                 "process_matches": list(set(process_matches))[:5],
                 "keyword_matches": keyword_matches[:5],
                 "experience_score": experience_score,
@@ -2396,7 +2563,8 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 "location": f"{vendor.get('city', '')}, {vendor.get('country', '')}",
                 "rating": vendor.get("rating", 0),
                 "total_jobs": vendor.get("total_jobs", 0),
-                "certifications": vendor.get("certifications", [])[:3]
+                "certifications": vendor.get("certifications", [])[:3],
+                "part_geometry": part_geometry
             })
     
     # Sort by score
