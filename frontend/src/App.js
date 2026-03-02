@@ -12,6 +12,7 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import BuyerDashboard from "./pages/BuyerDashboard";
 import BuyerRFQList from "./pages/BuyerRFQList";
 import BuyerQuotes from "./pages/BuyerQuotes";
+import BuyerProfile from "./pages/BuyerProfile";
 import VendorDashboard from "./pages/VendorDashboard";
 import VendorMatchedRFQs from "./pages/VendorMatchedRFQs";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -245,6 +246,11 @@ const AppRouter = () => {
       <Route path="/buyer/quotes" element={
         <ProtectedRoute allowedRoles={["buyer"]}>
           <BuyerQuotes />
+        </ProtectedRoute>
+      } />
+      <Route path="/buyer/profile" element={
+        <ProtectedRoute allowedRoles={["buyer"]}>
+          <BuyerProfile />
         </ProtectedRoute>
       } />
       <Route path="/buyer/rfq/new" element={

@@ -6,7 +6,7 @@ import NotificationBell from "../NotificationBell";
 import { 
   Factory, LayoutDashboard, FileText, Package, Settings, 
   LogOut, Menu, X, Wrench, Building2, Users, DollarSign,
-  ChevronDown, Bell, MessageSquare
+  ChevronDown, Bell, MessageSquare, User
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -48,6 +48,7 @@ const DashboardLayout = ({ children }) => {
     { path: "/buyer/rfqs", label: "My RFQs", icon: FileText },
     { path: "/buyer/quotes", label: "Received Quotes", icon: DollarSign },
     { path: "/buyer/rfq/new", label: "New RFQ", icon: FileText },
+    { path: "/buyer/profile", label: "My Profile", icon: User },
     { path: "/chat", label: "Messages", icon: MessageSquare, badge: unreadCount },
   ];
 
