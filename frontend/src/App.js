@@ -95,8 +95,15 @@ const AuthProvider = ({ children }) => {
     return response.data.user;
   };
 
-  const register = async (name, email, password, role) => {
-    const response = await api.post("/auth/register", { name, email, password, role });
+  const register = async (name, email, password, role, vendorDetails = {}) => {
+    const payload = { name, email, password, role };
+    
+    // Add vendor-specific fields if registering as a vendor
+    if (role === "vendor" && Object.keys(vendorDetails).length > 0) {
+      Object.assign(payload, vendorDetails);
+    }
+    
+    const response = await api.post("/auth/register", payload);
     localStorage.setItem("token", response.data.access_token);
     setUser(response.data.user);
     return response.data.user;

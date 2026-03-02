@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth, api } from "../App";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { toast } from "sonner";
 import { 
   Factory, Mail, Lock, User, ArrowRight, Building2, ShoppingCart, 
@@ -95,11 +96,46 @@ const RegisterPage = () => {
   const [companyName, setCompanyName] = useState("");
   const [tradeName, setTradeName] = useState("");
   const [address, setAddress] = useState("");
+  const [country, setCountry] = useState("India");
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [pincode, setPincode] = useState("");
   const [phone, setPhone] = useState("");
   const [gstinStatus, setGstinStatus] = useState("");
+  
+  // City suggestions based on country
+  const [availableCities, setAvailableCities] = useState([]);
+  const [loadingCities, setLoadingCities] = useState(false);
+  const [showCitySuggestions, setShowCitySuggestions] = useState(false);
+  
+  // Country options
+  const COUNTRY_OPTIONS = [
+    "India", "China", "Taiwan", "Japan", "South Korea", "Germany", 
+    "USA", "UK", "Italy", "Vietnam", "Thailand", "Malaysia", "Indonesia",
+    "Mexico", "Brazil"
+  ];
+  
+  // Fetch cities when country changes
+  useEffect(() => {
+    const fetchCities = async () => {
+      if (!country || role !== "vendor") return;
+      
+      setLoadingCities(true);
+      try {
+        const response = await api.get(`/locations/cities?countries=${encodeURIComponent(country)}`);
+        const cityData = response.data[country];
+        if (cityData?.cities) {
+          setAvailableCities(cityData.cities);
+        }
+      } catch (error) {
+        console.error("Failed to fetch cities:", error);
+      } finally {
+        setLoadingCities(false);
+      }
+    };
+
+    fetchCities();
+  }, [country, role]);
 
   const verifyGstin = async () => {
     if (!gstin || gstin.length !== 15) {
@@ -163,6 +199,7 @@ const RegisterPage = () => {
           company_name: companyName,
           trade_name: tradeName,
           address,
+          country,
           city,
           state,
           pincode,
@@ -175,6 +212,7 @@ const RegisterPage = () => {
         company_name: userData.company_name,
         trade_name: userData.trade_name,
         address: userData.address,
+        country: userData.country,
         city: userData.city,
         state: userData.state,
         pincode: userData.pincode,
@@ -347,12 +385,61 @@ const RegisterPage = () => {
                         />
                       </div>
                       <div>
+                        <Label className="text-xs text-slate-500">Country</Label>
+                        <Select value={country} onValueChange={setCountry}>
+                          <SelectTrigger className="h-10 text-sm">
+                            <SelectValue placeholder="Select country" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {COUNTRY_OPTIONS.map((c) => (
+                              <SelectItem key={c} value={c}>{c}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="relative">
                         <Label className="text-xs text-slate-500">City</Label>
                         <Input
                           value={city}
-                          onChange={(e) => setCity(e.target.value)}
+                          onChange={(e) => {
+                            setCity(e.target.value);
+                            setShowCitySuggestions(true);
+                          }}
+                          onFocus={() => setShowCitySuggestions(true)}
+                          onBlur={() => setTimeout(() => setShowCitySuggestions(false), 200)}
                           className="h-10 text-sm"
+                          placeholder={loadingCities ? "Loading cities..." : "Type or select city"}
                         />
+                        {/* City suggestions dropdown */}
+                        {showCitySuggestions && availableCities.length > 0 && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                            {availableCities
+                              .filter(c => !city || c.name.toLowerCase().includes(city.toLowerCase()))
+                              .slice(0, 10)
+                              .map((cityOption) => (
+                                <button
+                                  key={cityOption.name}
+                                  type="button"
+                                  className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-50 flex items-center justify-between ${
+                                    cityOption.has_vendors ? "bg-purple-50" : ""
+                                  }`}
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    setCity(cityOption.name);
+                                    setShowCitySuggestions(false);
+                                  }}
+                                >
+                                  <span>{cityOption.name}</span>
+                                  {cityOption.has_vendors && (
+                                    <span className="text-xs text-purple-600 flex items-center gap-1">
+                                      <Building2 className="w-3 h-3" />
+                                      {cityOption.vendor_count} vendors
+                                    </span>
+                                  )}
+                                </button>
+                              ))}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <Label className="text-xs text-slate-500">State</Label>

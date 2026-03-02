@@ -410,6 +410,16 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    # Optional vendor-specific fields
+    gstin: Optional[str] = None
+    company_name: Optional[str] = None
+    trade_name: Optional[str] = None
+    address: Optional[str] = None
+    country: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    pincode: Optional[str] = None
+    phone: Optional[str] = None
     
     @field_validator('password')
     @classmethod
@@ -958,6 +968,43 @@ async def register(user_data: UserCreate, request: Request):
     # Log successful registration
     logger.info(f"New user registered: {email} (ID: {user_id}) from IP: {client_ip}")
     
+    # If vendor role with company details, create vendor profile
+    vendor_company_name = None
+    if user_data.role == "vendor" and user_data.company_name:
+        vendor_id = f"vendor_{uuid.uuid4().hex[:12]}"
+        vendor_doc = {
+            "vendor_id": vendor_id,
+            "user_id": user_id,
+            "company_name": user_data.company_name,
+            "trade_name": user_data.trade_name or "",
+            "gstin": user_data.gstin or "",
+            "address": user_data.address or "",
+            "country": user_data.country or "India",
+            "city": user_data.city or "",
+            "state": user_data.state or "",
+            "pincode": user_data.pincode or "",
+            "phone": user_data.phone or "",
+            "description": "",
+            "website": "",
+            "certifications": [],
+            "industries": [],
+            "materials_handled": [],
+            "is_approved": False,
+            "rating": 0,
+            "total_jobs": 0,
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.vendors.insert_one(vendor_doc)
+        
+        # Update user document with company name
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"company_name": user_data.company_name}}
+        )
+        vendor_company_name = user_data.company_name
+        logger.info(f"Vendor profile created for {email} (Vendor ID: {vendor_id})")
+    
     token = create_jwt_token(user_id, email, user_data.role)
     
     return TokenResponse(
@@ -968,7 +1015,7 @@ async def register(user_data: UserCreate, request: Request):
             name=name,
             role=user_data.role,
             picture=None,
-            company_name=None,
+            company_name=vendor_company_name,
             created_at=user_doc["created_at"]
         )
     )
@@ -1859,6 +1906,164 @@ async def verify_gstin(gstin: str):
         "pan": pan,
         "note": "Basic info extracted from GSTIN. Full details not available."
     }
+
+# ============== LOCATION/CITIES ROUTES ==============
+
+# Major manufacturing cities by country
+MAJOR_CITIES_BY_COUNTRY = {
+    "India": [
+        "Mumbai", "Delhi", "Bangalore", "Chennai", "Hyderabad", "Pune", "Ahmedabad",
+        "Kolkata", "Coimbatore", "Ludhiana", "Faridabad", "Gurgaon", "Noida",
+        "Jamshedpur", "Indore", "Nashik", "Vadodara", "Rajkot", "Surat", "Haora"
+    ],
+    "China": [
+        "Shanghai", "Shenzhen", "Guangzhou", "Beijing", "Dongguan", "Suzhou",
+        "Hangzhou", "Ningbo", "Tianjin", "Wuhan", "Chengdu", "Foshan", "Xiamen"
+    ],
+    "USA": [
+        "Detroit", "Chicago", "Los Angeles", "Houston", "Cleveland", "Phoenix",
+        "San Jose", "Milwaukee", "Dallas", "Atlanta", "Pittsburgh", "Seattle"
+    ],
+    "Germany": [
+        "Stuttgart", "Munich", "Hamburg", "Berlin", "Dusseldorf", "Frankfurt",
+        "Cologne", "Wolfsburg", "Nuremberg", "Leipzig", "Dresden"
+    ],
+    "Japan": [
+        "Tokyo", "Osaka", "Nagoya", "Yokohama", "Kobe", "Hiroshima",
+        "Fukuoka", "Kawasaki", "Saitama", "Sendai"
+    ],
+    "South Korea": [
+        "Seoul", "Busan", "Incheon", "Daegu", "Ulsan", "Changwon", "Gwangju"
+    ],
+    "Taiwan": [
+        "Taipei", "Taichung", "Kaohsiung", "Taoyuan", "Tainan", "Hsinchu"
+    ],
+    "Vietnam": [
+        "Ho Chi Minh City", "Hanoi", "Da Nang", "Hai Phong", "Bien Hoa", "Binh Duong"
+    ],
+    "Thailand": [
+        "Bangkok", "Rayong", "Chonburi", "Samut Prakan", "Chiang Mai"
+    ],
+    "UK": [
+        "Birmingham", "Manchester", "Sheffield", "Leeds", "Glasgow", "Bristol", "London"
+    ],
+    "Mexico": [
+        "Monterrey", "Mexico City", "Guadalajara", "Queretaro", "Tijuana", "Saltillo"
+    ],
+    "Brazil": [
+        "Sao Paulo", "Rio de Janeiro", "Belo Horizonte", "Curitiba", "Porto Alegre"
+    ],
+    "Italy": [
+        "Milan", "Turin", "Bologna", "Brescia", "Bergamo", "Modena"
+    ]
+}
+
+@api_router.get("/locations/cities")
+async def get_cities_by_countries(countries: str = None):
+    """
+    Get cities for given countries with vendor presence highlighted.
+    Returns hybrid list: vendor cities first, then major manufacturing cities.
+    
+    Query params:
+    - countries: Comma-separated list of country names (e.g., "India,China")
+    """
+    result = {}
+    
+    # Parse countries from query string
+    country_list = []
+    if countries:
+        country_list = [c.strip() for c in countries.split(",") if c.strip()]
+    
+    if not country_list:
+        # Return all available countries with their cities
+        country_list = list(MAJOR_CITIES_BY_COUNTRY.keys())
+    
+    for country in country_list:
+        # Get vendors in this country
+        vendors_in_country = await db.vendors.find(
+            {"country": {"$regex": f"^{country}$", "$options": "i"}},
+            {"_id": 0, "city": 1, "company_name": 1}
+        ).to_list(100)
+        
+        # Extract unique vendor cities
+        vendor_cities = {}
+        for v in vendors_in_country:
+            city = v.get("city", "").strip()
+            if city:
+                if city not in vendor_cities:
+                    vendor_cities[city] = {"count": 0, "vendors": []}
+                vendor_cities[city]["count"] += 1
+                vendor_cities[city]["vendors"].append(v.get("company_name", "Unknown"))
+        
+        # Get major cities for this country
+        major_cities = MAJOR_CITIES_BY_COUNTRY.get(country, [])
+        
+        # Build city list with vendor presence info
+        cities = []
+        added_cities = set()
+        
+        # First, add cities with vendors (highlighted)
+        for city, info in sorted(vendor_cities.items(), key=lambda x: -x[1]["count"]):
+            cities.append({
+                "name": city,
+                "has_vendors": True,
+                "vendor_count": info["count"],
+                "is_major": city in major_cities
+            })
+            added_cities.add(city.lower())
+        
+        # Then add major cities without vendors
+        for city in major_cities:
+            if city.lower() not in added_cities:
+                cities.append({
+                    "name": city,
+                    "has_vendors": False,
+                    "vendor_count": 0,
+                    "is_major": True
+                })
+                added_cities.add(city.lower())
+        
+        result[country] = {
+            "cities": cities,
+            "vendor_city_count": len(vendor_cities),
+            "total_cities": len(cities)
+        }
+    
+    return result
+
+@api_router.get("/locations/countries")
+async def get_available_countries():
+    """
+    Get list of countries with vendor counts.
+    """
+    # Get unique countries from vendors
+    pipeline = [
+        {"$match": {"country": {"$exists": True, "$ne": ""}}},
+        {"$group": {"_id": "$country", "vendor_count": {"$sum": 1}}},
+        {"$sort": {"vendor_count": -1}}
+    ]
+    
+    vendor_countries = await db.vendors.aggregate(pipeline).to_list(50)
+    
+    # Merge with predefined countries
+    all_countries = set(MAJOR_CITIES_BY_COUNTRY.keys())
+    for vc in vendor_countries:
+        all_countries.add(vc["_id"])
+    
+    result = []
+    for country in sorted(all_countries):
+        vendor_info = next((vc for vc in vendor_countries if vc["_id"] == country), None)
+        result.append({
+            "name": country,
+            "has_vendors": vendor_info is not None,
+            "vendor_count": vendor_info["vendor_count"] if vendor_info else 0,
+            "has_major_cities": country in MAJOR_CITIES_BY_COUNTRY
+        })
+    
+    # Sort: countries with vendors first, then alphabetically
+    result.sort(key=lambda x: (-x["vendor_count"], x["name"]))
+    
+    return {"countries": result}
 
 # ============== CHAT/MESSAGING ROUTES ==============
 
