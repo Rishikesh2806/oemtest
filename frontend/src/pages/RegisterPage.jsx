@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth, api } from "../App";
 import { Button } from "../components/ui/button";
@@ -7,18 +7,86 @@ import { Label } from "../components/ui/label";
 import { toast } from "sonner";
 import { 
   Factory, Mail, Lock, User, ArrowRight, Building2, ShoppingCart, 
-  Search, Loader2, CheckCircle2, MapPin, Phone, Globe, FileText
+  Search, Loader2, CheckCircle2, MapPin, Phone, Globe, FileText,
+  Shield, Eye, EyeOff, AlertCircle
 } from "lucide-react";
+
+// Password strength validation
+const validatePassword = (password) => {
+  const requirements = [
+    { label: "At least 8 characters", met: password.length >= 8 },
+    { label: "One uppercase letter", met: /[A-Z]/.test(password) },
+    { label: "One lowercase letter", met: /[a-z]/.test(password) },
+    { label: "One number", met: /\d/.test(password) },
+    { label: "One special character (!@#$%^&*)", met: /[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/`~]/.test(password) }
+  ];
+  const strength = requirements.filter(r => r.met).length;
+  return { requirements, strength, isValid: strength === 5 };
+};
+
+const PasswordStrengthIndicator = ({ password }) => {
+  const { requirements, strength } = validatePassword(password);
+  
+  const getStrengthColor = () => {
+    if (strength <= 2) return "bg-red-500";
+    if (strength <= 3) return "bg-yellow-500";
+    if (strength <= 4) return "bg-blue-500";
+    return "bg-green-500";
+  };
+  
+  const getStrengthText = () => {
+    if (strength <= 2) return "Weak";
+    if (strength <= 3) return "Fair";
+    if (strength <= 4) return "Good";
+    return "Strong";
+  };
+
+  if (!password) return null;
+  
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="flex items-center gap-2">
+        <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+          <div 
+            className={`h-full transition-all duration-300 ${getStrengthColor()}`}
+            style={{ width: `${(strength / 5) * 100}%` }}
+          />
+        </div>
+        <span className={`text-xs font-medium ${strength === 5 ? 'text-green-600' : 'text-slate-500'}`}>
+          {getStrengthText()}
+        </span>
+      </div>
+      <div className="grid grid-cols-1 gap-1">
+        {requirements.map((req, idx) => (
+          <div key={idx} className="flex items-center gap-1.5 text-xs">
+            {req.met ? (
+              <CheckCircle2 className="w-3 h-3 text-green-500" />
+            ) : (
+              <AlertCircle className="w-3 h-3 text-slate-300" />
+            )}
+            <span className={req.met ? "text-green-600" : "text-slate-400"}>
+              {req.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const RegisterPage = () => {
   const [searchParams] = useSearchParams();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState(searchParams.get("role") || "buyer");
   const [loading, setLoading] = useState(false);
   const { register, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
+  
+  // Password validation
+  const passwordValidation = useMemo(() => validatePassword(password), [password]);
 
   // Vendor-specific fields
   const [gstin, setGstin] = useState("");
@@ -74,6 +142,13 @@ const RegisterPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validate password strength before submission
+    if (!passwordValidation.isValid) {
+      toast.error("Please ensure your password meets all requirements");
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -350,29 +425,39 @@ const RegisterPage = () => {
             </div>
 
             <div>
-              <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-slate-500">
+              <Label htmlFor="password" className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                <Shield className="w-3 h-3" />
                 Password
               </Label>
               <div className="relative mt-1">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <Input
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="pl-10 h-12 bg-white border-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                  placeholder="Create a strong password"
+                  className={`pl-10 pr-10 h-12 bg-white border-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent ${
+                    password && !passwordValidation.isValid ? "border-yellow-400" : ""
+                  } ${password && passwordValidation.isValid ? "border-green-400" : ""}`}
                   data-testid="register-password-input"
                   required
-                  minLength={6}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                </button>
               </div>
+              <PasswordStrengthIndicator password={password} />
             </div>
 
             <Button
               type="submit"
-              disabled={loading}
-              className="w-full h-12 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 text-white font-bold"
+              disabled={loading || !passwordValidation.isValid}
+              className="w-full h-12 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 text-white font-bold disabled:opacity-50"
               data-testid="register-submit-btn"
             >
               {loading ? (

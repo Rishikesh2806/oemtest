@@ -6,7 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, EmailStr, ConfigDict
+from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_validator
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -17,6 +17,11 @@ import aiofiles
 import httpx
 import asyncio
 import resend
+import re
+import secrets
+import hashlib
+from collections import defaultdict
+import time
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -30,6 +35,118 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ.get('JWT_SECRET_KEY', 'offloadex_secret_key')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 168  # 7 days
+
+# ============== SECURITY SETTINGS ==============
+# Rate limiting configuration
+RATE_LIMIT_WINDOW = 300  # 5 minutes
+MAX_LOGIN_ATTEMPTS = 5  # Max failed login attempts before lockout
+LOCKOUT_DURATION = 900  # 15 minutes lockout
+MAX_REGISTER_ATTEMPTS = 3  # Max registration attempts per IP per window
+
+# Password requirements
+MIN_PASSWORD_LENGTH = 8
+REQUIRE_UPPERCASE = True
+REQUIRE_LOWERCASE = True
+REQUIRE_DIGIT = True
+REQUIRE_SPECIAL = True
+
+# In-memory rate limiting storage (use Redis in production)
+login_attempts = defaultdict(list)  # {email: [(timestamp, success), ...]}
+register_attempts = defaultdict(list)  # {ip: [timestamp, ...]}
+locked_accounts = {}  # {email: unlock_timestamp}
+
+# Security utility functions
+def is_account_locked(email: str) -> bool:
+    """Check if account is locked due to too many failed attempts"""
+    if email in locked_accounts:
+        if time.time() < locked_accounts[email]:
+            return True
+        else:
+            del locked_accounts[email]
+    return False
+
+def get_lockout_remaining(email: str) -> int:
+    """Get remaining lockout time in seconds"""
+    if email in locked_accounts:
+        remaining = int(locked_accounts[email] - time.time())
+        return max(0, remaining)
+    return 0
+
+def record_login_attempt(email: str, success: bool):
+    """Record a login attempt for rate limiting"""
+    current_time = time.time()
+    # Clean old attempts
+    login_attempts[email] = [
+        (ts, s) for ts, s in login_attempts[email] 
+        if current_time - ts < RATE_LIMIT_WINDOW
+    ]
+    login_attempts[email].append((current_time, success))
+    
+    # Check for lockout
+    failed_attempts = [a for a in login_attempts[email] if not a[1]]
+    if len(failed_attempts) >= MAX_LOGIN_ATTEMPTS:
+        locked_accounts[email] = current_time + LOCKOUT_DURATION
+        login_attempts[email] = []  # Reset attempts after lockout
+
+def check_registration_rate_limit(ip: str) -> bool:
+    """Check if IP has exceeded registration rate limit"""
+    current_time = time.time()
+    register_attempts[ip] = [
+        ts for ts in register_attempts[ip] 
+        if current_time - ts < RATE_LIMIT_WINDOW
+    ]
+    return len(register_attempts[ip]) < MAX_REGISTER_ATTEMPTS
+
+def record_registration_attempt(ip: str):
+    """Record a registration attempt"""
+    register_attempts[ip].append(time.time())
+
+def validate_password_strength(password: str) -> tuple[bool, str]:
+    """Validate password meets security requirements"""
+    errors = []
+    
+    if len(password) < MIN_PASSWORD_LENGTH:
+        errors.append(f"at least {MIN_PASSWORD_LENGTH} characters")
+    
+    if REQUIRE_UPPERCASE and not re.search(r'[A-Z]', password):
+        errors.append("one uppercase letter")
+    
+    if REQUIRE_LOWERCASE and not re.search(r'[a-z]', password):
+        errors.append("one lowercase letter")
+    
+    if REQUIRE_DIGIT and not re.search(r'\d', password):
+        errors.append("one digit")
+    
+    if REQUIRE_SPECIAL and not re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\\/`~]', password):
+        errors.append("one special character (!@#$%^&*)")
+    
+    if errors:
+        return False, f"Password must contain: {', '.join(errors)}"
+    
+    # Check for common weak patterns
+    weak_patterns = ['password', '123456', 'qwerty', 'admin', 'letmein', 'welcome']
+    if any(pattern in password.lower() for pattern in weak_patterns):
+        return False, "Password contains common weak patterns"
+    
+    return True, "Password is strong"
+
+def sanitize_input(text: str) -> str:
+    """Sanitize user input to prevent injection attacks"""
+    if not text:
+        return text
+    # Remove potentially dangerous characters for NoSQL injection
+    dangerous_chars = ['$', '{', '}']
+    for char in dangerous_chars:
+        text = text.replace(char, '')
+    return text.strip()
+
+def generate_secure_token(length: int = 32) -> str:
+    """Generate a cryptographically secure random token"""
+    return secrets.token_urlsafe(length)
+
+def hash_token(token: str) -> str:
+    """Hash a token for secure storage"""
+    return hashlib.sha256(token.encode()).hexdigest()
 
 # Create the main app
 app = FastAPI(title="OEMLinker API", version="1.0.0")
@@ -248,6 +365,32 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v):
+        is_valid, message = validate_password_strength(v)
+        if not is_valid:
+            raise ValueError(message)
+        return v
+    
+    @field_validator('email')
+    @classmethod
+    def validate_email_format(cls, v):
+        # Additional email validation
+        if not re.match(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', v):
+            raise ValueError('Invalid email format')
+        return v.lower().strip()
+    
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v):
+        v = sanitize_input(v)
+        if len(v) < 2:
+            raise ValueError('Name must be at least 2 characters')
+        if len(v) > 100:
+            raise ValueError('Name must be less than 100 characters')
+        return v
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -679,33 +822,68 @@ async def create_notification(
 # ============== AUTH ROUTES ==============
 
 @api_router.post("/auth/register", response_model=TokenResponse)
-async def register(user_data: UserCreate):
-    existing = await db.users.find_one({"email": user_data.email}, {"_id": 0})
+async def register(user_data: UserCreate, request: Request):
+    # Get client IP for rate limiting
+    client_ip = request.client.host if request.client else "unknown"
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
+    
+    # Check registration rate limit
+    if not check_registration_rate_limit(client_ip):
+        logger.warning(f"Registration rate limit exceeded for IP: {client_ip}")
+        raise HTTPException(
+            status_code=429, 
+            detail="Too many registration attempts. Please try again in 5 minutes."
+        )
+    
+    # Record this registration attempt
+    record_registration_attempt(client_ip)
+    
+    # Sanitize and normalize email
+    email = sanitize_input(user_data.email.lower().strip())
+    name = sanitize_input(user_data.name)
+    
+    # Check if email already exists
+    existing = await db.users.find_one({"email": email}, {"_id": 0})
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
     user_id = f"user_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    
     user_doc = {
         "user_id": user_id,
-        "email": user_data.email,
-        "name": user_data.name,
+        "email": email,
+        "name": name,
         "role": user_data.role,
         "password_hash": hash_password(user_data.password),
         "picture": None,
         "company_name": None,
-        "created_at": datetime.now(timezone.utc).isoformat()
+        "email_verified": False,
+        "created_at": now,
+        "last_login": now,
+        "login_count": 1,
+        "failed_login_attempts": 0,
+        "security_settings": {
+            "two_factor_enabled": False,
+            "password_changed_at": now
+        }
     }
     
     await db.users.insert_one(user_doc)
     
-    token = create_jwt_token(user_id, user_data.email, user_data.role)
+    # Log successful registration
+    logger.info(f"New user registered: {email} (ID: {user_id}) from IP: {client_ip}")
+    
+    token = create_jwt_token(user_id, email, user_data.role)
     
     return TokenResponse(
         access_token=token,
         user=UserResponse(
             user_id=user_id,
-            email=user_data.email,
-            name=user_data.name,
+            email=email,
+            name=name,
             role=user_data.role,
             picture=None,
             company_name=None,
@@ -714,13 +892,65 @@ async def register(user_data: UserCreate):
     )
 
 @api_router.post("/auth/login", response_model=TokenResponse)
-async def login(login_data: LoginRequest):
-    user = await db.users.find_one({"email": login_data.email}, {"_id": 0})
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+async def login(login_data: LoginRequest, request: Request):
+    # Get client IP for logging
+    client_ip = request.client.host if request.client else "unknown"
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if forwarded_for:
+        client_ip = forwarded_for.split(",")[0].strip()
     
+    # Sanitize email input
+    email = sanitize_input(login_data.email.lower().strip())
+    
+    # Check if account is locked
+    if is_account_locked(email):
+        remaining = get_lockout_remaining(email)
+        logger.warning(f"Login attempt on locked account: {email} from IP: {client_ip}")
+        raise HTTPException(
+            status_code=423, 
+            detail=f"Account temporarily locked due to too many failed attempts. Try again in {remaining // 60} minutes."
+        )
+    
+    # Find user
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    
+    if not user:
+        # Record failed attempt (use email even if not found to prevent enumeration)
+        record_login_attempt(email, False)
+        logger.warning(f"Failed login attempt for non-existent email: {email} from IP: {client_ip}")
+        # Use same error message to prevent user enumeration
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # Verify password
     if not verify_password(login_data.password, user.get("password_hash", "")):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        record_login_attempt(email, False)
+        
+        # Update failed attempts in DB
+        await db.users.update_one(
+            {"email": email},
+            {"$inc": {"failed_login_attempts": 1}}
+        )
+        
+        logger.warning(f"Failed login attempt for: {email} from IP: {client_ip}")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    
+    # Successful login - record and reset failed attempts
+    record_login_attempt(email, True)
+    
+    # Update user login info
+    await db.users.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "last_login": datetime.now(timezone.utc).isoformat(),
+                "last_login_ip": client_ip,
+                "failed_login_attempts": 0
+            },
+            "$inc": {"login_count": 1}
+        }
+    )
+    
+    logger.info(f"Successful login: {email} from IP: {client_ip}")
     
     token = create_jwt_token(user["user_id"], user["email"], user["role"])
     
@@ -837,6 +1067,176 @@ async def logout(request: Request, response: Response):
         await db.user_sessions.delete_one({"session_token": token})
     response.delete_cookie("session_token", path="/")
     return {"message": "Logged out successfully"}
+
+# ============== PASSWORD SECURITY ENDPOINTS ==============
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+    
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, v):
+        is_valid, message = validate_password_strength(v)
+        if not is_valid:
+            raise ValueError(message)
+        return v
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str
+    
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, v):
+        is_valid, message = validate_password_strength(v)
+        if not is_valid:
+            raise ValueError(message)
+        return v
+
+@api_router.post("/auth/change-password")
+async def change_password(
+    password_data: PasswordChangeRequest, 
+    user: dict = Depends(get_current_user)
+):
+    """Change password for authenticated user"""
+    # Verify current password
+    db_user = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if not verify_password(password_data.current_password, db_user.get("password_hash", "")):
+        logger.warning(f"Failed password change attempt for user: {user['email']}")
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    # Check new password is different
+    if password_data.current_password == password_data.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from current password")
+    
+    # Update password
+    now = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {
+            "$set": {
+                "password_hash": hash_password(password_data.new_password),
+                "security_settings.password_changed_at": now
+            }
+        }
+    )
+    
+    # Invalidate all existing sessions except current (force re-login on other devices)
+    # This is a security measure after password change
+    
+    logger.info(f"Password changed successfully for user: {user['email']}")
+    return {"message": "Password changed successfully"}
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(reset_request: PasswordResetRequest, request: Request):
+    """Request password reset email"""
+    client_ip = request.client.host if request.client else "unknown"
+    email = sanitize_input(reset_request.email.lower().strip())
+    
+    # Always return success to prevent email enumeration
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    
+    if user:
+        # Generate secure reset token
+        reset_token = generate_secure_token(32)
+        token_hash = hash_token(reset_token)
+        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+        
+        # Store reset token in DB
+        await db.password_resets.delete_many({"email": email})  # Remove old tokens
+        await db.password_resets.insert_one({
+            "email": email,
+            "token_hash": token_hash,
+            "expires_at": expires_at.isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "used": False
+        })
+        
+        # Send reset email
+        reset_link = f"https://oemlinker.com/reset-password?token={reset_token}"
+        
+        email_html = f'''
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #1e40af;">Password Reset Request</h2>
+            <p>Hello {user.get("name", "User")},</p>
+            <p>We received a request to reset your password for your OEMLinker account.</p>
+            <p>Click the button below to reset your password. This link will expire in 1 hour.</p>
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{reset_link}" style="background-color: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset Password</a>
+            </div>
+            <p style="color: #666; font-size: 14px;">If you didn't request this, please ignore this email or contact support if you have concerns.</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="color: #999; font-size: 12px;">OEMLinker - AI-Powered Manufacturing Marketplace</p>
+        </div>
+        '''
+        
+        asyncio.create_task(send_email_async(email, "Reset Your OEMLinker Password", email_html))
+        logger.info(f"Password reset requested for: {email} from IP: {client_ip}")
+    else:
+        logger.warning(f"Password reset requested for non-existent email: {email} from IP: {client_ip}")
+    
+    # Always return success to prevent enumeration
+    return {"message": "If an account exists with that email, you will receive a password reset link shortly."}
+
+@api_router.post("/auth/reset-password")
+async def reset_password(reset_data: PasswordResetConfirm, request: Request):
+    """Reset password using token from email"""
+    client_ip = request.client.host if request.client else "unknown"
+    token_hash = hash_token(reset_data.token)
+    
+    # Find valid reset token
+    reset_record = await db.password_resets.find_one({
+        "token_hash": token_hash,
+        "used": False
+    }, {"_id": 0})
+    
+    if not reset_record:
+        logger.warning(f"Invalid password reset token attempt from IP: {client_ip}")
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token")
+    
+    # Check expiration
+    expires_at = datetime.fromisoformat(reset_record["expires_at"].replace('Z', '+00:00'))
+    if datetime.now(timezone.utc) > expires_at:
+        await db.password_resets.delete_one({"token_hash": token_hash})
+        raise HTTPException(status_code=400, detail="Reset token has expired. Please request a new one.")
+    
+    email = reset_record["email"]
+    
+    # Update password
+    now = datetime.now(timezone.utc).isoformat()
+    result = await db.users.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "password_hash": hash_password(reset_data.new_password),
+                "failed_login_attempts": 0,
+                "security_settings.password_changed_at": now
+            }
+        }
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Mark token as used
+    await db.password_resets.update_one(
+        {"token_hash": token_hash},
+        {"$set": {"used": True}}
+    )
+    
+    # Remove from locked accounts if locked
+    if email in locked_accounts:
+        del locked_accounts[email]
+    
+    logger.info(f"Password reset successfully for: {email} from IP: {client_ip}")
+    return {"message": "Password has been reset successfully. You can now log in with your new password."}
 
 @api_router.put("/auth/role")
 async def update_role(request: Request, user: dict = Depends(get_current_user)):
