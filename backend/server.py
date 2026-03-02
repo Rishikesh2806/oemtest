@@ -1627,23 +1627,74 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             system_message="""You are an expert manufacturing engineer analyzing engineering drawings. 
             CAREFULLY examine every detail in the drawing including dimension callouts, tolerances, notes, and title blocks.
             
+            FIRST, identify the part geometry type, then extract appropriate dimensions.
+            
             Extract and provide the following information in JSON format:
             {
-                "overall_dimensions": {"length": float, "width": float, "height": float, "unit": "mm"},
+                "part_geometry": string - one of: "rectangular", "cylindrical", "circular_flat", "conical", "spherical", "complex", "sheet_metal", "tube_pipe",
+                "overall_dimensions": {
+                    // For RECTANGULAR parts (blocks, brackets, housings):
+                    "length": float or null,
+                    "width": float or null, 
+                    "height": float or null,
+                    
+                    // For CYLINDRICAL parts (shafts, pins, bushings):
+                    "diameter": float or null,
+                    "outer_diameter": float or null,
+                    "inner_diameter": float or null,
+                    "length": float or null,
+                    
+                    // For CIRCULAR FLAT parts (discs, flanges, plates):
+                    "diameter": float or null,
+                    "thickness": float or null,
+                    "bore_diameter": float or null,
+                    "pcd": float or null,  // Pitch Circle Diameter
+                    
+                    // For CONICAL parts:
+                    "large_diameter": float or null,
+                    "small_diameter": float or null,
+                    "length": float or null,
+                    "taper_angle": float or null,
+                    
+                    // For TUBE/PIPE:
+                    "outer_diameter": float or null,
+                    "inner_diameter": float or null,
+                    "wall_thickness": float or null,
+                    "length": float or null,
+                    
+                    // For SHEET METAL:
+                    "length": float or null,
+                    "width": float or null,
+                    "thickness": float or null,
+                    "bend_radius": float or null,
+                    "bend_angle": float or null,
+                    
+                    "unit": "mm"
+                },
                 "critical_tolerances": [{"feature": string, "tolerance": float, "unit": "mm"}],
-                "holes": [{"diameter": float, "depth": float or null for THRU, "quantity": int}],
-                "threads": [{"type": string, "size": string, "quantity": int}],
+                "holes": [{"diameter": float, "depth": float or null for THRU, "quantity": int, "type": "plain/threaded/counterbored/countersunk"}],
+                "threads": [{"type": string, "size": string, "pitch": float or null, "quantity": int}],
+                "radii_fillets": [{"radius": float, "location": string}],
+                "angles": [{"angle": float, "feature": string}],
                 "material_specs": string or null,
                 "surface_finish": string or null,
                 "recommended_processes": [string] - BE SPECIFIC based on features seen,
                 "complexity_score": int (1-10),
                 "estimated_machining_time_hours": float,
                 "special_requirements": [string],
-                "max_dimension_mm": float - the largest dimension for machine envelope matching
+                "max_dimension_mm": float - the largest dimension for machine envelope matching,
+                "max_diameter_mm": float or null - for rotational parts
             }
             
-            IMPORTANT: Read ALL dimension callouts carefully. Look at the title block for material specs.
-            For recommended_processes, list SPECIFIC operations needed (e.g., "5-axis milling for complex contour", "Wire EDM for tight slots")."""
+            IMPORTANT RULES:
+            1. Read ALL dimension callouts carefully from the drawing
+            2. Identify the PRIMARY geometry type first
+            3. Only populate dimension fields relevant to that geometry
+            4. For cylindrical/turned parts, ALWAYS extract diameter and length
+            5. For flat circular parts (flanges, discs), extract diameter and thickness
+            6. Look for angles, tapers, and radii - these are critical for machining
+            7. Check title block for material specs
+            8. For recommended_processes, list SPECIFIC operations (e.g., "CNC Turning", "5-axis milling", "Wire EDM")"""
         ).with_model("openai", "gpt-5.2")
         
         # Create image content for vision analysis
@@ -1694,23 +1745,43 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             }}
         )
         
-        # Check if dimensions are missing
+        # Check if dimensions are missing based on geometry type
         dims = ai_analysis.get("overall_dimensions", {})
-        dimensions_missing = not all([
-            dims.get("length") and dims.get("length") > 0,
-            dims.get("width") and dims.get("width") > 0,
-            dims.get("height") and dims.get("height") > 0
-        ])
+        part_geometry = ai_analysis.get("part_geometry", "rectangular")
+        
+        # Define required dimensions for each geometry type
+        geometry_requirements = {
+            "rectangular": ["length", "width", "height"],
+            "cylindrical": ["diameter", "length"],
+            "circular_flat": ["diameter", "thickness"],
+            "conical": ["large_diameter", "small_diameter", "length"],
+            "spherical": ["diameter"],
+            "tube_pipe": ["outer_diameter", "inner_diameter", "length"],
+            "sheet_metal": ["length", "width", "thickness"],
+            "complex": ["max_dimension_mm"]  # For complex parts, just need max dimension
+        }
+        
+        required_dims = geometry_requirements.get(part_geometry, ["length", "width", "height"])
+        
+        # Check which required dimensions are missing
+        missing_fields = {}
+        has_all_required = True
+        for dim in required_dims:
+            value = dims.get(dim) or ai_analysis.get(dim)
+            is_missing = not (value and value > 0)
+            missing_fields[dim] = is_missing
+            if is_missing:
+                has_all_required = False
+        
+        dimensions_missing = not has_all_required
         
         return {
             "message": "Analysis complete", 
             "analysis": ai_analysis,
+            "part_geometry": part_geometry,
             "dimensions_missing": dimensions_missing,
-            "missing_fields": {
-                "length": not (dims.get("length") and dims.get("length") > 0),
-                "width": not (dims.get("width") and dims.get("width") > 0),
-                "height": not (dims.get("height") and dims.get("height") > 0)
-            }
+            "required_dimensions": required_dims,
+            "missing_fields": missing_fields
         }
         
     except Exception as e:
@@ -1742,17 +1813,34 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
         return {
             "message": "Analysis complete with fallback", 
             "analysis": fallback_analysis,
+            "part_geometry": "unknown",
             "dimensions_missing": True,
+            "required_dimensions": ["length", "width", "height"],
             "missing_fields": {"length": True, "width": True, "height": True}
         }
 
 # ============== MANUAL DIMENSIONS UPDATE ==============
 
 class ManualDimensions(BaseModel):
+    # Rectangular dimensions
     length: Optional[float] = None
     width: Optional[float] = None
     height: Optional[float] = None
+    # Cylindrical/Circular dimensions
+    diameter: Optional[float] = None
+    outer_diameter: Optional[float] = None
+    inner_diameter: Optional[float] = None
+    thickness: Optional[float] = None
+    # Conical dimensions
+    large_diameter: Optional[float] = None
+    small_diameter: Optional[float] = None
+    taper_angle: Optional[float] = None
+    # Sheet metal
+    bend_radius: Optional[float] = None
+    bend_angle: Optional[float] = None
+    # Common
     weight: Optional[float] = None  # Optional weight in kg
+    part_geometry: Optional[str] = None  # Allow changing geometry type
 
 @api_router.put("/rfqs/{rfq_id}/dimensions")
 async def update_rfq_dimensions(
@@ -1769,26 +1857,50 @@ async def update_rfq_dimensions(
     ai_analysis = rfq.get("ai_analysis") or {}
     overall_dimensions = ai_analysis.get("overall_dimensions") or {}
     
-    # Update dimensions with provided values (keep existing if not provided)
-    if dimensions.length is not None:
-        overall_dimensions["length"] = dimensions.length
-    if dimensions.width is not None:
-        overall_dimensions["width"] = dimensions.width
-    if dimensions.height is not None:
-        overall_dimensions["height"] = dimensions.height
+    # Update part geometry if provided
+    if dimensions.part_geometry:
+        ai_analysis["part_geometry"] = dimensions.part_geometry
+    
+    # Update ALL dimension fields with provided values
+    dimension_fields = [
+        "length", "width", "height",  # Rectangular
+        "diameter", "outer_diameter", "inner_diameter", "thickness",  # Cylindrical/Circular
+        "large_diameter", "small_diameter", "taper_angle",  # Conical
+        "bend_radius", "bend_angle"  # Sheet metal
+    ]
+    
+    for field in dimension_fields:
+        value = getattr(dimensions, field, None)
+        if value is not None:
+            overall_dimensions[field] = value
+    
     overall_dimensions["unit"] = "mm"
     
     # Add weight if provided
     if dimensions.weight is not None:
         ai_analysis["weight_kg"] = dimensions.weight
     
-    # Calculate max dimension for envelope matching
+    # Calculate max dimension for envelope matching (consider all dimension types)
     dim_values = [
         overall_dimensions.get("length") or 0,
         overall_dimensions.get("width") or 0,
-        overall_dimensions.get("height") or 0
+        overall_dimensions.get("height") or 0,
+        overall_dimensions.get("diameter") or 0,
+        overall_dimensions.get("outer_diameter") or 0,
+        overall_dimensions.get("large_diameter") or 0,
+        overall_dimensions.get("thickness") or 0
     ]
     ai_analysis["max_dimension_mm"] = max(dim_values) if any(dim_values) else None
+    
+    # Also set max_diameter_mm for rotational parts
+    diameter_values = [
+        overall_dimensions.get("diameter") or 0,
+        overall_dimensions.get("outer_diameter") or 0,
+        overall_dimensions.get("large_diameter") or 0
+    ]
+    if any(diameter_values):
+        ai_analysis["max_diameter_mm"] = max(diameter_values)
+    
     ai_analysis["overall_dimensions"] = overall_dimensions
     ai_analysis["dimensions_manually_updated"] = True
     
@@ -1801,12 +1913,15 @@ async def update_rfq_dimensions(
         }}
     )
     
-    logger.info(f"Dimensions updated for RFQ {rfq_id}: L={overall_dimensions.get('length')}, W={overall_dimensions.get('width')}, H={overall_dimensions.get('height')}")
+    part_geometry = ai_analysis.get("part_geometry", "rectangular")
+    logger.info(f"Dimensions updated for RFQ {rfq_id} ({part_geometry}): {overall_dimensions}")
     
     return {
         "message": "Dimensions updated successfully",
+        "part_geometry": part_geometry,
         "overall_dimensions": overall_dimensions,
-        "max_dimension_mm": ai_analysis.get("max_dimension_mm")
+        "max_dimension_mm": ai_analysis.get("max_dimension_mm"),
+        "max_diameter_mm": ai_analysis.get("max_diameter_mm")
     }
 
 

@@ -51,15 +51,87 @@ const CreateRFQ = () => {
   const [analysisResult, setAnalysisResult] = useState(null);
   const [dimensionsMissing, setDimensionsMissing] = useState(false);
   const [missingFields, setMissingFields] = useState({});
+  const [requiredDimensions, setRequiredDimensions] = useState([]);
+  const [partGeometry, setPartGeometry] = useState("rectangular");
   const [savingDimensions, setSavingDimensions] = useState(false);
   
-  // Manual dimensions input
+  // Manual dimensions input - supports all geometry types
   const [manualDimensions, setManualDimensions] = useState({
+    // Rectangular
     length: "",
     width: "",
     height: "",
+    // Cylindrical/Circular
+    diameter: "",
+    outer_diameter: "",
+    inner_diameter: "",
+    thickness: "",
+    // Conical
+    large_diameter: "",
+    small_diameter: "",
+    taper_angle: "",
+    // Sheet metal
+    bend_radius: "",
+    bend_angle: "",
+    // Common
     weight: ""
   });
+  
+  // Geometry type options
+  const GEOMETRY_TYPES = [
+    { value: "rectangular", label: "Rectangular (Block, Bracket, Housing)" },
+    { value: "cylindrical", label: "Cylindrical (Shaft, Pin, Bushing)" },
+    { value: "circular_flat", label: "Circular Flat (Disc, Flange, Plate)" },
+    { value: "conical", label: "Conical (Tapered Part)" },
+    { value: "tube_pipe", label: "Tube/Pipe" },
+    { value: "sheet_metal", label: "Sheet Metal" },
+    { value: "complex", label: "Complex Geometry" }
+  ];
+  
+  // Get dimension fields based on geometry type
+  const getDimensionFields = (geometry) => {
+    const fields = {
+      rectangular: [
+        { key: "length", label: "Length (mm)", required: true },
+        { key: "width", label: "Width (mm)", required: true },
+        { key: "height", label: "Height (mm)", required: true }
+      ],
+      cylindrical: [
+        { key: "diameter", label: "Diameter (mm)", required: true },
+        { key: "length", label: "Length (mm)", required: true },
+        { key: "inner_diameter", label: "Inner Diameter (mm)", required: false }
+      ],
+      circular_flat: [
+        { key: "diameter", label: "Diameter (mm)", required: true },
+        { key: "thickness", label: "Thickness (mm)", required: true },
+        { key: "inner_diameter", label: "Bore/Inner Diameter (mm)", required: false }
+      ],
+      conical: [
+        { key: "large_diameter", label: "Large Diameter (mm)", required: true },
+        { key: "small_diameter", label: "Small Diameter (mm)", required: true },
+        { key: "length", label: "Length (mm)", required: true },
+        { key: "taper_angle", label: "Taper Angle (°)", required: false }
+      ],
+      tube_pipe: [
+        { key: "outer_diameter", label: "Outer Diameter (mm)", required: true },
+        { key: "inner_diameter", label: "Inner Diameter (mm)", required: true },
+        { key: "length", label: "Length (mm)", required: true }
+      ],
+      sheet_metal: [
+        { key: "length", label: "Length (mm)", required: true },
+        { key: "width", label: "Width (mm)", required: true },
+        { key: "thickness", label: "Thickness (mm)", required: true },
+        { key: "bend_angle", label: "Bend Angle (°)", required: false }
+      ],
+      complex: [
+        { key: "length", label: "Max Length (mm)", required: false },
+        { key: "width", label: "Max Width (mm)", required: false },
+        { key: "height", label: "Max Height (mm)", required: false },
+        { key: "diameter", label: "Max Diameter (mm)", required: false }
+      ]
+    };
+    return fields[geometry] || fields.rectangular;
+  };
 
   const [formData, setFormData] = useState({
     title: "",
@@ -149,20 +221,32 @@ const CreateRFQ = () => {
     setAnalyzing(true);
     try {
       const response = await api.post(`/rfqs/${rfqId}/analyze`);
-      const { analysis, dimensions_missing, missing_fields } = response.data;
+      const { analysis, dimensions_missing, missing_fields, part_geometry, required_dimensions } = response.data;
       
       setAnalysisResult(analysis);
       setDimensionsMissing(dimensions_missing);
       setMissingFields(missing_fields || {});
+      setPartGeometry(part_geometry || analysis?.part_geometry || "rectangular");
+      setRequiredDimensions(required_dimensions || []);
       
       // Pre-fill manual dimensions with any extracted values
       const dims = analysis?.overall_dimensions || {};
-      setManualDimensions({
+      setManualDimensions(prev => ({
+        ...prev,
         length: dims.length || "",
         width: dims.width || "",
         height: dims.height || "",
+        diameter: dims.diameter || "",
+        outer_diameter: dims.outer_diameter || "",
+        inner_diameter: dims.inner_diameter || "",
+        thickness: dims.thickness || "",
+        large_diameter: dims.large_diameter || "",
+        small_diameter: dims.small_diameter || "",
+        taper_angle: dims.taper_angle || "",
+        bend_radius: dims.bend_radius || "",
+        bend_angle: dims.bend_angle || "",
         weight: analysis?.weight_kg || ""
-      });
+      }));
       
       if (dimensions_missing) {
         toast.warning("Some dimensions couldn't be extracted. Please review and fill in missing values.");
@@ -174,6 +258,7 @@ const CreateRFQ = () => {
       toast.error("Analysis failed, but continuing with matching");
       setDimensionsMissing(true);
       setMissingFields({ length: true, width: true, height: true });
+      setPartGeometry("rectangular");
       setStep(4);
     } finally {
       setAnalyzing(false);
@@ -181,20 +266,37 @@ const CreateRFQ = () => {
   };
 
   const saveManualDimensions = async () => {
-    // Validate that at least length and width are provided
-    if (!manualDimensions.length || !manualDimensions.width) {
-      toast.error("Please provide at least Length and Width dimensions");
+    // Get required fields for current geometry
+    const fields = getDimensionFields(partGeometry);
+    const requiredFields = fields.filter(f => f.required);
+    
+    // Validate required fields have values
+    const missingRequired = requiredFields.filter(f => !manualDimensions[f.key]);
+    if (missingRequired.length > 0) {
+      toast.error(`Please provide: ${missingRequired.map(f => f.label).join(", ")}`);
       return;
     }
     
     setSavingDimensions(true);
     try {
-      const response = await api.put(`/rfqs/${rfqId}/dimensions`, {
-        length: parseFloat(manualDimensions.length) || null,
-        width: parseFloat(manualDimensions.width) || null,
-        height: parseFloat(manualDimensions.height) || null,
+      // Build dimension payload based on geometry
+      const payload = {
+        part_geometry: partGeometry,
         weight: parseFloat(manualDimensions.weight) || null
+      };
+      
+      // Add all dimension fields that have values
+      const allDimFields = ["length", "width", "height", "diameter", "outer_diameter", 
+                           "inner_diameter", "thickness", "large_diameter", "small_diameter",
+                           "taper_angle", "bend_radius", "bend_angle"];
+      
+      allDimFields.forEach(field => {
+        if (manualDimensions[field]) {
+          payload[field] = parseFloat(manualDimensions[field]);
+        }
       });
+      
+      const response = await api.put(`/rfqs/${rfqId}/dimensions`, payload);
       
       toast.success("Dimensions saved successfully!");
       setDimensionsMissing(false);
@@ -203,8 +305,10 @@ const CreateRFQ = () => {
       // Update analysis result with new dimensions
       setAnalysisResult(prev => ({
         ...prev,
+        part_geometry: response.data.part_geometry,
         overall_dimensions: response.data.overall_dimensions,
-        max_dimension_mm: response.data.max_dimension_mm
+        max_dimension_mm: response.data.max_dimension_mm,
+        max_diameter_mm: response.data.max_diameter_mm
       }));
     } catch (error) {
       toast.error("Failed to save dimensions");
@@ -606,74 +710,83 @@ const CreateRFQ = () => {
               {/* Show AI Analysis Results */}
               {analysisResult && (
                 <div className="space-y-4">
-                  {/* Dimensions Section */}
+                  {/* Part Geometry & Dimensions Section */}
                   <div className={`p-4 rounded-lg border-2 ${dimensionsMissing ? 'border-amber-400 bg-amber-50' : 'border-green-400 bg-green-50'}`}>
-                    <div className="flex items-center gap-2 mb-3">
-                      {dimensionsMissing ? (
-                        <AlertTriangle className="w-5 h-5 text-amber-600" />
-                      ) : (
-                        <CheckCircle2 className="w-5 h-5 text-green-600" />
-                      )}
-                      <h3 className="font-semibold text-slate-900">
-                        {dimensionsMissing ? "Dimensions - Action Required" : "Extracted Dimensions"}
-                      </h3>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        {dimensionsMissing ? (
+                          <AlertTriangle className="w-5 h-5 text-amber-600" />
+                        ) : (
+                          <CheckCircle2 className="w-5 h-5 text-green-600" />
+                        )}
+                        <h3 className="font-semibold text-slate-900">
+                          {dimensionsMissing ? "Dimensions - Action Required" : "Extracted Dimensions"}
+                        </h3>
+                      </div>
+                      {/* Detected Geometry Badge */}
+                      <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+                        {GEOMETRY_TYPES.find(g => g.value === partGeometry)?.label || partGeometry}
+                      </span>
                     </div>
                     
                     {dimensionsMissing && (
                       <p className="text-sm text-amber-700 mb-4">
-                        We couldn't extract all dimensions from your drawing. Please provide the missing values below for accurate vendor matching.
+                        We couldn't extract all dimensions from your drawing. Please select the correct geometry type and provide the missing values.
                       </p>
                     )}
                     
+                    {/* Geometry Type Selector (when dimensions missing) */}
+                    {dimensionsMissing && (
+                      <div className="mb-4">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                          Part Geometry Type
+                        </Label>
+                        <Select
+                          value={partGeometry}
+                          onValueChange={(value) => {
+                            setPartGeometry(value);
+                            // Update missing fields based on new geometry
+                            const fields = getDimensionFields(value);
+                            const newMissing = {};
+                            fields.filter(f => f.required).forEach(f => {
+                              newMissing[f.key] = !manualDimensions[f.key];
+                            });
+                            setMissingFields(newMissing);
+                          }}
+                        >
+                          <SelectTrigger className="mt-1 w-full md:w-1/2" data-testid="geometry-select">
+                            <SelectValue placeholder="Select geometry type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {GEOMETRY_TYPES.map((g) => (
+                              <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    
+                    {/* Dynamic Dimension Fields based on Geometry */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <Label className={`text-xs font-bold uppercase tracking-wider ${missingFields.length ? 'text-red-600' : 'text-slate-500'}`}>
-                          <Ruler className="w-3 h-3 inline mr-1" />
-                          Length (mm) {missingFields.length && <span className="text-red-500">*</span>}
-                        </Label>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          value={manualDimensions.length}
-                          onChange={(e) => setManualDimensions(prev => ({ ...prev, length: e.target.value }))}
-                          className={`mt-1 ${missingFields.length ? 'border-red-400 focus:border-red-500' : ''}`}
-                          placeholder={missingFields.length ? "Required" : ""}
-                          data-testid="dimension-length"
-                        />
-                      </div>
-                      <div>
-                        <Label className={`text-xs font-bold uppercase tracking-wider ${missingFields.width ? 'text-red-600' : 'text-slate-500'}`}>
-                          <Ruler className="w-3 h-3 inline mr-1" />
-                          Width (mm) {missingFields.width && <span className="text-red-500">*</span>}
-                        </Label>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          value={manualDimensions.width}
-                          onChange={(e) => setManualDimensions(prev => ({ ...prev, width: e.target.value }))}
-                          className={`mt-1 ${missingFields.width ? 'border-red-400 focus:border-red-500' : ''}`}
-                          placeholder={missingFields.width ? "Required" : ""}
-                          data-testid="dimension-width"
-                        />
-                      </div>
-                      <div>
-                        <Label className={`text-xs font-bold uppercase tracking-wider ${missingFields.height ? 'text-red-600' : 'text-slate-500'}`}>
-                          <Ruler className="w-3 h-3 inline mr-1" />
-                          Height (mm) {missingFields.height && <span className="text-red-500">*</span>}
-                        </Label>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          value={manualDimensions.height}
-                          onChange={(e) => setManualDimensions(prev => ({ ...prev, height: e.target.value }))}
-                          className={`mt-1 ${missingFields.height ? 'border-red-400 focus:border-red-500' : ''}`}
-                          placeholder={missingFields.height ? "Required" : ""}
-                          data-testid="dimension-height"
-                        />
-                      </div>
+                      {getDimensionFields(partGeometry).map((field) => (
+                        <div key={field.key}>
+                          <Label className={`text-xs font-bold uppercase tracking-wider ${missingFields[field.key] ? 'text-red-600' : 'text-slate-500'}`}>
+                            <Ruler className="w-3 h-3 inline mr-1" />
+                            {field.label} {field.required && missingFields[field.key] && <span className="text-red-500">*</span>}
+                          </Label>
+                          <Input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            value={manualDimensions[field.key] || ""}
+                            onChange={(e) => setManualDimensions(prev => ({ ...prev, [field.key]: e.target.value }))}
+                            className={`mt-1 ${missingFields[field.key] ? 'border-red-400 focus:border-red-500' : ''}`}
+                            placeholder={field.required && missingFields[field.key] ? "Required" : "Optional"}
+                            data-testid={`dimension-${field.key}`}
+                          />
+                        </div>
+                      ))}
+                      {/* Weight is always shown */}
                       <div>
                         <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
                           <Scale className="w-3 h-3 inline mr-1" />
