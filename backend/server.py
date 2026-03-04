@@ -3459,6 +3459,11 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         experience_keywords_matched = []
         geometry_experience = False
         experience_match_details = []
+        material_experience = False
+        process_experience = False
+        part_type_experience = False
+        best_experience_match = None
+        best_experience_score = 0
         
         # ============== CHECK VENDOR'S DECLARED PAST EXPERIENCES ==============
         for exp in vendor_past_experiences:
@@ -3473,38 +3478,79 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             similarity_score = 0
             match_reasons = []
             
+            # Check title/description keyword match (more weight for title match)
+            job_title_lower = job_title.lower()
+            job_desc_lower = job_description.lower()
+            
+            # Title similarity check
+            title_words = set(job_title_lower.split())
+            exp_title_words = set(exp_title.split())
+            common_title_words = title_words & exp_title_words - {'for', 'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'on', 'at', 'by', '-', 'mm', 'kg'}
+            if common_title_words:
+                similarity_score += len(common_title_words) * 3  # High weight for title match
+                match_reasons.append(f"title_match:{list(common_title_words)[:3]}")
+            
             # Check keywords match
             for keyword in detected_keywords:
                 if keyword in exp_text:
-                    similarity_score += 1
+                    similarity_score += 2
                     if keyword not in experience_keywords_matched:
                         experience_keywords_matched.append(keyword)
                     match_reasons.append(f"keyword:{keyword}")
             
-            # Check material match
+            # Check material match (high weight)
             if required_material and required_material in exp_material:
-                similarity_score += 3
+                similarity_score += 5
+                material_experience = True
                 match_reasons.append(f"material:{required_material}")
             
             # Check process match
             for proc in recommended_processes:
-                if any(proc.lower() in p for p in exp_processes):
-                    similarity_score += 2
+                proc_lower = proc.lower()
+                if any(proc_lower in p or p in proc_lower for p in exp_processes):
+                    similarity_score += 3
+                    process_experience = True
                     match_reasons.append(f"process:{proc}")
             
             # Check part type match (e.g., "shaft", "housing", "bracket")
-            if exp_part_type and exp_part_type in job_text:
+            if exp_part_type:
+                if exp_part_type in job_text:
+                    similarity_score += 4
+                    part_type_experience = True
+                    match_reasons.append(f"part_type:{exp_part_type}")
+                # Also check if job mentions the part type
+                common_part_types = ["shaft", "housing", "bracket", "flange", "gear", "plate", "block", "sleeve", "bushing", "pin", "rod", "disc", "ring"]
+                for pt in common_part_types:
+                    if pt in job_text and pt in exp_text:
+                        similarity_score += 3
+                        part_type_experience = True
+                        if f"part:{pt}" not in match_reasons:
+                            match_reasons.append(f"part:{pt}")
+            
+            # Check industry match
+            if exp_industry and exp_industry in job_text:
                 similarity_score += 2
-                match_reasons.append(f"part_type:{exp_part_type}")
+                match_reasons.append(f"industry:{exp_industry}")
             
             if similarity_score >= 2:
                 similar_jobs_count += 1
-                experience_match_details.append({
+                exp_detail = {
                     "source": "profile",
                     "title": exp.get("title"),
+                    "description": exp.get("description", "")[:100],
+                    "material": exp.get("material"),
+                    "part_type": exp.get("part_type"),
+                    "processes": exp.get("processes_used", []),
+                    "year": exp.get("year"),
                     "score": similarity_score,
                     "matches": match_reasons
-                })
+                }
+                experience_match_details.append(exp_detail)
+                
+                # Track best match
+                if similarity_score > best_experience_score:
+                    best_experience_score = similarity_score
+                    best_experience_match = exp_detail
         
         # ============== CHECK COMPLETED ORDER HISTORY ==============
         for past_rfq in past_rfqs:
@@ -3539,12 +3585,38 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             
             if similarity_score >= 2:
                 similar_jobs_count += 1
+                experience_match_details.append({
+                    "source": "order_history",
+                    "title": past_rfq.get("title"),
+                    "material": past_rfq.get("material_type"),
+                    "geometry": past_geometry,
+                    "score": similarity_score
+                })
         
-        # Calculate experience score (max 25 points)
-        experience_score = min(similar_jobs_count * 2 + len(experience_keywords_matched), 20)
+        # ============== CALCULATE EXPERIENCE SCORE (max 35 points - increased weightage) ==============
+        # Base score from similar jobs
+        experience_score = min(similar_jobs_count * 3, 15)  # Up to 15 points for job count
+        
+        # Bonus for keyword matches
+        experience_score += min(len(experience_keywords_matched) * 2, 8)  # Up to 8 points
+        
+        # Bonus for geometry experience
         if geometry_experience:
-            experience_score += 5  # Bonus for same geometry experience
-        experience_score = min(experience_score, 25)
+            experience_score += 5
+        
+        # Bonus for material experience (vendor worked with same material before)
+        if material_experience:
+            experience_score += 4
+        
+        # Bonus for process experience
+        if process_experience:
+            experience_score += 3
+        
+        # Bonus for part type experience (e.g., vendor made shafts before, RFQ is for shaft)
+        if part_type_experience:
+            experience_score += 5
+        
+        experience_score = min(experience_score, 35)  # Cap at 35 points
         
         # Track capabilities across all machines
         matching_machines = []
@@ -3941,7 +4013,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             # Base score from best machine (max 50)
             final_score = best_machine_score
             
-            # Experience bonus (max 25)
+            # Experience bonus (max 35 - increased weightage)
             final_score += experience_score
             
             # Geometry compatibility bonus
@@ -4000,12 +4072,20 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 "geometry_compatible": geometry_compatible,
                 "process_matches": list(set(process_matches))[:5],
                 "keyword_matches": keyword_matches[:5],
+                # Enhanced experience data
                 "experience_score": experience_score,
                 "similar_jobs_count": similar_jobs_count,
                 "experience_keywords": experience_keywords_matched[:5],
                 "has_profile_experience": len(vendor_past_experiences) > 0,
+                "experience_details": experience_match_details[:3],  # Top 3 relevant experiences
+                "best_experience_match": best_experience_match,  # Single best match
+                "material_experience": material_experience,
+                "process_experience": process_experience,
+                "geometry_experience": geometry_experience,
+                "part_type_experience": part_type_experience,
+                # Location data
                 "location": f"{vendor.get('city', '')}, {vendor.get('country', '')}",
-                "location_match": location_match_type,  # 'city', 'country', or None
+                "location_match": location_match_type,
                 "location_score": location_score,
                 "rating": vendor.get("rating", 0),
                 "total_jobs": vendor.get("total_jobs", 0),

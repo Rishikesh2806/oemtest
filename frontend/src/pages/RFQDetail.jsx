@@ -792,19 +792,78 @@ const RFQDetail = () => {
                           )}
 
                           {/* Experience Info */}
-                          {(vendor.similar_jobs_count > 0 || vendor.experience_keywords?.length > 0) && (
-                            <div className="mt-3">
-                              <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                                Relevant Experience
-                              </p>
+                          {/* Relevant Experience - Enhanced Display */}
+                          {(vendor.experience_score > 0 || vendor.best_experience_match) && (
+                            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-xs font-bold uppercase tracking-wider text-amber-700">
+                                  Relevant Experience
+                                </p>
+                                <span className="text-xs bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full font-medium">
+                                  +{vendor.experience_score} pts
+                                </span>
+                              </div>
+                              
+                              {/* Best matching experience */}
+                              {vendor.best_experience_match && (
+                                <div className="bg-white rounded p-2 mb-2 border border-amber-100">
+                                  <p className="text-sm font-medium text-slate-800">
+                                    {vendor.best_experience_match.title}
+                                  </p>
+                                  {vendor.best_experience_match.description && (
+                                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                                      {vendor.best_experience_match.description}
+                                    </p>
+                                  )}
+                                  <div className="flex flex-wrap gap-1 mt-2">
+                                    {vendor.best_experience_match.material && (
+                                      <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                                        {vendor.best_experience_match.material}
+                                      </span>
+                                    )}
+                                    {vendor.best_experience_match.part_type && (
+                                      <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
+                                        {vendor.best_experience_match.part_type}
+                                      </span>
+                                    )}
+                                    {vendor.best_experience_match.processes?.slice(0, 2).map((proc, k) => (
+                                      <span key={k} className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                                        {proc}
+                                      </span>
+                                    ))}
+                                    {vendor.best_experience_match.year && (
+                                      <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                                        {vendor.best_experience_match.year}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Experience badges */}
                               <div className="flex flex-wrap gap-1">
                                 {vendor.similar_jobs_count > 0 && (
                                   <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">
                                     {vendor.similar_jobs_count} similar jobs
                                   </span>
                                 )}
-                                {vendor.experience_keywords?.map((keyword, j) => (
-                                  <span key={j} className="text-xs bg-amber-50 text-amber-600 px-2 py-1 rounded">
+                                {vendor.material_experience && (
+                                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                                    Material Expert
+                                  </span>
+                                )}
+                                {vendor.geometry_experience && (
+                                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                    Geometry Match
+                                  </span>
+                                )}
+                                {vendor.part_type_experience && (
+                                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                                    Part Type Expert
+                                  </span>
+                                )}
+                                {vendor.experience_keywords?.slice(0, 3).map((keyword, j) => (
+                                  <span key={j} className="text-xs bg-amber-50 text-amber-600 px-2 py-1 rounded border border-amber-200">
                                     {keyword}
                                   </span>
                                 ))}
