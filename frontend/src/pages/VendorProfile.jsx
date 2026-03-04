@@ -31,6 +31,20 @@ const VendorProfile = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isNew, setIsNew] = useState(false);
+  
+  // Past experiences state
+  const [experiences, setExperiences] = useState([]);
+  const [showExpForm, setShowExpForm] = useState(false);
+  const [expSaving, setExpSaving] = useState(false);
+  const [newExperience, setNewExperience] = useState({
+    title: "",
+    description: "",
+    industry: "",
+    material: "",
+    processes_used: [],
+    part_type: "",
+    year: new Date().getFullYear()
+  });
 
   const [formData, setFormData] = useState({
     company_name: "",
@@ -47,6 +61,7 @@ const VendorProfile = () => {
 
   useEffect(() => {
     fetchProfile();
+    fetchExperiences();
   }, []);
 
   const fetchProfile = async () => {
@@ -73,6 +88,53 @@ const VendorProfile = () => {
       }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchExperiences = async () => {
+    try {
+      const response = await api.get("/vendors/experiences");
+      setExperiences(response.data.experiences || []);
+    } catch (error) {
+      console.error("Failed to load experiences:", error);
+    }
+  };
+
+  const handleAddExperience = async () => {
+    if (!newExperience.title) {
+      toast.error("Experience title is required");
+      return;
+    }
+    
+    setExpSaving(true);
+    try {
+      await api.post("/vendors/experiences", newExperience);
+      toast.success("Experience added successfully");
+      setShowExpForm(false);
+      setNewExperience({
+        title: "",
+        description: "",
+        industry: "",
+        material: "",
+        processes_used: [],
+        part_type: "",
+        year: new Date().getFullYear()
+      });
+      fetchExperiences();
+    } catch (error) {
+      toast.error("Failed to add experience");
+    } finally {
+      setExpSaving(false);
+    }
+  };
+
+  const handleDeleteExperience = async (experienceId) => {
+    try {
+      await api.delete(`/vendors/experiences/${experienceId}`);
+      toast.success("Experience deleted");
+      fetchExperiences();
+    } catch (error) {
+      toast.error("Failed to delete experience");
     }
   };
 
@@ -320,6 +382,157 @@ const VendorProfile = () => {
                   </button>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Past Experiences Section */}
+          <Card className="border-slate-200 mb-6">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="font-heading text-lg">Past Experiences</CardTitle>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setShowExpForm(!showExpForm)}
+                className="text-sm"
+              >
+                {showExpForm ? "Cancel" : "+ Add Experience"}
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-slate-500 mb-4">
+                Add your past manufacturing projects to improve RFQ matching accuracy. Include details about similar parts you've made.
+              </p>
+              
+              {/* Add Experience Form */}
+              {showExpForm && (
+                <div className="bg-slate-50 p-4 rounded-lg mb-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm">Project Title *</Label>
+                      <Input
+                        value={newExperience.title}
+                        onChange={(e) => setNewExperience({...newExperience, title: e.target.value})}
+                        placeholder="e.g., CNC Machined Shaft for Automotive"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm">Part Type</Label>
+                      <Input
+                        value={newExperience.part_type}
+                        onChange={(e) => setNewExperience({...newExperience, part_type: e.target.value})}
+                        placeholder="e.g., shaft, housing, bracket"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm">Industry</Label>
+                      <Input
+                        value={newExperience.industry}
+                        onChange={(e) => setNewExperience({...newExperience, industry: e.target.value})}
+                        placeholder="e.g., Automotive, Aerospace"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm">Material</Label>
+                      <Input
+                        value={newExperience.material}
+                        onChange={(e) => setNewExperience({...newExperience, material: e.target.value})}
+                        placeholder="e.g., Steel, Aluminum"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm">Processes Used</Label>
+                      <Input
+                        value={newExperience.processes_used.join(", ")}
+                        onChange={(e) => setNewExperience({
+                          ...newExperience, 
+                          processes_used: e.target.value.split(",").map(p => p.trim()).filter(p => p)
+                        })}
+                        placeholder="e.g., CNC Turning, Milling, Grinding"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm">Year</Label>
+                      <Input
+                        type="number"
+                        value={newExperience.year}
+                        onChange={(e) => setNewExperience({...newExperience, year: parseInt(e.target.value)})}
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm">Description</Label>
+                    <Textarea
+                      value={newExperience.description}
+                      onChange={(e) => setNewExperience({...newExperience, description: e.target.value})}
+                      placeholder="Brief description of the project, quantities, tolerances achieved, etc."
+                      className="mt-1"
+                      rows={2}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleAddExperience}
+                    disabled={expSaving}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    {expSaving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                    Save Experience
+                  </Button>
+                </div>
+              )}
+              
+              {/* Experience List */}
+              {experiences.length === 0 ? (
+                <p className="text-slate-400 text-sm italic">No past experiences added yet. Add your project history to improve matching.</p>
+              ) : (
+                <div className="space-y-3">
+                  {experiences.map((exp) => (
+                    <div key={exp.experience_id} className="bg-white border border-slate-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-slate-900">{exp.title}</h4>
+                          {exp.description && (
+                            <p className="text-sm text-slate-600 mt-1">{exp.description}</p>
+                          )}
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {exp.industry && (
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">{exp.industry}</span>
+                            )}
+                            {exp.material && (
+                              <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">{exp.material}</span>
+                            )}
+                            {exp.part_type && (
+                              <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">{exp.part_type}</span>
+                            )}
+                            {exp.year && (
+                              <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded">{exp.year}</span>
+                            )}
+                            {exp.processes_used?.map((proc, i) => (
+                              <span key={i} className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">{proc}</span>
+                            ))}
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteExperience(exp.experience_id)}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 

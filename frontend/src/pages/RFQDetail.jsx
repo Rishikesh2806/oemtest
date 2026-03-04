@@ -791,6 +791,27 @@ const RFQDetail = () => {
                             </div>
                           )}
 
+                          {/* Experience Info */}
+                          {(vendor.similar_jobs_count > 0 || vendor.experience_keywords?.length > 0) && (
+                            <div className="mt-3">
+                              <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                                Relevant Experience
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {vendor.similar_jobs_count > 0 && (
+                                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">
+                                    {vendor.similar_jobs_count} similar jobs
+                                  </span>
+                                )}
+                                {vendor.experience_keywords?.map((keyword, j) => (
+                                  <span key={j} className="text-xs bg-amber-50 text-amber-600 px-2 py-1 rounded">
+                                    {keyword}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           {/* Matching Machines */}
                           <div className="mt-3">
                             <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">

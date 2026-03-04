@@ -146,6 +146,8 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 
 ### P0 - Critical (Completed)
 - Vendor location preference matching ✓
+- Vendor past experience in profile for improved matching ✓
+- Conventional/heavy machine detection for rough machining ✓
 - Manual dimension input in RFQ creation ✓
 - GSTIN verification for vendor registration ✓
 - Notification redirect fixes ✓

@@ -480,10 +480,21 @@ class VendorProfile(BaseModel):
     certifications: List[str] = []
     industries: List[str] = []
     materials_handled: List[str] = []
+    past_experiences: List[dict] = []  # List of {title, description, industry, material, year}
     is_approved: bool = False
     rating: float = 0.0
     total_jobs: int = 0
     created_at: str
+
+class PastExperience(BaseModel):
+    """Vendor's past project experience for matching"""
+    title: str
+    description: Optional[str] = None
+    industry: Optional[str] = None
+    material: Optional[str] = None
+    processes_used: List[str] = []
+    part_type: Optional[str] = None  # e.g., "shaft", "housing", "bracket"
+    year: Optional[int] = None
 
 class VendorProfileCreate(BaseModel):
     company_name: str
@@ -496,6 +507,7 @@ class VendorProfileCreate(BaseModel):
     certifications: List[str] = []
     industries: List[str] = []
     materials_handled: List[str] = []
+    past_experiences: List[PastExperience] = []
 
 class Machine(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -1743,6 +1755,70 @@ async def list_vendors(approved_only: bool = True):
     query = {"is_approved": True} if approved_only else {}
     vendors = await db.vendors.find(query, {"_id": 0}).to_list(100)
     return vendors
+
+# ============== VENDOR PAST EXPERIENCE ==============
+# NOTE: These routes MUST come BEFORE /vendors/{vendor_id} routes to avoid path conflicts
+
+@api_router.post("/vendors/experiences")
+async def add_past_experience(experience: PastExperience, user: dict = Depends(get_current_user)):
+    """Add a past experience to vendor profile"""
+    if user["role"] != "vendor":
+        raise HTTPException(status_code=403, detail="Only vendors can add experiences")
+    
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor profile not found")
+    
+    experience_doc = {
+        "experience_id": f"exp_{uuid.uuid4().hex[:12]}",
+        "title": experience.title,
+        "description": experience.description,
+        "industry": experience.industry,
+        "material": experience.material,
+        "processes_used": experience.processes_used,
+        "part_type": experience.part_type,
+        "year": experience.year,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.vendors.update_one(
+        {"vendor_id": vendor["vendor_id"]},
+        {"$push": {"past_experiences": experience_doc}}
+    )
+    
+    return {"message": "Experience added successfully", "experience": experience_doc}
+
+@api_router.get("/vendors/experiences")
+async def get_my_experiences(user: dict = Depends(get_current_user)):
+    """Get vendor's past experiences"""
+    if user["role"] != "vendor":
+        raise HTTPException(status_code=403, detail="Only vendors can view their experiences")
+    
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0, "past_experiences": 1})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor profile not found")
+    
+    return {"experiences": vendor.get("past_experiences", [])}
+
+@api_router.delete("/vendors/experiences/{experience_id}")
+async def delete_experience(experience_id: str, user: dict = Depends(get_current_user)):
+    """Delete a past experience"""
+    if user["role"] != "vendor":
+        raise HTTPException(status_code=403, detail="Only vendors can delete their experiences")
+    
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor profile not found")
+    
+    result = await db.vendors.update_one(
+        {"vendor_id": vendor["vendor_id"]},
+        {"$pull": {"past_experiences": {"experience_id": experience_id}}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Experience not found")
+    
+    return {"message": "Experience deleted successfully"}
 
 @api_router.get("/vendors/{vendor_id}")
 async def get_vendor_by_id(vendor_id: str):
@@ -3153,7 +3229,10 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         if not machines:
             continue
         
-        # ============== GET VENDOR'S PAST EXPERIENCE ==============
+        # ============== GET VENDOR'S PAST EXPERIENCE (from profile + orders) ==============
+        # Get vendor's declared past experiences from profile
+        vendor_past_experiences = vendor.get("past_experiences", [])
+        
         # Get completed orders for this vendor
         past_orders = await db.orders.find(
             {"vendor_id": vendor["vendor_id"], "status": "completed"},
@@ -3171,7 +3250,55 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         similar_jobs_count = 0
         experience_keywords_matched = []
         geometry_experience = False
+        experience_match_details = []
         
+        # ============== CHECK VENDOR'S DECLARED PAST EXPERIENCES ==============
+        for exp in vendor_past_experiences:
+            exp_title = (exp.get("title") or "").lower()
+            exp_desc = (exp.get("description") or "").lower()
+            exp_material = (exp.get("material") or "").lower()
+            exp_industry = (exp.get("industry") or "").lower()
+            exp_part_type = (exp.get("part_type") or "").lower()
+            exp_processes = [p.lower() for p in exp.get("processes_used", [])]
+            exp_text = f"{exp_title} {exp_desc} {exp_industry} {exp_part_type}"
+            
+            similarity_score = 0
+            match_reasons = []
+            
+            # Check keywords match
+            for keyword in detected_keywords:
+                if keyword in exp_text:
+                    similarity_score += 1
+                    if keyword not in experience_keywords_matched:
+                        experience_keywords_matched.append(keyword)
+                    match_reasons.append(f"keyword:{keyword}")
+            
+            # Check material match
+            if required_material and required_material in exp_material:
+                similarity_score += 3
+                match_reasons.append(f"material:{required_material}")
+            
+            # Check process match
+            for proc in recommended_processes:
+                if any(proc.lower() in p for p in exp_processes):
+                    similarity_score += 2
+                    match_reasons.append(f"process:{proc}")
+            
+            # Check part type match (e.g., "shaft", "housing", "bracket")
+            if exp_part_type and exp_part_type in job_text:
+                similarity_score += 2
+                match_reasons.append(f"part_type:{exp_part_type}")
+            
+            if similarity_score >= 2:
+                similar_jobs_count += 1
+                experience_match_details.append({
+                    "source": "profile",
+                    "title": exp.get("title"),
+                    "score": similarity_score,
+                    "matches": match_reasons
+                })
+        
+        # ============== CHECK COMPLETED ORDER HISTORY ==============
         for past_rfq in past_rfqs:
             past_title = (past_rfq.get("title") or "").lower()
             past_desc = (past_rfq.get("description") or "").lower()
@@ -3205,7 +3332,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             if similarity_score >= 2:
                 similar_jobs_count += 1
         
-        # Calculate experience score (max 20 points)
+        # Calculate experience score (max 25 points)
         experience_score = min(similar_jobs_count * 2 + len(experience_keywords_matched), 20)
         if geometry_experience:
             experience_score += 5  # Bonus for same geometry experience
@@ -3246,6 +3373,30 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             is_press_machine = any(k in machine_type_lower for k in ["press", "brake", "sheet"])
             is_cutting_machine = any(k in machine_type_lower for k in ["laser", "plasma", "waterjet", "cut"])
             is_vtl_machine = "vtl" in machine_type_lower or "vertical turret" in machine_type_lower
+            
+            # ============== CONVENTIONAL/HEAVY MACHINE DETECTION ==============
+            is_conventional_lathe = any(k in machine_type_lower for k in ["engine lathe", "turret lathe", "capstan", "gap bed", "heavy duty lathe"])
+            is_conventional_mill = any(k in machine_type_lower for k in ["universal milling", "vertical milling", "horizontal milling", "knee mill", "bed mill", "ram turret"])
+            is_conventional_machine = is_conventional_lathe or is_conventional_mill or "conventional" in machine_type_lower or "conventional" in machine_category
+            is_heavy_duty_machine = any(k in machine_type_lower for k in ["heavy duty", "heavy-duty", "floor boring", "planer", "double column"])
+            is_shaping_machine = any(k in machine_type_lower for k in ["shaper", "planer", "slotter"])
+            
+            # Check if job requires rough/heavy machining
+            rough_heavy_keywords = ["rough", "roughing", "heavy", "heavy duty", "heavy-duty", "forging", "casting", "large scale", "heavy machining", "stock removal", "bulk removal"]
+            job_needs_rough_heavy = any(k in job_description.lower() for k in rough_heavy_keywords)
+            
+            # Check if AI analysis recommends conventional/rough machining
+            ai_recommends_conventional = any(
+                any(k in proc.lower() for k in ["conventional", "rough", "heavy", "shaping", "planing"])
+                for proc in recommended_processes
+            )
+            
+            # Bonus for conventional machines when rough/heavy work is needed
+            if job_needs_rough_heavy or ai_recommends_conventional:
+                if is_conventional_machine or is_heavy_duty_machine or is_shaping_machine:
+                    machine_score += 15  # Significant bonus for appropriate machine
+                    if "Conventional Machining" not in process_matches:
+                        process_matches.append("Conventional Machining")
             
             # ============== GEOMETRY-MACHINE COMPATIBILITY CHECK ==============
             # This ensures milling machines don't match turning jobs and vice versa
@@ -3643,6 +3794,8 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 "keyword_matches": keyword_matches[:5],
                 "experience_score": experience_score,
                 "similar_jobs_count": similar_jobs_count,
+                "experience_keywords": experience_keywords_matched[:5],
+                "has_profile_experience": len(vendor_past_experiences) > 0,
                 "location": f"{vendor.get('city', '')}, {vendor.get('country', '')}",
                 "location_match": location_match_type,  # 'city', 'country', or None
                 "location_score": location_score,
