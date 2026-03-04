@@ -108,7 +108,15 @@ const VendorProfile = () => {
     
     setExpSaving(true);
     try {
-      await api.post("/vendors/experiences", newExperience);
+      // Ensure processes_used is an array before sending
+      const experienceData = {
+        ...newExperience,
+        processes_used: Array.isArray(newExperience.processes_used) 
+          ? newExperience.processes_used 
+          : newExperience.processes_used.split(",").map(p => p.trim()).filter(p => p)
+      };
+      
+      await api.post("/vendors/experiences", experienceData);
       toast.success("Experience added successfully");
       setShowExpForm(false);
       setNewExperience({
@@ -447,14 +455,26 @@ const VendorProfile = () => {
                     <div>
                       <Label className="text-sm">Processes Used</Label>
                       <Input
-                        value={newExperience.processes_used.join(", ")}
-                        onChange={(e) => setNewExperience({
-                          ...newExperience, 
-                          processes_used: e.target.value.split(",").map(p => p.trim()).filter(p => p)
-                        })}
+                        value={Array.isArray(newExperience.processes_used) ? newExperience.processes_used.join(", ") : newExperience.processes_used}
+                        onChange={(e) => {
+                          // Store as string while typing, parse to array on blur
+                          setNewExperience({
+                            ...newExperience, 
+                            processes_used: e.target.value
+                          });
+                        }}
+                        onBlur={(e) => {
+                          // Convert to array when user finishes typing
+                          const processes = e.target.value.split(",").map(p => p.trim()).filter(p => p);
+                          setNewExperience({
+                            ...newExperience,
+                            processes_used: processes
+                          });
+                        }}
                         placeholder="e.g., CNC Turning, Milling, Grinding"
                         className="mt-1"
                       />
+                      <p className="text-xs text-slate-400 mt-1">Separate processes with commas</p>
                     </div>
                     <div>
                       <Label className="text-sm">Year</Label>
