@@ -304,7 +304,17 @@ const CreateRFQ = () => {
     setAnalyzing(true);
     try {
       const response = await api.post(`/rfqs/${rfqId}/analyze`);
-      const { analysis, dimensions_missing, missing_fields, part_geometry, required_dimensions } = response.data;
+      const { 
+        analysis, 
+        dimensions_missing, 
+        missing_fields, 
+        part_geometry, 
+        required_dimensions,
+        analyzed_count,
+        analyzed_files,
+        skipped_cad_files,
+        note
+      } = response.data;
       
       setAnalysisResult(analysis);
       setDimensionsMissing(dimensions_missing);
@@ -331,10 +341,17 @@ const CreateRFQ = () => {
         weight: analysis?.weight_kg || ""
       }));
       
-      if (dimensions_missing) {
+      // Show appropriate messages based on analysis results
+      if (analyzed_count === 0) {
+        toast.warning(note || "No drawings could be analyzed. Please add PDF or image files.");
+      } else if (skipped_cad_files?.length > 0) {
+        toast.info(`Analyzed ${analyzed_count} drawing(s). ${skipped_cad_files.length} CAD file(s) kept as attachments.`);
+      }
+      
+      if (dimensions_missing && analyzed_count > 0) {
         toast.warning("Some dimensions couldn't be extracted. Please review and fill in missing values.");
-      } else {
-        toast.success("AI analysis complete - all dimensions extracted!");
+      } else if (analyzed_count > 0) {
+        toast.success(`AI analysis complete - analyzed ${analyzed_count} drawing(s)!`);
       }
       setStep(4);
     } catch (error) {

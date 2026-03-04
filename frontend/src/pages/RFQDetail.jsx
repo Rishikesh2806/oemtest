@@ -603,15 +603,34 @@ const RFQDetail = () => {
                 {drawings.map((drawing) => {
                   const isImage = ['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(drawing.file_type?.toLowerCase());
                   const isPdf = drawing.file_type?.toLowerCase() === 'pdf';
+                  const isCadAttachment = drawing.is_cad_attachment;
+                  const isAnalyzed = drawing.analyzed;
                   const API_URL = process.env.REACT_APP_BACKEND_URL;
                   const token = localStorage.getItem('token');
                   
                   return (
                     <div 
                       key={drawing.drawing_id}
-                      className="p-4 bg-slate-50 rounded-lg border border-slate-200 hover:border-orange-300 transition-colors"
+                      className={`p-4 rounded-lg border transition-colors ${
+                        isCadAttachment 
+                          ? "bg-amber-50 border-amber-200 hover:border-amber-300" 
+                          : "bg-slate-50 border-slate-200 hover:border-orange-300"
+                      }`}
                       data-testid={`drawing-${drawing.drawing_id}`}
                     >
+                      {/* Status badge */}
+                      <div className="mb-2">
+                        {isCadAttachment ? (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                            <FileText className="w-3 h-3" /> CAD Attachment
+                          </span>
+                        ) : isAnalyzed ? (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                            <CheckCircle2 className="w-3 h-3" /> AI Analyzed
+                          </span>
+                        ) : null}
+                      </div>
+                      
                       {/* Preview for images */}
                       {isImage && drawing.file_data && (
                         <div className="mb-3 rounded overflow-hidden bg-white border">
@@ -625,8 +644,10 @@ const RFQDetail = () => {
                       
                       {/* Icon for non-images */}
                       {!isImage && (
-                        <div className="mb-3 h-32 flex items-center justify-center bg-white rounded border">
-                          <FileText className="w-12 h-12 text-slate-300" />
+                        <div className={`mb-3 h-32 flex items-center justify-center rounded border ${
+                          isCadAttachment ? "bg-amber-50" : "bg-white"
+                        }`}>
+                          <FileText className={`w-12 h-12 ${isCadAttachment ? "text-amber-400" : "text-slate-300"}`} />
                         </div>
                       )}
                       

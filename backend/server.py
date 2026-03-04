@@ -2535,7 +2535,8 @@ def convert_pdf_to_image_base64(pdf_base64: str) -> str:
 
 @api_router.post("/rfqs/{rfq_id}/analyze")
 async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_user)):
-    """Use AI to analyze the uploaded drawings (supports PDF, PNG, JPG)"""
+    """Use AI to analyze the uploaded drawings (supports PDF, PNG, JPG). 
+    Analyzes multiple drawings together, skips unsupported CAD files but keeps them as attachments."""
     from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
     
     rfq = await db.rfqs.find_one({"rfq_id": rfq_id, "buyer_id": user["user_id"]}, {"_id": 0})
@@ -2551,67 +2552,130 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
         {"$set": {"status": RFQStatus.ANALYZING, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
     
-    # Get first drawing for analysis
-    drawing = await db.drawings.find_one({"drawing_id": rfq["drawing_ids"][0]}, {"_id": 0})
-    if not drawing:
-        raise HTTPException(status_code=404, detail="Drawing not found")
+    # Get ALL drawings for this RFQ
+    all_drawings = await db.drawings.find(
+        {"drawing_id": {"$in": rfq["drawing_ids"]}}, 
+        {"_id": 0}
+    ).to_list(50)
+    
+    if not all_drawings:
+        raise HTTPException(status_code=404, detail="Drawings not found")
+    
+    # Categorize drawings: analyzable vs CAD attachments
+    unsupported_cad_formats = [".dwg", ".dxf", ".step", ".stp", ".iges", ".igs", ".sat", ".prt", ".sldprt", ".catpart", ".x_t", ".x_b"]
+    
+    analyzable_drawings = []
+    skipped_cad_files = []
+    
+    for drawing in all_drawings:
+        filename = drawing.get("filename", "").lower()
+        file_type = drawing.get("file_type", "").lower()
+        
+        is_unsupported_cad = any(filename.endswith(ext) for ext in unsupported_cad_formats)
+        
+        if is_unsupported_cad:
+            skipped_cad_files.append({
+                "drawing_id": drawing["drawing_id"],
+                "filename": drawing.get("filename", "Unknown"),
+                "reason": "Native CAD format - kept as attachment"
+            })
+            # Mark as attachment in DB
+            await db.drawings.update_one(
+                {"drawing_id": drawing["drawing_id"]},
+                {"$set": {"is_cad_attachment": True, "analyzed": False}}
+            )
+        else:
+            analyzable_drawings.append(drawing)
+    
+    # If no analyzable drawings, return info about attachments
+    if not analyzable_drawings:
+        await db.rfqs.update_one(
+            {"rfq_id": rfq_id},
+            {"$set": {
+                "status": RFQStatus.MATCHING,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "cad_attachments": skipped_cad_files
+            }}
+        )
+        return {
+            "message": "No analyzable drawings found",
+            "analyzed_count": 0,
+            "skipped_cad_files": skipped_cad_files,
+            "part_geometry": "unknown",
+            "dimensions_missing": True,
+            "required_dimensions": ["length", "width", "height"],
+            "missing_fields": {"length": True, "width": True, "height": True},
+            "note": "All uploaded files are native CAD formats. Please export at least one drawing as PDF or image for AI analysis. CAD files are kept as attachments for vendor reference."
+        }
     
     try:
         api_key = os.environ.get("EMERGENT_LLM_KEY")
         if not api_key:
             raise HTTPException(status_code=500, detail="AI service not configured")
         
-        # Convert PDF to image if needed
-        file_data = drawing["file_data"]
-        file_type = drawing.get("file_type", "").lower()
-        filename = drawing.get("filename", "").lower()
+        # Process all analyzable drawings and collect image contents
+        image_contents = []
+        analyzed_files = []
         
-        # Check for unsupported CAD file formats
-        unsupported_cad_formats = [".dwg", ".dxf", ".step", ".stp", ".iges", ".igs", ".sat", ".prt", ".sldprt", ".catpart", ".x_t", ".x_b"]
-        is_unsupported_cad = any(filename.endswith(ext) for ext in unsupported_cad_formats)
-        
-        if is_unsupported_cad:
-            # Return a helpful error message for CAD files
-            cad_format = next((ext for ext in unsupported_cad_formats if filename.endswith(ext)), "CAD")
-            logger.warning(f"Unsupported CAD file format for AI analysis: {filename}")
-            raise HTTPException(
-                status_code=400, 
-                detail=f"AI analysis does not support native CAD formats ({cad_format.upper()} files). Please export your drawing as a PDF or high-resolution PNG/JPG image for AI analysis. Most CAD software (AutoCAD, SolidWorks, CATIA, etc.) can export to PDF via Print > PDF or Save As > PDF."
-            )
-        
-        if "pdf" in file_type or filename.endswith(".pdf"):
-            logger.info(f"Converting PDF to image for analysis: {filename}")
+        for drawing in analyzable_drawings:
+            file_data = drawing["file_data"]
+            file_type = drawing.get("file_type", "").lower()
+            filename = drawing.get("filename", "").lower()
+            
             try:
-                file_data = convert_pdf_to_image_base64(file_data)
-            except Exception as pdf_err:
-                logger.error(f"PDF conversion error: {pdf_err}")
-                raise HTTPException(status_code=400, detail=f"Failed to process PDF: {str(pdf_err)}")
+                # Convert PDF to image if needed
+                if "pdf" in file_type or filename.endswith(".pdf"):
+                    logger.info(f"Converting PDF to image for analysis: {filename}")
+                    file_data = convert_pdf_to_image_base64(file_data)
+                
+                # Verify the file is analyzable
+                supported_image_types = ["image/png", "image/jpg", "image/jpeg", "image/gif", "image/webp"]
+                is_image = any(img_type in file_type for img_type in supported_image_types) or \
+                           filename.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
+                is_pdf = "pdf" in file_type or filename.endswith(".pdf")
+                
+                if is_image or is_pdf:
+                    image_contents.append(ImageContent(image_base64=file_data))
+                    analyzed_files.append({
+                        "drawing_id": drawing["drawing_id"],
+                        "filename": drawing.get("filename", "Unknown")
+                    })
+                    # Mark as analyzed in DB
+                    await db.drawings.update_one(
+                        {"drawing_id": drawing["drawing_id"]},
+                        {"$set": {"analyzed": True, "is_cad_attachment": False}}
+                    )
+            except Exception as conv_err:
+                logger.error(f"Error processing {filename}: {conv_err}")
+                skipped_cad_files.append({
+                    "drawing_id": drawing["drawing_id"],
+                    "filename": drawing.get("filename", "Unknown"),
+                    "reason": f"Processing error: {str(conv_err)}"
+                })
         
-        # Verify the file is an image format we can analyze
-        supported_image_types = ["image/png", "image/jpg", "image/jpeg", "image/gif", "image/webp"]
-        is_image = any(img_type in file_type for img_type in supported_image_types) or \
-                   filename.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
-        is_pdf = "pdf" in file_type or filename.endswith(".pdf")
+        if not image_contents:
+            raise HTTPException(status_code=400, detail="No valid images could be extracted for analysis")
         
-        if not is_image and not is_pdf:
-            logger.warning(f"Unsupported file type for AI analysis: {file_type} - {filename}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"AI analysis only supports images (PNG, JPG) and PDF files. Uploaded file type: {file_type}. Please convert your drawing to PDF or export as a high-resolution image."
-            )
-        
+        # Create AI chat for multi-drawing analysis
         chat = LlmChat(
             api_key=api_key,
             session_id=f"analysis_{rfq_id}_{uuid.uuid4().hex[:8]}",
-            system_message="""You are an expert manufacturing engineer analyzing engineering drawings. 
-            CAREFULLY examine every detail in the drawing including dimension callouts, tolerances, notes, and title blocks.
+            system_message=f"""You are an expert manufacturing engineer analyzing {len(image_contents)} engineering drawing(s). 
+            CAREFULLY examine every detail in ALL drawings including dimension callouts, tolerances, notes, and title blocks.
+            
+            If multiple drawings are provided, they may show:
+            - Different views of the same part (front, top, side, isometric)
+            - Assembly drawings with multiple components
+            - Detail views with specific features
+            
+            Combine information from ALL drawings to get complete specifications.
             
             FIRST, identify the part geometry type, then extract appropriate dimensions.
             
             Extract and provide the following information in JSON format:
-            {
+            {{
                 "part_geometry": string - one of: "rectangular", "cylindrical", "circular_flat", "conical", "spherical", "complex", "sheet_metal", "tube_pipe",
-                "overall_dimensions": {
+                "overall_dimensions": {{
                     // For RECTANGULAR parts (blocks, brackets, housings):
                     "length": float or null,
                     "width": float or null, 
@@ -2627,7 +2691,7 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
                     "diameter": float or null,
                     "thickness": float or null,
                     "bore_diameter": float or null,
-                    "pcd": float or null,  // Pitch Circle Diameter
+                    "pcd": float or null,
                     
                     // For CONICAL parts:
                     "large_diameter": float or null,
@@ -2649,12 +2713,12 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
                     "bend_angle": float or null,
                     
                     "unit": "mm"
-                },
-                "critical_tolerances": [{"feature": string, "tolerance": float, "unit": "mm"}],
-                "holes": [{"diameter": float, "depth": float or null for THRU, "quantity": int, "type": "plain/threaded/counterbored/countersunk"}],
-                "threads": [{"type": string, "size": string, "pitch": float or null, "quantity": int}],
-                "radii_fillets": [{"radius": float, "location": string}],
-                "angles": [{"angle": float, "feature": string}],
+                }},
+                "critical_tolerances": [{{"feature": string, "tolerance": float, "unit": "mm"}}],
+                "holes": [{{"diameter": float, "depth": float or null for THRU, "quantity": int, "type": "plain/threaded/counterbored/countersunk"}}],
+                "threads": [{{"type": string, "size": string, "pitch": float or null, "quantity": int}}],
+                "radii_fillets": [{{"radius": float, "location": string}}],
+                "angles": [{{"angle": float, "feature": string}}],
                 "material_specs": string or null,
                 "surface_finish": string or null,
                 "recommended_processes": [string] - BE SPECIFIC based on features seen,
@@ -2662,25 +2726,27 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
                 "estimated_machining_time_hours": float,
                 "special_requirements": [string],
                 "max_dimension_mm": float - the largest dimension for machine envelope matching,
-                "max_diameter_mm": float or null - for rotational parts
-            }
+                "max_diameter_mm": float or null - for rotational parts,
+                "drawings_analyzed": int - number of drawings you analyzed
+            }}
             
             IMPORTANT RULES:
-            1. Read ALL dimension callouts carefully from the drawing
-            2. Identify the PRIMARY geometry type first
-            3. Only populate dimension fields relevant to that geometry
-            4. For cylindrical/turned parts, ALWAYS extract diameter and length
-            5. For flat circular parts (flanges, discs), extract diameter and thickness
-            6. Look for angles, tapers, and radii - these are critical for machining
-            7. Check title block for material specs
-            8. For recommended_processes, list SPECIFIC operations (e.g., "CNC Turning", "5-axis milling", "Wire EDM")"""
+            1. Read ALL dimension callouts carefully from ALL drawings
+            2. Cross-reference dimensions between different views
+            3. Identify the PRIMARY geometry type first
+            4. Only populate dimension fields relevant to that geometry
+            5. For cylindrical/turned parts, ALWAYS extract diameter and length
+            6. For flat circular parts (flanges, discs), extract diameter and thickness
+            7. Look for angles, tapers, and radii - these are critical for machining
+            8. Check title block for material specs
+            9. For recommended_processes, list SPECIFIC operations"""
         ).with_model("openai", "gpt-5.2")
         
-        # Create image content for vision analysis
-        image_content = ImageContent(image_base64=file_data)
-        
+        # Create user message with ALL images for multi-drawing analysis
+        drawing_count = len(image_contents)
         user_message = UserMessage(
-            text=f"""CAREFULLY analyze this engineering drawing and extract ALL manufacturing specifications.
+            text=f"""CAREFULLY analyze these {drawing_count} engineering drawing(s) and extract ALL manufacturing specifications.
+            Combine information from all views/drawings to get complete dimensions.
             
             RFQ Context:
             - Title: {rfq['title']}
@@ -2688,8 +2754,10 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             - Required Tolerance: {rfq['tolerance']} mm
             - Quantity: {rfq['quantity']}
             
+            Files being analyzed: {', '.join([f['filename'] for f in analyzed_files])}
+            
             Please provide a detailed analysis in the JSON format specified.""",
-            file_contents=[image_content]
+            file_contents=image_contents
         )
         
         response = await chat.send_message(user_message)
@@ -2708,11 +2776,16 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
                 "error": "Could not parse structured data"
             }
         
-        # Update drawing with analysis
-        await db.drawings.update_one(
-            {"drawing_id": drawing["drawing_id"]},
-            {"$set": {"ai_analysis": ai_analysis}}
-        )
+        # Add metadata about analysis
+        ai_analysis["analyzed_files"] = analyzed_files
+        ai_analysis["skipped_cad_files"] = skipped_cad_files
+        
+        # Update all analyzed drawings with analysis
+        for af in analyzed_files:
+            await db.drawings.update_one(
+                {"drawing_id": af["drawing_id"]},
+                {"$set": {"ai_analysis": ai_analysis, "analyzed": True}}
+            )
         
         # Update RFQ with analysis
         await db.rfqs.update_one(
@@ -2720,6 +2793,7 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             {"$set": {
                 "ai_analysis": ai_analysis,
                 "status": RFQStatus.MATCHING,
+                "cad_attachments": skipped_cad_files,
                 "updated_at": datetime.now(timezone.utc).isoformat()
             }}
         )
@@ -2755,12 +2829,15 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
         dimensions_missing = not has_all_required
         
         return {
-            "message": "Analysis complete", 
+            "message": f"Analysis complete - analyzed {len(analyzed_files)} drawing(s)", 
             "analysis": ai_analysis,
             "part_geometry": part_geometry,
             "dimensions_missing": dimensions_missing,
             "required_dimensions": required_dims,
-            "missing_fields": missing_fields
+            "missing_fields": missing_fields,
+            "analyzed_count": len(analyzed_files),
+            "analyzed_files": analyzed_files,
+            "skipped_cad_files": skipped_cad_files
         }
         
     except HTTPException:
