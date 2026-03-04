@@ -172,7 +172,10 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Backend refactoring (break down server.py monolith)
 
 ## Key API Endpoints
-- POST /api/rfqs/{rfq_id}/match - Smart vendor matching with location scoring
+- POST /api/rfqs/{rfq_id}/match - Smart vendor matching with location scoring + text dimension extraction
+- POST /api/rfqs/{rfq_id}/analyze - AI drawing analysis with title/description fallback
+- POST /api/vendors/experiences - Add past experience
+- GET /api/vendors/experiences - Get vendor's past experiences
 - PUT /api/rfqs/{rfq_id}/dimensions - Update manual dimensions
 - GET /api/gstin/verify/{gstin} - Verify GSTIN
 - POST /api/quotes/{quote_id}/negotiate - Start negotiation

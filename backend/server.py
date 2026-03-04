@@ -2818,17 +2818,30 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             9. For recommended_processes, list SPECIFIC operations"""
         ).with_model("openai", "gpt-5.2")
         
+        # Get RFQ description for additional context
+        rfq_title = rfq.get('title', '')
+        rfq_description = rfq.get('description', '')
+        
         # Create user message with ALL images for multi-drawing analysis
         drawing_count = len(image_contents)
         user_message = UserMessage(
             text=f"""CAREFULLY analyze these {drawing_count} engineering drawing(s) and extract ALL manufacturing specifications.
             Combine information from all views/drawings to get complete dimensions.
             
-            RFQ Context:
-            - Title: {rfq['title']}
-            - Material Type: {rfq['material_type']}
-            - Required Tolerance: {rfq['tolerance']} mm
-            - Quantity: {rfq['quantity']}
+            === RFQ CONTEXT (Use this to help identify part type and dimensions) ===
+            Title: {rfq_title}
+            Description: {rfq_description}
+            Material Type: {rfq['material_type']}
+            Required Tolerance: {rfq['tolerance']} mm
+            Quantity: {rfq['quantity']}
+            
+            === IMPORTANT ===
+            - If dimensions are NOT clearly visible in the drawings, try to INFER them from:
+              1. The title (e.g., "50mm Shaft" suggests diameter=50mm)
+              2. The description (e.g., "200mm length x 100mm diameter" gives specific dimensions)
+              3. Standard part sizes mentioned
+            - Mark inferred dimensions with a note in special_requirements
+            - Even if drawings are unclear, provide your BEST ESTIMATE based on all available context
             
             Files being analyzed: {', '.join([f['filename'] for f in analyzed_files])}
             
@@ -2877,6 +2890,113 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
         # Check if dimensions are missing based on geometry type
         dims = ai_analysis.get("overall_dimensions", {})
         part_geometry = ai_analysis.get("part_geometry", "rectangular")
+        
+        # ============== FALLBACK: Extract dimensions from title/description ==============
+        # If AI couldn't extract dimensions, try to parse from text
+        def extract_dimensions_from_text(title, description):
+            """Extract dimensions mentioned in title or description"""
+            import re
+            text = f"{title} {description}".lower()
+            extracted = {}
+            
+            # Pattern for dimensions like "100mm", "50 mm", "200 x 100", etc.
+            # Diameter patterns: "dia 50mm", "diameter 100mm", "Ø50", "50mm dia"
+            dia_patterns = [
+                r'(?:dia(?:meter)?|ø)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:mm)?',
+                r'(\d+(?:\.\d+)?)\s*(?:mm)?\s*(?:dia(?:meter)?|ø)',
+                r'd\s*[:=]\s*(\d+(?:\.\d+)?)\s*(?:mm)?'
+            ]
+            for pattern in dia_patterns:
+                match = re.search(pattern, text)
+                if match:
+                    extracted['diameter'] = float(match.group(1))
+                    break
+            
+            # Length patterns: "length 200mm", "L=150", "200mm long"
+            length_patterns = [
+                r'(?:length|long|l)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:mm)?',
+                r'(\d+(?:\.\d+)?)\s*(?:mm)?\s*(?:length|long)',
+            ]
+            for pattern in length_patterns:
+                match = re.search(pattern, text)
+                if match:
+                    extracted['length'] = float(match.group(1))
+                    break
+            
+            # Width patterns
+            width_patterns = [
+                r'(?:width|w)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:mm)?',
+                r'(\d+(?:\.\d+)?)\s*(?:mm)?\s*(?:wide|width)',
+            ]
+            for pattern in width_patterns:
+                match = re.search(pattern, text)
+                if match:
+                    extracted['width'] = float(match.group(1))
+                    break
+            
+            # Height/thickness patterns
+            height_patterns = [
+                r'(?:height|thickness|h|t)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:mm)?',
+                r'(\d+(?:\.\d+)?)\s*(?:mm)?\s*(?:thick|height)',
+            ]
+            for pattern in height_patterns:
+                match = re.search(pattern, text)
+                if match:
+                    val = float(match.group(1))
+                    if 'thickness' in text or 'thick' in text:
+                        extracted['thickness'] = val
+                    else:
+                        extracted['height'] = val
+                    break
+            
+            # Dimension format: "100 x 50 x 25" or "100x50x25 mm"
+            dim_pattern = r'(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*(?:[xX×]\s*(\d+(?:\.\d+)?))?\s*(?:mm)?'
+            match = re.search(dim_pattern, text)
+            if match:
+                vals = [float(v) for v in match.groups() if v]
+                if len(vals) >= 2:
+                    sorted_vals = sorted(vals, reverse=True)
+                    if 'length' not in extracted:
+                        extracted['length'] = sorted_vals[0]
+                    if 'width' not in extracted and len(sorted_vals) > 1:
+                        extracted['width'] = sorted_vals[1]
+                    if 'height' not in extracted and len(sorted_vals) > 2:
+                        extracted['height'] = sorted_vals[2]
+            
+            # OD/ID patterns for pipes/tubes
+            od_match = re.search(r'(?:od|outer\s*(?:dia(?:meter)?)?)\s*[:=]?\s*(\d+(?:\.\d+)?)', text)
+            if od_match:
+                extracted['outer_diameter'] = float(od_match.group(1))
+            
+            id_match = re.search(r'(?:id|inner\s*(?:dia(?:meter)?)?|bore)\s*[:=]?\s*(\d+(?:\.\d+)?)', text)
+            if id_match:
+                extracted['inner_diameter'] = float(id_match.group(1))
+            
+            return extracted
+        
+        # Try to fill in missing dimensions from title/description
+        text_dims = extract_dimensions_from_text(rfq.get('title', ''), rfq.get('description', ''))
+        
+        if text_dims:
+            logger.info(f"Extracted dimensions from title/description: {text_dims}")
+            # Merge with AI-extracted dimensions (AI takes precedence)
+            for key, value in text_dims.items():
+                if not dims.get(key) or dims.get(key) == 0:
+                    dims[key] = value
+                    if "dimensions_from_text" not in ai_analysis.get("special_requirements", []):
+                        if "special_requirements" not in ai_analysis:
+                            ai_analysis["special_requirements"] = []
+                        ai_analysis["special_requirements"].append(f"Dimension '{key}' extracted from RFQ text")
+            
+            # Update the analysis with merged dimensions
+            ai_analysis["overall_dimensions"] = dims
+            ai_analysis["text_extracted_dimensions"] = text_dims
+            
+            # Update in database
+            await db.rfqs.update_one(
+                {"rfq_id": rfq_id},
+                {"$set": {"ai_analysis": ai_analysis}}
+            )
         
         # Define required dimensions for each geometry type
         geometry_requirements = {
@@ -3120,6 +3240,94 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     dims = ai_analysis.get("overall_dimensions") or {}
     recommended_processes = ai_analysis.get("recommended_processes", [])
     part_geometry = ai_analysis.get("part_geometry", "rectangular")
+    
+    # ============== FALLBACK: Extract dimensions from title/description for matching ==============
+    def extract_dimensions_for_matching(title, description):
+        """Extract dimensions mentioned in title or description for matching when AI analysis is incomplete"""
+        import re
+        text = f"{title} {description}".lower()
+        extracted = {}
+        
+        # Diameter patterns
+        dia_patterns = [
+            r'(?:dia(?:meter)?|ø)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:mm)?',
+            r'(\d+(?:\.\d+)?)\s*(?:mm)?\s*(?:dia(?:meter)?|ø)',
+        ]
+        for pattern in dia_patterns:
+            match = re.search(pattern, text)
+            if match:
+                extracted['diameter'] = float(match.group(1))
+                break
+        
+        # Length patterns
+        length_patterns = [
+            r'(?:length|long|l)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(?:mm)?',
+            r'(\d+(?:\.\d+)?)\s*(?:mm)?\s*(?:length|long)',
+        ]
+        for pattern in length_patterns:
+            match = re.search(pattern, text)
+            if match:
+                extracted['length'] = float(match.group(1))
+                break
+        
+        # Width patterns
+        width_match = re.search(r'(?:width|w)\s*[:=]?\s*(\d+(?:\.\d+)?)', text)
+        if width_match:
+            extracted['width'] = float(width_match.group(1))
+        
+        # Height/thickness patterns  
+        height_match = re.search(r'(?:height|thickness|h|t)\s*[:=]?\s*(\d+(?:\.\d+)?)', text)
+        if height_match:
+            val = float(height_match.group(1))
+            if 'thickness' in text:
+                extracted['thickness'] = val
+            else:
+                extracted['height'] = val
+        
+        # Dimension format: "100 x 50 x 25" or "100x50x25 mm"
+        dim_pattern = r'(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*(?:[xX×]\s*(\d+(?:\.\d+)?))?\s*(?:mm)?'
+        match = re.search(dim_pattern, text)
+        if match:
+            vals = [float(v) for v in match.groups() if v]
+            if len(vals) >= 2:
+                sorted_vals = sorted(vals, reverse=True)
+                if 'length' not in extracted:
+                    extracted['length'] = sorted_vals[0]
+                if 'width' not in extracted and len(sorted_vals) > 1:
+                    extracted['width'] = sorted_vals[1]
+                if 'height' not in extracted and len(sorted_vals) > 2:
+                    extracted['height'] = sorted_vals[2]
+        
+        # OD/ID for pipes
+        od_match = re.search(r'(?:od|outer\s*dia(?:meter)?)\s*[:=]?\s*(\d+(?:\.\d+)?)', text)
+        if od_match:
+            extracted['outer_diameter'] = float(od_match.group(1))
+        id_match = re.search(r'(?:id|inner\s*dia(?:meter)?|bore)\s*[:=]?\s*(\d+(?:\.\d+)?)', text)
+        if id_match:
+            extracted['inner_diameter'] = float(id_match.group(1))
+        
+        # Weight patterns
+        weight_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:kg|kilos?|kilogram)', text)
+        if weight_match:
+            extracted['weight_kg'] = float(weight_match.group(1))
+        
+        return extracted
+    
+    # Extract dimensions from text if AI analysis is missing dimensions
+    text_dims = extract_dimensions_for_matching(rfq.get('title', ''), rfq.get('description', ''))
+    dimensions_from_text = False
+    
+    if text_dims:
+        logger.info(f"Matching - Extracted dimensions from title/description: {text_dims}")
+        # Merge text dimensions with AI dimensions (AI takes precedence)
+        for key, value in text_dims.items():
+            if key == 'weight_kg':
+                if not ai_analysis.get('weight_kg'):
+                    ai_analysis['weight_kg'] = value
+                    dimensions_from_text = True
+            elif key not in dims or not dims.get(key):
+                dims[key] = value
+                dimensions_from_text = True
     
     # Get part dimensions from AI analysis based on geometry
     part_length = dims.get("length") or 0
@@ -3860,7 +4068,9 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         "matched_vendors": matched_vendors, 
         "total_matches": len(matched_vendors),
         "vendors_notified": len(qualified_vendors),
-        "notification_threshold": "50%"
+        "notification_threshold": "50%",
+        "dimensions_from_text": dimensions_from_text,
+        "text_extracted_dimensions": text_dims if dimensions_from_text else None
     }
 
 @api_router.post("/rfqs/{rfq_id}/submit")
