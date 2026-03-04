@@ -304,8 +304,8 @@ const VendorMatchedRFQs = () => {
                               Your Quote
                             </div>
                             <div className="flex items-center justify-end gap-1 text-2xl font-bold text-slate-900">
-                              <DollarSign className="w-5 h-5" />
-                              {quote.price?.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                              <span className="text-xl">₹</span>
+                              {quote.price?.toLocaleString('en-IN', {minimumFractionDigits: 2})}
                             </div>
                             <div className="flex items-center justify-end gap-1 text-sm text-slate-500">
                               <Clock className="w-4 h-4" /> {quote.lead_time_days} days
@@ -401,7 +401,7 @@ const VendorMatchedRFQs = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Price (USD) *
+                    Price (₹) *
                   </Label>
                   <Input
                     type="number"

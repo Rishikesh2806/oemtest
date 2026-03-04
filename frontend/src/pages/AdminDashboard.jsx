@@ -697,7 +697,7 @@ const QuotesTab = ({ quotes, loading, onRefresh, onUpdateQuote, onDeleteQuote })
                   <td className="p-4 text-xs font-mono text-slate-600">{quote.quote_id}</td>
                   <td className="p-4 text-sm text-slate-900">{quote.rfq_info?.title || quote.rfq_id}</td>
                   <td className="p-4 text-sm text-slate-900">{quote.vendor_info?.company_name || "-"}</td>
-                  <td className="p-4 font-medium text-slate-900">${quote.price?.toFixed(2)}</td>
+                  <td className="p-4 font-medium text-slate-900">₹{quote.price?.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
                   <td className="p-4 text-slate-600">{quote.lead_time_days} days</td>
                   <td className="p-4"><StatusBadge status={quote.status} /></td>
                   <td className="p-4 text-right">
@@ -848,7 +848,7 @@ const OrdersTab = ({ orders, loading, onRefresh, onUpdateOrder, onDeleteOrder })
                   <td className="p-4 text-sm text-slate-900">{order.rfq_info?.title || "-"}</td>
                   <td className="p-4 text-sm text-slate-900">{order.buyer_info?.name || "-"}</td>
                   <td className="p-4 text-sm text-slate-900">{order.vendor_info?.company_name || "-"}</td>
-                  <td className="p-4 font-medium text-slate-900">${order.total_amount?.toFixed(2)}</td>
+                  <td className="p-4 font-medium text-slate-900">₹{order.total_amount?.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
                   <td className="p-4"><StatusBadge status={order.status} /></td>
                   <td className="p-4 text-right">
                     <div className="flex justify-end gap-2">

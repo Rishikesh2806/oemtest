@@ -89,8 +89,8 @@ const QuotesList = () => {
                     <div className="flex items-center gap-6">
                       <div className="text-right">
                         <div className="flex items-center gap-1 text-lg font-bold text-slate-900">
-                          <DollarSign className="w-4 h-4" />
-                          {quote.price?.toFixed(2)}
+                          <span>₹</span>
+                          {quote.price?.toLocaleString('en-IN', {minimumFractionDigits: 2})}
                         </div>
                         <div className="flex items-center gap-1 text-sm text-slate-500">
                           <Clock className="w-3 h-3" /> {quote.lead_time_days} days

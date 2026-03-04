@@ -203,7 +203,7 @@ const BuyerDashboard = () => {
                         <div>
                           <p className="font-medium text-slate-900">Order #{order.order_id.slice(-8)}</p>
                           <p className="text-sm text-slate-500">
-                            ${order.total_amount?.toFixed(2)} {order.currency}
+                            ₹{order.total_amount?.toLocaleString('en-IN', {minimumFractionDigits: 2})}
                           </p>
                         </div>
                       </div>
