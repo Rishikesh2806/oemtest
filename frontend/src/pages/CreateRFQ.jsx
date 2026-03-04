@@ -313,6 +313,15 @@ const CreateRFQ = () => {
       }
       setStep(4);
     } catch (error) {
+      const errorMessage = error.response?.data?.detail || error.response?.data?.analysis?.error || "Analysis failed";
+      
+      // Check if it's a file format error
+      if (errorMessage.includes("CAD format") || errorMessage.includes("DWG") || errorMessage.includes("STEP")) {
+        toast.error(errorMessage, { duration: 8000 });
+        // Don't proceed to step 4 for file format errors
+        return;
+      }
+      
       toast.error("Analysis failed, but continuing with matching");
       setDimensionsMissing(true);
       setMissingFields({ length: true, width: true, height: true });
@@ -850,7 +859,10 @@ const CreateRFQ = () => {
                   Drag and drop your files here, or click to browse
                 </p>
                 <p className="text-sm text-slate-500 mt-2">
-                  Supports PDF, STEP, DWG, DXF, PNG, JPG
+                  <strong>For AI Analysis:</strong> PDF, PNG, JPG (recommended)
+                </p>
+                <p className="text-xs text-orange-600 mt-1">
+                  Note: DWG, STEP, DXF files can be uploaded but need PDF/image export for AI analysis
                 </p>
                 <input
                   id="file-input"

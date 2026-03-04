@@ -2602,6 +2602,19 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
         file_type = drawing.get("file_type", "").lower()
         filename = drawing.get("filename", "").lower()
         
+        # Check for unsupported CAD file formats
+        unsupported_cad_formats = [".dwg", ".dxf", ".step", ".stp", ".iges", ".igs", ".sat", ".prt", ".sldprt", ".catpart", ".x_t", ".x_b"]
+        is_unsupported_cad = any(filename.endswith(ext) for ext in unsupported_cad_formats)
+        
+        if is_unsupported_cad:
+            # Return a helpful error message for CAD files
+            cad_format = next((ext for ext in unsupported_cad_formats if filename.endswith(ext)), "CAD")
+            logger.warning(f"Unsupported CAD file format for AI analysis: {filename}")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"AI analysis does not support native CAD formats ({cad_format.upper()} files). Please export your drawing as a PDF or high-resolution PNG/JPG image for AI analysis. Most CAD software (AutoCAD, SolidWorks, CATIA, etc.) can export to PDF via Print > PDF or Save As > PDF."
+            )
+        
         if "pdf" in file_type or filename.endswith(".pdf"):
             logger.info(f"Converting PDF to image for analysis: {filename}")
             try:
@@ -2609,6 +2622,19 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             except Exception as pdf_err:
                 logger.error(f"PDF conversion error: {pdf_err}")
                 raise HTTPException(status_code=400, detail=f"Failed to process PDF: {str(pdf_err)}")
+        
+        # Verify the file is an image format we can analyze
+        supported_image_types = ["image/png", "image/jpg", "image/jpeg", "image/gif", "image/webp"]
+        is_image = any(img_type in file_type for img_type in supported_image_types) or \
+                   filename.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
+        is_pdf = "pdf" in file_type or filename.endswith(".pdf")
+        
+        if not is_image and not is_pdf:
+            logger.warning(f"Unsupported file type for AI analysis: {file_type} - {filename}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"AI analysis only supports images (PNG, JPG) and PDF files. Uploaded file type: {file_type}. Please convert your drawing to PDF or export as a high-resolution image."
+            )
         
         chat = LlmChat(
             api_key=api_key,
@@ -2773,9 +2799,12 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             "missing_fields": missing_fields
         }
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (like unsupported file format) without fallback
+        raise
     except Exception as e:
         logger.error(f"AI analysis error: {str(e)}")
-        # Provide fallback analysis
+        # Provide fallback analysis for other errors
         fallback_analysis = {
             "overall_dimensions": {"length": None, "width": None, "height": None, "unit": "mm"},
             "critical_tolerances": [],

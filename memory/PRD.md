@@ -19,6 +19,22 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - **Payments**: Stripe (test mode) - planned
 - **Email**: Resend API
 
+## AI Drawing Analysis - Supported Formats
+
+### Supported for AI Analysis:
+- **PDF** - Best quality, recommended
+- **PNG/JPG** - High-resolution images work well
+- The AI can extract dimensions, tolerances, materials, and manufacturing specifications
+
+### Not Supported for AI Analysis (Mar 4, 2026):
+- **DWG** (AutoCAD native format) - Requires PDF/image export
+- **STEP/STP** (3D CAD exchange format) - Requires PDF/image export
+- **DXF** (Drawing Exchange Format) - Requires PDF/image export
+- **IGES/IGS** (CAD exchange format) - Requires PDF/image export
+- **CATPART, SLDPRT, PRT** (Native CAD) - Requires PDF/image export
+
+**Note**: CAD files can still be uploaded for reference but must be exported to PDF or high-res image for AI analysis. Users receive clear error message with export instructions.
+
 ## Security Features Implemented (Mar 2, 2026)
 
 ### Password Security
