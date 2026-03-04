@@ -47,6 +47,8 @@ const CreateRFQ = () => {
   const [rfqId, setRfqId] = useState(null);
   const [files, setFiles] = useState([]);
   const [uploadProgress, setUploadProgress] = useState({});
+  const [uploadController, setUploadController] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
   
   // AI Analysis results
   const [analysisResult, setAnalysisResult] = useState(null);
@@ -246,9 +248,19 @@ const CreateRFQ = () => {
       return;
     }
 
+    // Create abort controller for cancellation
+    const controller = new AbortController();
+    setUploadController(controller);
+    setIsUploading(true);
     setLoading(true);
+    
     try {
       for (let i = 0; i < files.length; i++) {
+        // Check if upload was cancelled
+        if (controller.signal.aborted) {
+          throw new Error("Upload cancelled");
+        }
+        
         const file = files[i];
         const formDataUpload = new FormData();
         formDataUpload.append("file", file);
@@ -257,6 +269,7 @@ const CreateRFQ = () => {
 
         await api.post(`/rfqs/${rfqId}/drawings`, formDataUpload, {
           headers: { "Content-Type": "multipart/form-data" },
+          signal: controller.signal,
           onUploadProgress: (progressEvent) => {
             const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
             setUploadProgress(prev => ({ ...prev, [i]: percent }));
@@ -267,9 +280,23 @@ const CreateRFQ = () => {
       toast.success("Drawings uploaded successfully");
       setStep(3);
     } catch (error) {
-      toast.error("Failed to upload drawings");
+      if (error.name === 'CanceledError' || error.message === 'Upload cancelled') {
+        toast.info("Upload cancelled");
+        setUploadProgress({});
+      } else {
+        toast.error("Failed to upload drawings");
+      }
     } finally {
       setLoading(false);
+      setIsUploading(false);
+      setUploadController(null);
+    }
+  };
+
+  const cancelUpload = () => {
+    if (uploadController) {
+      uploadController.abort();
+      toast.info("Cancelling upload...");
     }
   };
 
@@ -878,21 +905,35 @@ const CreateRFQ = () => {
               )}
 
               <div className="flex justify-between pt-4">
-                <Button variant="outline" onClick={() => setStep(1)}>
+                <Button variant="outline" onClick={() => setStep(1)} disabled={isUploading}>
                   <ArrowLeft className="mr-2 w-4 h-4" /> Back
                 </Button>
-                <Button 
-                  onClick={uploadFiles} 
-                  disabled={loading || files.length === 0}
-                  className="bg-orange-600 hover:bg-orange-700"
-                  data-testid="upload-btn"
-                >
-                  {loading ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <>Upload & Continue <ArrowRight className="ml-2 w-4 h-4" /></>
+                <div className="flex gap-2">
+                  {isUploading && (
+                    <Button 
+                      variant="destructive"
+                      onClick={cancelUpload}
+                      data-testid="cancel-upload-btn"
+                    >
+                      <X className="mr-2 w-4 h-4" /> Cancel Upload
+                    </Button>
                   )}
-                </Button>
+                  <Button 
+                    onClick={uploadFiles} 
+                    disabled={loading || files.length === 0}
+                    className="bg-orange-600 hover:bg-orange-700"
+                    data-testid="upload-btn"
+                  >
+                    {loading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>Upload & Continue <ArrowRight className="ml-2 w-4 h-4" /></>
+                    )}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>
