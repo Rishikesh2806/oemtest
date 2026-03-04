@@ -171,29 +171,27 @@ const CreateRFQ = () => {
     { value: "DDP", label: "DDP - Delivered Duty Paid" }
   ];
 
-  // Country options for vendor preferences
-  const COUNTRY_OPTIONS = [
-    "India", "China", "Taiwan", "Japan", "South Korea", "Germany", 
-    "USA", "UK", "Italy", "Vietnam", "Thailand", "Malaysia", "Indonesia"
-  ];
+  // Country options for vendor preferences (India only)
+  const COUNTRY_OPTIONS = ["India"];
 
-  // State for available cities based on selected countries
+  // State for available cities (India only)
   const [availableCities, setAvailableCities] = useState({});
   const [loadingCities, setLoadingCities] = useState(false);
 
-  // Fetch cities when preferred countries change
+  // Fetch India cities on component mount
   useEffect(() => {
     const fetchCities = async () => {
-      if (formData.preferred_vendor_countries.length === 0) {
-        setAvailableCities({});
-        return;
-      }
-      
       setLoadingCities(true);
       try {
-        const countriesParam = formData.preferred_vendor_countries.join(",");
-        const response = await api.get(`/locations/cities?countries=${encodeURIComponent(countriesParam)}`);
+        const response = await api.get(`/locations/cities?countries=India`);
         setAvailableCities(response.data);
+        // Auto-set India as preferred country
+        if (!formData.preferred_vendor_countries.includes("India")) {
+          setFormData(prev => ({
+            ...prev,
+            preferred_vendor_countries: ["India"]
+          }));
+        }
       } catch (error) {
         console.error("Failed to fetch cities:", error);
       } finally {
@@ -202,7 +200,7 @@ const CreateRFQ = () => {
     };
 
     fetchCities();
-  }, [formData.preferred_vendor_countries]);
+  }, []);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -711,103 +709,71 @@ const CreateRFQ = () => {
                   
                   <div>
                     <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Preferred Vendor Countries (Optional)
+                      Preferred Vendor Location (India)
                     </Label>
-                    <div className="mt-2 grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border rounded-lg">
-                      {COUNTRY_OPTIONS.map((country) => (
-                        <div key={country} className="flex items-center gap-2">
-                          <Checkbox
-                            id={`country-${country}`}
-                            checked={formData.preferred_vendor_countries.includes(country)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                handleInputChange("preferred_vendor_countries", [...formData.preferred_vendor_countries, country]);
-                              } else {
-                                handleInputChange("preferred_vendor_countries", formData.preferred_vendor_countries.filter(c => c !== country));
-                              }
-                            }}
-                          />
-                          <label htmlFor={`country-${country}`} className="text-sm text-slate-600 cursor-pointer">
-                            {country}
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                    {formData.preferred_vendor_countries.length > 0 && (
-                      <p className="text-xs text-orange-600 mt-1">
-                        Selected: {formData.preferred_vendor_countries.join(", ")}
-                      </p>
-                    )}
+                    <p className="text-xs text-slate-400 mt-1 mb-2">
+                      Select cities where you prefer vendors to be located
+                    </p>
                   </div>
                 </div>
                 
-                <div className="mt-4">
+                <div className="mt-2">
                   <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Preferred Vendor Cities (Optional)
+                    Select Preferred Cities (Optional)
                   </Label>
                   
-                  {formData.preferred_vendor_countries.length === 0 ? (
-                    <p className="text-sm text-slate-400 mt-2 italic">
-                      Select preferred countries first to see available cities
-                    </p>
-                  ) : loadingCities ? (
+                  {loadingCities ? (
                     <div className="flex items-center gap-2 mt-2 text-slate-500">
                       <Loader2 className="w-4 h-4 animate-spin" />
                       <span className="text-sm">Loading cities...</span>
                     </div>
                   ) : (
                     <div className="mt-2 space-y-3">
-                      {/* Cities organized by country */}
-                      {Object.entries(availableCities).map(([country, data]) => (
-                        <div key={country} className="border border-slate-200 rounded-lg p-3">
-                          <p className="text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
-                            {country} ({data.cities?.length || 0} cities)
-                          </p>
-                          <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
-                            {data.cities?.map((city) => {
-                              const isSelected = formData.preferred_vendor_cities.includes(city.name);
-                              return (
-                                <button
-                                  key={city.name}
-                                  type="button"
-                                  onClick={() => {
-                                    if (isSelected) {
-                                      handleInputChange("preferred_vendor_cities", 
-                                        formData.preferred_vendor_cities.filter(c => c !== city.name)
-                                      );
-                                    } else {
-                                      handleInputChange("preferred_vendor_cities", 
-                                        [...formData.preferred_vendor_cities, city.name]
-                                      );
-                                    }
-                                  }}
-                                  className={`px-2 py-1 text-xs rounded-full border transition-all flex items-center gap-1 ${
-                                    isSelected
-                                      ? "bg-orange-600 text-white border-orange-600"
-                                      : city.has_vendors
-                                        ? "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
-                                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                                  }`}
-                                >
-                                  {city.has_vendors && !isSelected && (
-                                    <Building2 className="w-3 h-3" />
-                                  )}
-                                  {city.name}
-                                  {city.has_vendors && !isSelected && (
-                                    <span className="text-purple-500">({city.vendor_count})</span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                          {data.vendor_city_count > 0 && (
-                            <p className="text-xs text-purple-600 mt-2 flex items-center gap-1">
-                              <Building2 className="w-3 h-3" />
-                              Purple = Cities with registered vendors
-                            </p>
-                          )}
+                      <div className="border border-slate-200 rounded-lg p-3">
+                        <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
+                          {availableCities?.India?.cities?.map((city) => {
+                            const isSelected = formData.preferred_vendor_cities.includes(city.name);
+                            return (
+                              <button
+                                key={city.name}
+                                type="button"
+                                onClick={() => {
+                                  if (isSelected) {
+                                    handleInputChange("preferred_vendor_cities", 
+                                      formData.preferred_vendor_cities.filter(c => c !== city.name)
+                                    );
+                                  } else {
+                                    handleInputChange("preferred_vendor_cities", 
+                                      [...formData.preferred_vendor_cities, city.name]
+                                    );
+                                  }
+                                }}
+                                className={`px-2 py-1 text-xs rounded-full border transition-all flex items-center gap-1 ${
+                                  isSelected
+                                    ? "bg-orange-600 text-white border-orange-600"
+                                    : city.has_vendors
+                                      ? "bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100"
+                                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                                }`}
+                              >
+                                {city.has_vendors && !isSelected && (
+                                  <Building2 className="w-3 h-3" />
+                                )}
+                                {city.name}
+                                {city.has_vendors && !isSelected && (
+                                  <span className="text-purple-500">({city.vendor_count})</span>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
-                      ))}
+                        {availableCities?.India?.vendor_city_count > 0 && (
+                          <p className="text-xs text-purple-600 mt-2 flex items-center gap-1">
+                            <Building2 className="w-3 h-3" />
+                            Purple = Cities with registered vendors
+                          </p>
+                        )}
+                      </div>
                       
                       {/* Selected cities summary */}
                       {formData.preferred_vendor_cities.length > 0 && (

@@ -108,12 +108,8 @@ const RegisterPage = () => {
   const [loadingCities, setLoadingCities] = useState(false);
   const [showCitySuggestions, setShowCitySuggestions] = useState(false);
   
-  // Country options
-  const COUNTRY_OPTIONS = [
-    "India", "China", "Taiwan", "Japan", "South Korea", "Germany", 
-    "USA", "UK", "Italy", "Vietnam", "Thailand", "Malaysia", "Indonesia",
-    "Mexico", "Brazil"
-  ];
+  // Country options (India only)
+  const COUNTRY_OPTIONS = ["India"];
   
   // Fetch cities when country changes
   useEffect(() => {

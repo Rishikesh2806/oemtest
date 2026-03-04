@@ -1909,52 +1909,16 @@ async def verify_gstin(gstin: str):
 
 # ============== LOCATION/CITIES ROUTES ==============
 
-# Major manufacturing cities by country
+# Major manufacturing cities by country (India only)
 MAJOR_CITIES_BY_COUNTRY = {
     "India": [
         "Mumbai", "Delhi", "Bangalore", "Chennai", "Hyderabad", "Pune", "Ahmedabad",
         "Kolkata", "Coimbatore", "Ludhiana", "Faridabad", "Gurgaon", "Noida",
-        "Jamshedpur", "Indore", "Nashik", "Vadodara", "Rajkot", "Surat", "Haora"
-    ],
-    "China": [
-        "Shanghai", "Shenzhen", "Guangzhou", "Beijing", "Dongguan", "Suzhou",
-        "Hangzhou", "Ningbo", "Tianjin", "Wuhan", "Chengdu", "Foshan", "Xiamen"
-    ],
-    "USA": [
-        "Detroit", "Chicago", "Los Angeles", "Houston", "Cleveland", "Phoenix",
-        "San Jose", "Milwaukee", "Dallas", "Atlanta", "Pittsburgh", "Seattle"
-    ],
-    "Germany": [
-        "Stuttgart", "Munich", "Hamburg", "Berlin", "Dusseldorf", "Frankfurt",
-        "Cologne", "Wolfsburg", "Nuremberg", "Leipzig", "Dresden"
-    ],
-    "Japan": [
-        "Tokyo", "Osaka", "Nagoya", "Yokohama", "Kobe", "Hiroshima",
-        "Fukuoka", "Kawasaki", "Saitama", "Sendai"
-    ],
-    "South Korea": [
-        "Seoul", "Busan", "Incheon", "Daegu", "Ulsan", "Changwon", "Gwangju"
-    ],
-    "Taiwan": [
-        "Taipei", "Taichung", "Kaohsiung", "Taoyuan", "Tainan", "Hsinchu"
-    ],
-    "Vietnam": [
-        "Ho Chi Minh City", "Hanoi", "Da Nang", "Hai Phong", "Bien Hoa", "Binh Duong"
-    ],
-    "Thailand": [
-        "Bangkok", "Rayong", "Chonburi", "Samut Prakan", "Chiang Mai"
-    ],
-    "UK": [
-        "Birmingham", "Manchester", "Sheffield", "Leeds", "Glasgow", "Bristol", "London"
-    ],
-    "Mexico": [
-        "Monterrey", "Mexico City", "Guadalajara", "Queretaro", "Tijuana", "Saltillo"
-    ],
-    "Brazil": [
-        "Sao Paulo", "Rio de Janeiro", "Belo Horizonte", "Curitiba", "Porto Alegre"
-    ],
-    "Italy": [
-        "Milan", "Turin", "Bologna", "Brescia", "Bergamo", "Modena"
+        "Jamshedpur", "Indore", "Nashik", "Vadodara", "Rajkot", "Surat", "Haora",
+        "Tiruchirappalli", "Salem", "Hosur", "Aurangabad", "Nagpur", "Visakhapatnam",
+        "Madurai", "Thiruvananthapuram", "Kochi", "Bhopal", "Raipur", "Ranchi",
+        "Lucknow", "Kanpur", "Agra", "Varanasi", "Patna", "Guwahati", "Chandigarh",
+        "Jalandhar", "Amritsar", "Jodhpur", "Jaipur", "Udaipur", "Bhilai"
     ]
 }
 
