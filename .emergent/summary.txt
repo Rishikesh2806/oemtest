@@ -4,80 +4,70 @@ The platform must support a complete workflow: RFQ -> AI Analysis -> Vendor Matc
 
 **PRODUCT REQUIREMENTS:**
 -   **User Roles:** Buyer, Vendor, Admin.
--   **AI Core:** An Intelligence Engine to read drawings (PDF, CAD, etc.) and extract technical specifications, aware of part geometry (e.g., cylindrical vs. rectangular).
--   **Matching:** A smart algorithm to match RFQs to vendors based on machine type, capacity, and location.
+-   **AI Core:** An Intelligence Engine to read drawings (PDF, CAD, etc.), extract technical specifications, and use RFQ title/description as a fallback.
+-   **Matching:** A smart algorithm to match RFQs to vendors based on machine type, capacity, location, and past project experience.
 -   **Workflow:** A complete RFQ-to-payment lifecycle management module.
 -   **Security:** Secure user authentication with 2FA, password policies, and rate limiting.
--   **Commercials:** Escrow payments, platform commissions, and multi-currency support.
+-   **Commercials:** Escrow payments, platform commissions, and currency support (now INR).
 -   **Dashboards:** Dedicated dashboards for buyers, vendors, and admins.
 -   **Tech Stack:** React frontend, Python (FastAPI) backend, and a MongoDB database.
 
 **User's preferred language**: English
 
 **what currently exists?**
-A full-stack application rebranded as **OEMLinker** with a React frontend and FastAPI backend using MongoDB. The app features JWT authentication with comprehensive security enhancements, including 2FA via email, password strength policies, account lockout, and forgot/reset password flows.
+The OEMLinker application is a mature full-stack platform with a React frontend, a monolithic FastAPI backend, and a MongoDB database.
 
-Key implemented features:
--   **Core Workflows:** RFQ matching, quotation lifecycle, order management, and quote negotiation.
--   **Geometry-Aware AI:** The AI drawing analysis now intelligently detects part geometry (e.g., cylindrical, rectangular) and extracts appropriate dimensions (e.g., diameter, length).
--   **Advanced Vendor Matching:** The algorithm matches RFQs to vendors by considering machine type vs. part geometry, dimensional and weight capacity, and vendor location preferences.
--   **Enhanced RFQ Creation:** RFQs now include fields for Delivery Location, Incoterms, and Preferred Vendor Locations.
--   **User Profiles:** A dedicated Buyer Profile page allows users to manage personal, company, and security (2FA) settings.
--   **UI/UX:** The app uses a new, larger SVG logo for OEMLinker.
--   **Integrations:** GPT-5.2 for drawing analysis, Resend for emails (configured for ), and a GSTIN API.
+**Key Implemented Features:**
+-   **Core Platform:** Full JWT authentication (login, register, 2FA, password reset), user role management, and dashboards.
+-   **RFQ Workflow:** Users can create RFQs, upload multiple drawings (PDF/Image for analysis, CAD as attachments), and receive AI-driven analysis of specifications. The system supports upload cancellation.
+-   **Advanced Vendor Matching:** The algorithm matches vendors based on a weighted score considering:
+    -   Machine capabilities vs. part geometry/requirements.
+    -   Dimensional/weight capacity.
+    -   **Location Preferences:** Prioritizes vendors in the buyer's preferred cities.
+    -   **Past Experience:** A significant matching component that scores vendors based on keywords, part types, materials, and industries from their project history.
+    -   **Text-Based Fallback:** Uses RFQ title and description to infer dimensions and processes if drawing analysis is inconclusive.
+-   **Vendor Profiles:** Vendors can manage their company details and add a portfolio of Past Experiences to improve their match potential.
+-   **UI/UX:** The UI has been updated to use INR (₹) as the currency. It features a hybrid city selector that auto-loads Indian cities, highlighting those with registered vendors. It also provides clear user feedback on drawing analysis status (analyzed vs. CAD attachment).
+-   **Admin:** A secure, one-time endpoint () exists to create the initial admin user in a new production environment.
 
 **Last working item**:
--   Last item agent was working: Enhancing the vendor matching algorithm to use the new Preferred Vendor Locations (countries and cities) specified in an RFQ. The backend logic was added to score and prioritize vendors based on these preferences.
+-   Last item agent was working: The user reported that for the account , newly added Past Experience entries disappear after logging out and back in. The agent began investigating this persistence issue.
 -   Status: IN PROGRESS
 -   Agent Testing Done: N
--   Which testing method agent to use? backend testing agent
+-   Which testing method agent to use? manual testing by curl
 -   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Test and Verify Vendor Location Matching (Priority: P0)**
-    -   **Attempted fixes:** The backend logic was added to  in the  endpoint.
+-   **Issue 1: Past Experience Not Persisting for  (Priority: P0)**
+    -   **Attempted fixes:** The agent confirmed the  API works correctly in the preview environment and added fallback logic to auto-create a vendor profile if one doesn't exist upon adding an experience. The investigation for the specific user account had just begun.
     -   **Next debug checklist:**
-        1.  Create an RFQ with specific Preferred Vendor Countries/Cities.
-        2.  Use  or the testing agent to call the  endpoint.
-        3.  Verify that the returned list of vendors is correctly filtered and/or prioritized based on the location preferences.
-    -   **Why fix this issue and what will be achieved with the fix?** To complete the location-based vendor preference feature and ensure it provides more relevant matches for buyers.
+        1.  Log in as  using .
+        2.  Add a new past experience item via the  endpoint.
+        3.  Verify the experience was added by calling the GET  endpoint immediately after.
+        4.  Log out and log back in as the same user.
+        5.  Call GET  again to check if the data persists.
+        6.  Inspect the GET/POST logic in  for the  endpoint and the  hook in  that fetches the data to identify any potential race conditions or state management flaws.
+    -   **Why fix this issue and what will be achieved with the fix?** The Past Experience feature is a critical part of the vendor matching algorithm. If vendors cannot save their data, the matching quality is severely degraded.
     -   **Status:** IN PROGRESS
     -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** backend
+    -   **Should Test frontend/backend/both after fix?** both
     -   **Blocked on other issue:** None
 
--   **Issue 2: Display New RFQ Fields for Vendors (Priority: P1)**
-    -   **Attempted fixes:** None. This was missed when adding the new fields.
+-   **Issue 2: Verify GSTIN Integration for Vendor Registration (Priority: P1)**
+    -   **Attempted fixes:** None in this session. This is a carry-over from a previous handoff.
     -   **Next debug checklist:**
-        1.  Modify .
-        2.  Check the user's role.
-        3.  When the user is a vendor, display the Delivery Location and Incoterms sections, similar to how they are shown for buyers/admins.
-    -   **Why fix this issue and what will be achieved with the fix?** Vendors need to see the delivery location and shipping terms to provide an accurate quote.
-    -   **Status:** NOT STARTED
-    -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** frontend
-    -   **Blocked on other issue:** None
-
--   **Issue 3: Verify GSTIN Integration for Vendor Registration (Priority: P2)**
-    -   **Attempted fixes:** The agent previously checked  and concluded the code was implemented.
-    -   **Next debug checklist:**
-        1.  Navigate to the registration page and select the Vendor role.
+        1.  Go to the registration page and select the Vendor role.
         2.  Enter a valid test GSTIN and click Verify.
-        3.  Confirm that company details (name, address) are auto-populated correctly.
-        4.  Complete the registration and ensure the vendor is created successfully.
-    -   **Why fix this issue and what will be achieved with the fix?** This was a high-priority item from a previous session that was never fully tested end-to-end. Verification is needed to close the loop.
+        3.  Confirm company details are auto-populated.
+        4.  Complete the registration and verify the vendor is created.
+    -   **Why fix this issue and what will be achieved with the fix?** To ensure the automated vendor verification flow, a key trust and safety feature, works end-to-end.
     -   **Status:** USER VERIFICATION PENDING
     -   **Is recurring issue?** N
     -   **Should Test frontend/backend/both after fix?** frontend
     -   **Blocked on other issue:** None
 
 **In progress Task List**:
--   **Task 1: Complete Vendor Location Preference Feature (Priority: P0)**
-    -   **Where to resume:** Testing the  endpoint.
-    -   **What will be achieved with this?** A fully functional vendor matching system that respects buyer location preferences.
-    -   **Status:** IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?** backend
-    -   **Blocked on something:** No
+-   None.
 
 **Upcoming and Future Tasks**
 **Upcoming Tasks:**
@@ -91,24 +81,23 @@ Key implemented features:
 -   **Refactor the monolithic ** into a more scalable structure (routes, models, services).
 
 **Completed work in this session**
--   **Rebranding:** Fully rebranded the application from MachinoMatch to OEMLinker, including a new SVG logo, app-wide text replacement, and updated email sender domain.
--   **Security Overhaul:**
-    -   Implemented backend rate limiting, brute-force protection, account lockout, and password history.
-    -   Added a full **Forgot/Reset Password** flow with secure tokens and email notifications.
-    -   Implemented **2FA via email OTP** for login, with options to enable/disable in the user profile.
-    -   Added password change security alert emails.
-    -   Enhanced the registration page with a real-time password strength indicator.
--   **AI & Matching Enhancements:**
-    -   Made AI drawing analysis geometry-aware to extract relevant dimensions for different part shapes.
-    -   Upgraded the vendor matching algorithm to filter by machine type vs. part geometry, and check dimensional/weight capacity.
--   **Feature Additions:**
-    -   Created a **Buyer Profile** page with tabs for personal, company, and security settings.
-    -   Added new fields to RFQs: **Delivery Location, Incoterms, and Preferred Vendor Locations**.
-    -   Updated the RFQ detail view to display the new fields for buyers/admins.
--   **Bug Fixes & Admin:**
-    -   Fixed a critical login redirect bug.
-    -   Addressed user queries about the Emergent LLM Key and custom domain linking.
-    -   Updated the Resend API key.
+-   **Feature: Advanced Vendor Matching:**
+    -   Implemented and tested location-based scoring for vendor matching.
+    -   Added Past Experience to vendor profiles, with full CRUD, and integrated it as a heavily weighted component in the matching algorithm.
+    -   Enhanced matching to use RFQ title/description as a fallback for dimension extraction.
+    -   Added conventional machine types for matching rough/heavy machining jobs.
+-   **Feature: Multi-Drawing & CAD File Handling:**
+    -   Enabled analysis of multiple drawings in a single RFQ.
+    -   The system now intelligently skips unsupported CAD files (DWG, STEP) for AI analysis but retains them as RFQ attachments.
+    -   Updated UI to show AI Analyzed vs. CAD Attachment badges.
+-   **Feature: City Auto-Loading (India Focus):**
+    -   Implemented a hybrid city selector on RFQ and registration forms that auto-loads all major Indian cities, highlighting those with registered vendors.
+-   **Feature: Upload Cancellation:** Added a Cancel button to the drawing upload process.
+-   **Enhancement: Currency Change to INR:** Changed all currency displays and inputs from USD ($) to Indian Rupees (₹) across the entire application.
+-   **Admin: Secure Setup Endpoint:** Created a one-time, secure endpoint () for creating the initial admin user on a new production deployment.
+-   **Bug Fix:** Resolved an issue where spaces in process names within Past Experience were not being saved correctly.
+-   **Bug Fix:** Fixed a critical API route-ordering issue that prevented vendor experiences from being retrieved.
+-   **Verification:** Confirmed that vendors can already see all necessary RFQ fields (Delivery Location, Incoterms), correcting an inaccuracy in the previous handoff summary.
 
 **Earlier issues found/mentioned but not fixed**
 -   The **Made with Emergent badge** cannot be removed via code in the preview environment, as it's injected by a platform script. The solution is to deploy to a custom server or contact support for paid plans.
@@ -123,58 +112,58 @@ Key implemented features:
 -   **Backend:** FastAPI
 -   **Frontend:** React (functional components, hooks)
 -   **Database:** MongoDB
--   **Security:** JWT, bcrypt, Rate Limiting (SlowAPIs), 2FA via email, Pwned Passwords validation.
+-   **Security:** JWT, bcrypt, Rate Limiting, 2FA, Pwned Passwords validation.
 -   **AI Integration:** OpenAI GPT-5.2 (Vision API) via .
--   **Email:** Resend API
--   **Vendor Verification:** GSTIN Check API
+-   **Frontend State:**  for handling upload cancellation.
 
 **key DB schema**
 -   **users:** 
+-   **PastExperience:**  (New model, stored within )
 -   **rfqs:** 
--   **password_reset_tokens:** (New collection) 
 
 **changes in tech stack**
 -   None.
 
 **All files of reference**
--   : Heavily modified for security, geometry-aware AI/matching, new RFQ fields, and user profiles.
--   : Modified for geometry-aware dynamic dimension fields and new RFQ option fields.
--   : Modified for password strength indicator.
--   : Modified to handle 2FA and fix login redirect.
--   : New file for managing user/company/security info.
--   , : New files for the password reset flow.
--   Multiple files across the frontend were updated for the OEMLinker rebranding and to use the new larger SVG logo.
+-   : Heavily modified for all new features and bug fixes (matching, experience, city API, admin setup, currency).
+-   : Modified for multi-file upload, cancel button, text guidance, and India-specific city selection.
+-   : Modified for country/city selection.
+-   : Modified to display enhanced experience matching data and file analysis status badges.
+-   : New file to allow vendors to manage their past experiences.
+-   : Updated the global register function.
+-   Multiple frontend files (, , , etc.) were updated to change currency from  to .
 
 **Areas that need refactoring**:
--   The  file has grown significantly and is a high-priority candidate for being broken down into a proper project structure (e.g., separate directories for routes, models, services, security).
+-    is now extremely large and complex. It is a high-priority candidate for being broken down into a proper project structure (e.g., separate directories for routes, models, services, security).
 
 **key api endpoints**
--   , ,  (POST)
--   , ,  (POST)
--    (GET, PUT)
--    (GET) - Updated with new geometry and location matching logic.
+-    (POST) - New endpoint for one-time admin creation.
+-    (GET) - New endpoint to fetch a hybrid list of cities.
+-    (GET, POST, DELETE) - New endpoints for vendor past experience CRUD.
+-    (POST) - Modified to handle multiple files and skip CAD.
+-    (GET) - Modified to include location and experience scoring.
+-    (POST) - Modified to handle vendor-specific fields.
 
 **Critical Info for New Agent**
--   **Rebranding Complete:** The application is now **OEMLinker**. Test users in the database may still have  emails; consider creating new  test users for consistency.
--   **Monolithic Backend:**  contains all backend logic. Be mindful of this when adding new features. A major refactor is on the backlog.
--   **Platform Badge:** The Made with Emergent badge **cannot be removed** via code in the development environment. Inform the user of this platform limitation if they ask again.
--   **Domain Linking:** The user must link their  domain via the Emergent platform's Link domain feature. You cannot do this with code.
+-   The immediate priority is debugging the Past Experience not persisting issue for the  account. The feature works in the preview environment, so this may be a data-specific or edge-case bug.
+-   The production site () and the preview environment use separate databases. The user has been provided instructions for using the  endpoint to create their production admin account.
+-   Be extremely careful when adding new routes to  due to its monolithic nature. The agent previously fixed a critical bug caused by incorrect route ordering. New, more specific routes must be defined *before* general routes with path parameters (e.g.,  must come before ).
 
 **documents and test reports created in this job**
--   : Updated with all new features and rebranding.
--   : Confirmed core features were working after the first major implementation wave.
+-   : Updated with all new features.
+-   : Generated after verifying the location matching fix.
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **user:** add company details in buyer profile (Status: **Completed**)
-2.  **user:** remove made with emergent badge from app (Status: **Completed** - Investigated and explained it's a platform limitation)
-3.  **user:** add options in RFQs like delivery location, incoterms, preferred vendors locations (Status: **Completed**)
-4.  **user:** Display delivery/incoterms in RFQ detail view (Status: **Completed**)
-5.  **user:** Use vendor location preferences in matching algorithm (Status: **In Progress**)
-6.  **user:** use this logo (Status: **Completed**)
-7.  **user:** remove site name and use that space with logo in transparent image (Status: **Completed**)
-8.  **user:** make it larger to be visible like text (Status: **Completed**)
-9.  **user:** login not redirecting (Status: **Completed**)
-10. **user:** use this logo (Status: **Completed** - new logo provided)
+1.  **user:** change currency in rupees symbol (Status: **Completed**)
+2.  **user:** Proceed (with currency changes) (Status: **Completed**)
+3.  **user:** What is admin credentials for deployed app (Status: **Answered** - Explained DB separation and provided solution)
+4.  **user:** Is not working in oemlinker.com (Status: **Answered** - Explained DB separation)
+5.  **user:** Past experience is not being saved (Status: **In Progress** - Investigation started)
+6.  **user:** vendor@offoadex.com, password - vendor123 past experience is added but not shown after login again (Status: **In Progress** - This is the current active bug being investigated)
+7.  **user:** use description and title for drawing analysis and matching if dimensions are not found accurately from drawing file (Status: **Completed**)
+8.  **user:** match results with past experience data also and give weightage in matching results (Status: **Completed**)
+9.  **user:** check processes used in vendor experience space is not taking between texts (Status: **Completed**)
+10. **user:** add past experience in vendor profile match with title, description if drawing analyzed results are not sufficient for matching... (Status: **Completed**)
 
 **Project Health Check:**
 -   **Broken:** None
@@ -201,11 +190,12 @@ Key implemented features:
 -   **Buyer:**
     -   Email: 
     -   Password: 
--   **Vendor:**
+-   **Vendor (with experience issue):**
     -   Email: 
     -   Password: 
-*Note: Consider creating new test users with  emails for consistency.*
+-   **Other Test Vendor:**
+    -   Email: 
+    -   Password: 
 
 **What agent forgot to execute**
--   The agent did not add the new RFQ fields (Delivery Location, Incoterms) to the **vendor's view** of the RFQ detail page. This is now listed as **Pending Issue 2**.
--   The agent did not perform a data migration for existing users after the MachinoMatch -> OEMLinker rebrand. Existing user data will still reference the old brand.</analysis>
+-   The agent was actively working on the user's latest bug report and had not forgotten any tasks. The next logical step is to continue debugging the persistence issue.</analysis>
