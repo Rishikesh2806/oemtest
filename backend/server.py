@@ -2243,6 +2243,9 @@ async def get_vendor_full_profile(vendor_id: str, user: dict = Depends(get_curre
 
 # ============== GSTIN VERIFICATION ==============
 
+# GSTIN API Key
+GSTIN_API_KEY = os.environ.get("GSTIN_API_KEY", "6720148bc8d7ed819c0e757afae0be70")
+
 @api_router.get("/gstin/verify/{gstin}")
 async def verify_gstin(gstin: str):
     """Verify GSTIN and fetch company details from GST database"""
@@ -2276,10 +2279,10 @@ async def verify_gstin(gstin: str):
     state = state_codes.get(state_code, "Unknown")
     
     try:
-        # Try to fetch from public GST API (gstincheck.co.in free API)
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # Using the free API from gstincheck.co.in
-            api_url = f"https://sheet.gstincheck.co.in/check/free/{gstin}"
+        # Fetch from GSTIN Check API with API key
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            api_url = f"http://sheet.gstincheck.co.in/check/{GSTIN_API_KEY}/{gstin}"
+            logger.info(f"Verifying GSTIN: {gstin}")
             response = await client.get(api_url)
             
             if response.status_code == 200:
