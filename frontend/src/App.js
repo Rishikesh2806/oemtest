@@ -27,7 +27,8 @@ import QuotesList from "./pages/QuotesList";
 import ChatPage from "./pages/ChatPage";
 import NotificationsPage from "./pages/NotificationsPage";
 
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+// Use relative URL for API calls - works on any domain
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || window.location.origin;
 export const API = `${BACKEND_URL}/api`;
 
 // Auth Context
