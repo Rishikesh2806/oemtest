@@ -58,7 +58,7 @@ const LandingPage = () => {
       <nav className="fixed top-0 left-0 right-0 z-50 glass border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <img src="/logo.svg" alt="OEMLinker" className="h-14" />
+            <img src="/logo.svg" alt="OEMLinker" className="w-[180px] h-[48px]" />
           </Link>
           
           <div className="flex items-center gap-4">
@@ -254,7 +254,7 @@ const LandingPage = () => {
         <div className="max-w-7xl mx-auto px-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <img src="/logo.svg" alt="OEMLinker" className="h-12" />
+              <img src="/logo.svg" alt="OEMLinker" className="w-[180px] h-[48px]" />
             </div>
             <p className="text-sm">© 2025 OEMLinker. Precision Manufacturing on Demand.</p>
           </div>

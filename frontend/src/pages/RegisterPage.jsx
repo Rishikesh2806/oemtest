@@ -251,7 +251,7 @@ const RegisterPage = () => {
       <div className="flex-1 flex items-center justify-center px-6 py-12 overflow-y-auto">
         <div className="w-full max-w-md">
           <Link to="/" className="flex items-center gap-2 mb-8">
-            <img src="/logo.svg" alt="OEMLinker" className="h-14" />
+            <img src="/logo.svg" alt="OEMLinker" className="w-[180px] h-[48px]" />
           </Link>
 
           <h1 className="font-heading text-3xl font-bold text-slate-900 mb-2">Create your account</h1>
