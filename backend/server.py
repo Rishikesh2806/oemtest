@@ -1795,9 +1795,15 @@ async def get_vendor_profile(user: dict = Depends(get_current_user)):
 
 @api_router.put("/vendors/profile")
 async def update_vendor_profile(profile: VendorProfileCreate, user: dict = Depends(get_current_user)):
+    # Get the update data but EXCLUDE past_experiences to preserve them
+    update_data = profile.model_dump()
+    # Remove past_experiences from update to prevent overwriting
+    # Past experiences are managed separately via /vendors/experiences endpoints
+    update_data.pop("past_experiences", None)
+    
     result = await db.vendors.update_one(
         {"user_id": user["user_id"]},
-        {"$set": profile.model_dump()}
+        {"$set": update_data}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Vendor profile not found")

@@ -183,7 +183,9 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 
 ## Known Issues
 - External GSTIN API (gstincheck.co.in) may occasionally return errors
-- **Past Experience Persistence**: Investigated Mar 5, 2026 - No bug found. Backend API and frontend correctly persist and display vendor experiences. Issue was NOT reproducible. Possible causes: user was testing on production (separate DB), or transient browser cache issue.
+
+## Bug Fixes (Mar 5, 2026)
+- **Past Experience Persistence Fixed**: The PUT `/api/vendors/profile` endpoint was overwriting `past_experiences` with an empty array when saving profile changes. Fixed by excluding `past_experiences` from the `$set` operation - experiences are now managed separately via `/vendors/experiences` endpoints.
 
 ## Database Collections
 - users, user_sessions, vendors, machines
