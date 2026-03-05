@@ -27,8 +27,9 @@ import QuotesList from "./pages/QuotesList";
 import ChatPage from "./pages/ChatPage";
 import NotificationsPage from "./pages/NotificationsPage";
 
-// Use relative URL for API calls - works on any domain
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || window.location.origin;
+// Use window.location.origin for API calls - this ensures requests go to the same domain
+// This fixes issues where REACT_APP_BACKEND_URL might point to a different host
+const BACKEND_URL = window.location.origin;
 export const API = `${BACKEND_URL}/api`;
 
 // Auth Context
@@ -45,7 +46,6 @@ export const useAuth = () => {
 // API instance with auth
 export const api = axios.create({
   baseURL: API,
-  withCredentials: true,
 });
 
 api.interceptors.request.use((config) => {
