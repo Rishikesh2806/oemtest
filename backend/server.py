@@ -7043,7 +7043,7 @@ EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
 
 @api_router.post("/voice/transcribe")
 async def transcribe_audio(audio: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    """Transcribe audio to text using OpenAI Whisper"""
+    """Transcribe audio to text using OpenAI Whisper - supports all Indian languages"""
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="Voice agent not configured")
     
@@ -7056,22 +7056,27 @@ async def transcribe_audio(audio: UploadFile = File(...), user: dict = Depends(g
         # Initialize STT
         stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
         
-        # Transcribe
+        # Transcribe with auto language detection (supports Hindi, Tamil, Telugu, Bengali, etc.)
         response = await stt.transcribe(
             file=audio_file,
             model="whisper-1",
-            language="en",
-            response_format="json"
+            response_format="verbose_json"  # Get language detection
         )
         
-        return {"text": response.text}
+        # Extract detected language
+        detected_language = getattr(response, 'language', 'en') or 'en'
+        
+        return {
+            "text": response.text,
+            "language": detected_language
+        }
     except Exception as e:
         logger.error(f"Transcription error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
 
 @api_router.post("/voice/query")
 async def voice_query(request: Request, user: dict = Depends(get_current_user)):
-    """Process voice query and return matched RFQs with audio response"""
+    """Process voice query and return matched RFQs with audio response - supports all Indian languages"""
     if not EMERGENT_LLM_KEY:
         raise HTTPException(status_code=500, detail="Voice agent not configured")
     
@@ -7080,6 +7085,26 @@ async def voice_query(request: Request, user: dict = Depends(get_current_user)):
     
     body = await request.json()
     query_text = body.get("query", "")
+    detected_language = body.get("language", "en")  # Language detected from transcription
+    
+    # Map language codes to full names for AI prompt
+    LANGUAGE_NAMES = {
+        "en": "English",
+        "hi": "Hindi (हिंदी)",
+        "ta": "Tamil (தமிழ்)",
+        "te": "Telugu (తెలుగు)",
+        "bn": "Bengali (বাংলা)",
+        "mr": "Marathi (मराठी)",
+        "gu": "Gujarati (ગુજરાતી)",
+        "kn": "Kannada (ಕನ್ನಡ)",
+        "ml": "Malayalam (മലയാളം)",
+        "pa": "Punjabi (ਪੰਜਾਬੀ)",
+        "or": "Odia (ଓଡ଼ିଆ)",
+        "as": "Assamese (অসমীয়া)",
+        "ur": "Urdu (اردو)"
+    }
+    
+    language_name = LANGUAGE_NAMES.get(detected_language, "the same language as the user's query")
     
     if not query_text:
         raise HTTPException(status_code=400, detail="Query text is required")
@@ -7088,10 +7113,15 @@ async def voice_query(request: Request, user: dict = Depends(get_current_user)):
         # Get vendor info
         vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
         if not vendor:
+            no_profile_msg = {
+                "en": "Your vendor profile is not set up yet. Please complete your profile first.",
+                "hi": "आपकी वेंडर प्रोफ़ाइल अभी तक सेट नहीं हुई है। कृपया पहले अपनी प्रोफ़ाइल पूरी करें।",
+            }
             return {
-                "response_text": "Your vendor profile is not set up yet. Please complete your profile first.",
+                "response_text": no_profile_msg.get(detected_language, no_profile_msg["en"]),
                 "matched_rfqs": [],
-                "audio_base64": None
+                "audio_base64": None,
+                "language": detected_language
             }
         
         # Get matched RFQs for this vendor
@@ -7119,7 +7149,9 @@ async def voice_query(request: Request, user: dict = Depends(get_current_user)):
                     "created_at": rfq.get("created_at", "")
                 })
         
-        # Build context for AI
+        # Build context for AI - with multilingual support
+        language_instruction = f"\n\nIMPORTANT: Respond ONLY in {language_name}. Do not mix languages."
+        
         if rfq_summaries:
             rfq_context = "\n".join([
                 f"- {r['title']}: {r['material']}, Qty: {r['quantity']}, Match Score: {r['match_score']}%, Machines: {', '.join(r['matching_machines'][:2]) or 'Compatible'}"
@@ -7130,14 +7162,14 @@ The vendor has {len(rfq_summaries)} matched RFQs. Here are the most recent ones:
 {rfq_context}
 
 Respond naturally and concisely to the vendor's question. Keep responses under 100 words.
-Focus on the most relevant information. Mention match scores and key details."""
+Focus on the most relevant information. Mention match scores and key details.{language_instruction}"""
         else:
-            system_prompt = """You are a helpful voice assistant for OEMLinker, a manufacturing marketplace.
+            system_prompt = f"""You are a helpful voice assistant for OEMLinker, a manufacturing marketplace.
 The vendor currently has no matched RFQs. Encourage them to:
 1. Complete their profile with all machines
 2. Add past experiences
 3. Check back soon for new opportunities
-Keep responses friendly and under 50 words."""
+Keep responses friendly and under 50 words.{language_instruction}"""
         
         # Use AI to generate natural response
         session_id = f"voice_{user['user_id']}_{uuid.uuid4().hex[:8]}"
@@ -7154,14 +7186,15 @@ Keep responses friendly and under 50 words."""
         audio_base64 = await tts.generate_speech_base64(
             text=response_text,
             model="tts-1",
-            voice="nova"  # Energetic, upbeat voice
+            voice="nova"  # Energetic, upbeat voice - works well for multiple languages
         )
         
         return {
             "response_text": response_text,
             "matched_rfqs": rfq_summaries[:5],
             "total_matches": len(rfq_summaries),
-            "audio_base64": audio_base64
+            "audio_base64": audio_base64,
+            "language": detected_language
         }
         
     except Exception as e:

@@ -73,7 +73,7 @@ const VoiceAgent = ({ isOpen, onClose }) => {
     setIsProcessing(true);
     
     try {
-      // Step 1: Transcribe audio
+      // Step 1: Transcribe audio (auto-detects language)
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
       
@@ -82,6 +82,7 @@ const VoiceAgent = ({ isOpen, onClose }) => {
       });
       
       const userQuery = transcribeResponse.data.text;
+      const detectedLanguage = transcribeResponse.data.language || 'en';
       setTranscript(userQuery);
       
       if (!userQuery || userQuery.trim().length < 2) {
@@ -90,9 +91,10 @@ const VoiceAgent = ({ isOpen, onClose }) => {
         return;
       }
       
-      // Step 2: Process query and get response
+      // Step 2: Process query with detected language
       const queryResponse = await api.post('/voice/query', {
-        query: userQuery
+        query: userQuery,
+        language: detectedLanguage
       });
       
       setResponse(queryResponse.data.response_text);
@@ -174,7 +176,7 @@ const VoiceAgent = ({ isOpen, onClose }) => {
             </Button>
           </div>
           <p className="text-orange-100 text-sm mt-1">
-            Ask about your matched RFQs
+            Speak in English, Hindi, Tamil, Telugu, or any Indian language
           </p>
         </CardHeader>
         
@@ -273,20 +275,22 @@ const VoiceAgent = ({ isOpen, onClose }) => {
             </div>
           )}
 
-          {/* Sample Questions */}
+          {/* Sample Questions - English & Hindi */}
           <div className="border-t pt-4">
-            <p className="text-xs text-gray-500 mb-2">Try asking:</p>
+            <p className="text-xs text-gray-500 mb-2">Try asking (English or Hindi):</p>
             <div className="flex flex-wrap gap-2">
               {[
                 "What new RFQs match my machines?",
+                "मेरी मशीनों से कौन से RFQ मिलते हैं?",
                 "Show me high-priority opportunities",
-                "Any urgent requests today?"
+                "आज कोई urgent काम है?"
               ].map((suggestion, i) => (
                 <button
                   key={i}
                   onClick={() => {
                     setTranscript(suggestion);
-                    api.post('/voice/query', { query: suggestion })
+                    const lang = suggestion.match(/[अ-ह]/) ? 'hi' : 'en';
+                    api.post('/voice/query', { query: suggestion, language: lang })
                       .then(res => {
                         setResponse(res.data.response_text);
                         setMatchedRFQs(res.data.matched_rfqs || []);
