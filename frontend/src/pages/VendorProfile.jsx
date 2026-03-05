@@ -109,14 +109,28 @@ const VendorProfile = () => {
     setExpSaving(true);
     try {
       // Ensure processes_used is an array before sending
+      let processesArray = [];
+      if (Array.isArray(newExperience.processes_used)) {
+        processesArray = newExperience.processes_used;
+      } else if (typeof newExperience.processes_used === 'string' && newExperience.processes_used.trim()) {
+        processesArray = newExperience.processes_used.split(",").map(p => p.trim()).filter(p => p);
+      }
+      
       const experienceData = {
-        ...newExperience,
-        processes_used: Array.isArray(newExperience.processes_used) 
-          ? newExperience.processes_used 
-          : newExperience.processes_used.split(",").map(p => p.trim()).filter(p => p)
+        title: newExperience.title,
+        description: newExperience.description || "",
+        industry: newExperience.industry || "",
+        material: newExperience.material || "",
+        processes_used: processesArray,
+        part_type: newExperience.part_type || "",
+        year: newExperience.year || new Date().getFullYear()
       };
       
-      await api.post("/vendors/experiences", experienceData);
+      console.log("Sending experience data:", experienceData);
+      
+      const response = await api.post("/vendors/experiences", experienceData);
+      console.log("Experience saved:", response.data);
+      
       toast.success("Experience added successfully");
       setShowExpForm(false);
       setNewExperience({
@@ -130,7 +144,8 @@ const VendorProfile = () => {
       });
       fetchExperiences();
     } catch (error) {
-      toast.error("Failed to add experience");
+      console.error("Failed to add experience:", error);
+      toast.error("Failed to add experience: " + (error.response?.data?.detail || error.message));
     } finally {
       setExpSaving(false);
     }

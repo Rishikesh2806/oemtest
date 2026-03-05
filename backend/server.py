@@ -1827,24 +1827,39 @@ async def add_past_experience(experience: PastExperience, user: dict = Depends(g
     
     vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
     if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor profile not found")
+        # Auto-create vendor profile if it doesn't exist
+        logger.info(f"Creating vendor profile for user {user['user_id']}")
+        vendor_id = f"vendor_{uuid.uuid4().hex[:12]}"
+        now = datetime.now(timezone.utc).isoformat()
+        vendor = {
+            "vendor_id": vendor_id,
+            "user_id": user["user_id"],
+            "company_name": user.get("name", ""),
+            "is_approved": False,
+            "past_experiences": [],
+            "created_at": now,
+            "updated_at": now
+        }
+        await db.vendors.insert_one(vendor)
     
     experience_doc = {
         "experience_id": f"exp_{uuid.uuid4().hex[:12]}",
         "title": experience.title,
-        "description": experience.description,
-        "industry": experience.industry,
-        "material": experience.material,
-        "processes_used": experience.processes_used,
-        "part_type": experience.part_type,
+        "description": experience.description or "",
+        "industry": experience.industry or "",
+        "material": experience.material or "",
+        "processes_used": experience.processes_used or [],
+        "part_type": experience.part_type or "",
         "year": experience.year,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
-    await db.vendors.update_one(
+    result = await db.vendors.update_one(
         {"vendor_id": vendor["vendor_id"]},
         {"$push": {"past_experiences": experience_doc}}
     )
+    
+    logger.info(f"Experience added for vendor {vendor['vendor_id']}: {experience.title}, modified: {result.modified_count}")
     
     return {"message": "Experience added successfully", "experience": experience_doc}
 
@@ -1856,7 +1871,8 @@ async def get_my_experiences(user: dict = Depends(get_current_user)):
     
     vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0, "past_experiences": 1})
     if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor profile not found")
+        # Return empty if no vendor profile yet
+        return {"experiences": []}
     
     return {"experiences": vendor.get("past_experiences", [])}
 
