@@ -192,6 +192,14 @@ Admin receives email notifications at `oemlinker@gmail.com` for:
 - Vendor matching completed
 - Quotation accepted
 - New PO created
+
+## Voice Agent (Added Mar 5, 2026)
+Web-based voice assistant for vendors to query matched RFQs:
+- Speech-to-text using OpenAI Whisper
+- AI-powered response generation using GPT-4o-mini
+- Text-to-speech using OpenAI TTS (Nova voice)
+- Accessible via "Voice Assistant" button on Vendor Dashboard
+- Features: Microphone recording, sample questions, audio playback
 - **Past Experience Persistence Fixed**: The PUT `/api/vendors/profile` endpoint was overwriting `past_experiences` with an empty array when saving profile changes. Fixed by excluding `past_experiences` from the `$set` operation - experiences are now managed separately via `/vendors/experiences` endpoints.
 
 ## Database Collections

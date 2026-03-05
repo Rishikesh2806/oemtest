@@ -22,6 +22,10 @@ import secrets
 import hashlib
 from collections import defaultdict
 import time
+from io import BytesIO
+
+# Voice Agent imports
+from emergentintegrations.llm.openai import OpenAISpeechToText, OpenAITextToSpeech, LlmChat, UserMessage
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -7031,6 +7035,166 @@ async def delete_notification(notification_id: str, user: dict = Depends(get_cur
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Notification not found")
     return {"message": "Notification deleted"}
+
+# ============== VOICE AGENT ENDPOINTS ==============
+
+# Initialize voice agent components
+EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
+
+@api_router.post("/voice/transcribe")
+async def transcribe_audio(audio: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    """Transcribe audio to text using OpenAI Whisper"""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="Voice agent not configured")
+    
+    try:
+        # Read audio file
+        audio_bytes = await audio.read()
+        audio_file = BytesIO(audio_bytes)
+        audio_file.name = audio.filename or "audio.webm"
+        
+        # Initialize STT
+        stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
+        
+        # Transcribe
+        response = await stt.transcribe(
+            file=audio_file,
+            model="whisper-1",
+            language="en",
+            response_format="json"
+        )
+        
+        return {"text": response.text}
+    except Exception as e:
+        logger.error(f"Transcription error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Transcription failed: {str(e)}")
+
+@api_router.post("/voice/query")
+async def voice_query(request: Request, user: dict = Depends(get_current_user)):
+    """Process voice query and return matched RFQs with audio response"""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="Voice agent not configured")
+    
+    if user["role"] != "vendor":
+        raise HTTPException(status_code=403, detail="Voice agent is only available for vendors")
+    
+    body = await request.json()
+    query_text = body.get("query", "")
+    
+    if not query_text:
+        raise HTTPException(status_code=400, detail="Query text is required")
+    
+    try:
+        # Get vendor info
+        vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+        if not vendor:
+            return {
+                "response_text": "Your vendor profile is not set up yet. Please complete your profile first.",
+                "matched_rfqs": [],
+                "audio_base64": None
+            }
+        
+        # Get matched RFQs for this vendor
+        matched_rfqs = await db.rfqs.find(
+            {
+                "matched_vendors.vendor_id": vendor["vendor_id"],
+                "status": {"$in": ["matching", "quoted"]}
+            },
+            {"_id": 0, "rfq_id": 1, "title": 1, "material_type": 1, "quantity": 1, 
+             "tolerance": 1, "matched_vendors": 1, "created_at": 1}
+        ).sort("created_at", -1).to_list(20)
+        
+        # Filter to get this vendor's match info
+        rfq_summaries = []
+        for rfq in matched_rfqs:
+            vendor_match = next((v for v in rfq.get("matched_vendors", []) if v.get("vendor_id") == vendor["vendor_id"]), None)
+            if vendor_match:
+                rfq_summaries.append({
+                    "rfq_id": rfq["rfq_id"],
+                    "title": rfq["title"],
+                    "material": rfq.get("material_type", "Not specified"),
+                    "quantity": rfq.get("quantity", "N/A"),
+                    "match_score": vendor_match.get("suitability_score", 0),
+                    "matching_machines": vendor_match.get("matching_machines", [])[:2],
+                    "created_at": rfq.get("created_at", "")
+                })
+        
+        # Build context for AI
+        if rfq_summaries:
+            rfq_context = "\n".join([
+                f"- {r['title']}: {r['material']}, Qty: {r['quantity']}, Match Score: {r['match_score']}%, Machines: {', '.join(r['matching_machines'][:2]) or 'Compatible'}"
+                for r in rfq_summaries[:5]
+            ])
+            system_prompt = f"""You are a helpful voice assistant for OEMLinker, a manufacturing marketplace.
+The vendor has {len(rfq_summaries)} matched RFQs. Here are the most recent ones:
+{rfq_context}
+
+Respond naturally and concisely to the vendor's question. Keep responses under 100 words.
+Focus on the most relevant information. Mention match scores and key details."""
+        else:
+            system_prompt = """You are a helpful voice assistant for OEMLinker, a manufacturing marketplace.
+The vendor currently has no matched RFQs. Encourage them to:
+1. Complete their profile with all machines
+2. Add past experiences
+3. Check back soon for new opportunities
+Keep responses friendly and under 50 words."""
+        
+        # Use AI to generate natural response
+        session_id = f"voice_{user['user_id']}_{uuid.uuid4().hex[:8]}"
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=session_id,
+            system_message=system_prompt
+        ).with_model("openai", "gpt-4o-mini")
+        
+        response_text = await chat.send_message(UserMessage(text=query_text))
+        
+        # Generate audio response
+        tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
+        audio_base64 = await tts.generate_speech_base64(
+            text=response_text,
+            model="tts-1",
+            voice="nova"  # Energetic, upbeat voice
+        )
+        
+        return {
+            "response_text": response_text,
+            "matched_rfqs": rfq_summaries[:5],
+            "total_matches": len(rfq_summaries),
+            "audio_base64": audio_base64
+        }
+        
+    except Exception as e:
+        logger.error(f"Voice query error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Voice query failed: {str(e)}")
+
+@api_router.post("/voice/speak")
+async def text_to_speech(request: Request, user: dict = Depends(get_current_user)):
+    """Convert text to speech"""
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=500, detail="Voice agent not configured")
+    
+    body = await request.json()
+    text = body.get("text", "")
+    
+    if not text:
+        raise HTTPException(status_code=400, detail="Text is required")
+    
+    if len(text) > 4096:
+        raise HTTPException(status_code=400, detail="Text too long. Maximum 4096 characters.")
+    
+    try:
+        tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
+        audio_base64 = await tts.generate_speech_base64(
+            text=text,
+            model="tts-1",
+            voice="nova"
+        )
+        
+        return {"audio_base64": audio_base64}
+    except Exception as e:
+        logger.error(f"TTS error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Speech generation failed: {str(e)}")
 
 # Include the router in the main app
 app.include_router(api_router)

@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth, api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
+import VoiceAgent from "../components/VoiceAgent";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { toast } from "sonner";
 import { 
   Settings, FileText, Package, DollarSign, Wrench,
-  ArrowRight, AlertCircle, Loader2, CheckCircle2, XCircle
+  ArrowRight, AlertCircle, Loader2, CheckCircle2, XCircle, Mic
 } from "lucide-react";
 
 const VendorDashboard = () => {
@@ -15,6 +16,7 @@ const VendorDashboard = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [hasProfile, setHasProfile] = useState(true);
+  const [showVoiceAgent, setShowVoiceAgent] = useState(false);
 
   useEffect(() => {
     fetchDashboard();
@@ -110,6 +112,13 @@ const VendorDashboard = () => {
             </div>
           </div>
           <div className="flex gap-3">
+            <Button 
+              onClick={() => setShowVoiceAgent(true)}
+              className="bg-orange-600 hover:bg-orange-700"
+              data-testid="voice-agent-btn"
+            >
+              <Mic className="w-4 h-4 mr-2" /> Voice Assistant
+            </Button>
             <Link to="/vendor/machines">
               <Button variant="outline" data-testid="manage-machines-btn">
                 <Wrench className="w-4 h-4 mr-2" /> Machines
@@ -285,6 +294,9 @@ const VendorDashboard = () => {
           </Card>
         </div>
       </div>
+      
+      {/* Voice Agent Modal */}
+      <VoiceAgent isOpen={showVoiceAgent} onClose={() => setShowVoiceAgent(false)} />
     </DashboardLayout>
   );
 };
