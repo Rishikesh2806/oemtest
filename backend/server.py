@@ -229,6 +229,163 @@ async def send_email_async(to_email: str, subject: str, html_content: str):
         logger.error(f"Failed to send email to {to_email}: {str(e)}")
         return None
 
+# Admin notification email
+ADMIN_EMAIL = "oemlinker@gmail.com"
+
+async def send_admin_notification(event_type: str, data: dict):
+    """Send notification email to admin for important platform events"""
+    if not resend.api_key:
+        logger.warning("RESEND_API_KEY not configured, skipping admin notification")
+        return None
+    
+    templates = {
+        "new_user": {
+            "subject": f"👤 New User Registration: {data.get('name', 'Unknown')}",
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); padding: 20px; text-align: center;">
+                    <h2 style="color: white; margin: 0;">New User Registration</h2>
+                </div>
+                <div style="padding: 25px; background: #f8fafc;">
+                    <p style="font-size: 16px; color: #334155;"><strong>A new user has registered on OEMLinker:</strong></p>
+                    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Name:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">{data.get('name', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Email:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('email', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Role:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('role', 'N/A').upper()}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Company:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('company_name', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; color: #64748b;">Registered At:</td><td style="padding: 8px;">{data.get('created_at', 'N/A')}</td></tr>
+                    </table>
+                </div>
+            </div>
+            """
+        },
+        "new_rfq": {
+            "subject": f"📋 New RFQ Created: {data.get('title', 'Untitled')}",
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); padding: 20px; text-align: center;">
+                    <h2 style="color: white; margin: 0;">New RFQ Created</h2>
+                </div>
+                <div style="padding: 25px; background: #f8fafc;">
+                    <p style="font-size: 16px; color: #334155;"><strong>A new RFQ has been submitted:</strong></p>
+                    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">RFQ ID:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">{data.get('rfq_id', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Title:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">{data.get('title', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Buyer:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('buyer_name', 'N/A')} ({data.get('buyer_email', 'N/A')})</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Material:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('material_type', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Quantity:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('quantity', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; color: #64748b;">Created At:</td><td style="padding: 8px;">{data.get('created_at', 'N/A')}</td></tr>
+                    </table>
+                </div>
+            </div>
+            """
+        },
+        "new_quotation": {
+            "subject": f"💰 New Quotation Submitted: ₹{data.get('total_amount', 0):,.2f}",
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%); padding: 20px; text-align: center;">
+                    <h2 style="color: white; margin: 0;">New Quotation Submitted</h2>
+                </div>
+                <div style="padding: 25px; background: #f8fafc;">
+                    <p style="font-size: 16px; color: #334155;"><strong>A vendor has submitted a quotation:</strong></p>
+                    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Quote ID:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">{data.get('quote_id', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">RFQ Title:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('rfq_title', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Vendor:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('vendor_name', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Buyer:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('buyer_name', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Amount:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #059669;">₹{data.get('total_amount', 0):,.2f}</td></tr>
+                        <tr><td style="padding: 8px; color: #64748b;">Lead Time:</td><td style="padding: 8px;">{data.get('lead_time', 'N/A')} days</td></tr>
+                    </table>
+                </div>
+            </div>
+            """
+        },
+        "vendor_matching": {
+            "subject": f"🎯 Vendor Matching Complete: {data.get('matched_count', 0)} vendors for {data.get('rfq_title', 'RFQ')}",
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); padding: 20px; text-align: center;">
+                    <h2 style="color: white; margin: 0;">Vendor Matching Complete</h2>
+                </div>
+                <div style="padding: 25px; background: #f8fafc;">
+                    <p style="font-size: 16px; color: #334155;"><strong>AI matching has found suitable vendors:</strong></p>
+                    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">RFQ ID:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">{data.get('rfq_id', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Title:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('rfq_title', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Buyer:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('buyer_name', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Matched Vendors:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #f97316;">{data.get('matched_count', 0)}</td></tr>
+                        <tr><td style="padding: 8px; color: #64748b;">Top Match:</td><td style="padding: 8px;">{data.get('top_vendor', 'N/A')} ({data.get('top_score', 0)}%)</td></tr>
+                    </table>
+                </div>
+            </div>
+            """
+        },
+        "quotation_accepted": {
+            "subject": f"✅ Quotation Accepted: ₹{data.get('total_amount', 0):,.2f} - PO #{data.get('po_number', 'N/A')}",
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #16a34a 0%, #15803d 100%); padding: 20px; text-align: center;">
+                    <h2 style="color: white; margin: 0;">Quotation Accepted - PO Created</h2>
+                </div>
+                <div style="padding: 25px; background: #f8fafc;">
+                    <p style="font-size: 16px; color: #334155;"><strong>A buyer has accepted a quotation:</strong></p>
+                    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">PO Number:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #16a34a;">{data.get('po_number', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Order ID:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">{data.get('order_id', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">RFQ Title:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('rfq_title', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Buyer:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('buyer_name', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Vendor:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('vendor_name', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Amount:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold; font-size: 18px; color: #16a34a;">₹{data.get('total_amount', 0):,.2f}</td></tr>
+                        <tr><td style="padding: 8px; color: #64748b;">Payment Terms:</td><td style="padding: 8px;">{data.get('payment_terms', 'N/A')}</td></tr>
+                    </table>
+                </div>
+            </div>
+            """
+        },
+        "new_po": {
+            "subject": f"📦 New Purchase Order: PO #{data.get('po_number', 'N/A')} - ₹{data.get('total_amount', 0):,.2f}",
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%); padding: 20px; text-align: center;">
+                    <h2 style="color: white; margin: 0;">New Purchase Order Created</h2>
+                </div>
+                <div style="padding: 25px; background: #f8fafc;">
+                    <p style="font-size: 16px; color: #334155;"><strong>A new purchase order has been created:</strong></p>
+                    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">PO Number:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #0891b2;">{data.get('po_number', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Order ID:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">{data.get('order_id', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">RFQ Title:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('rfq_title', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Buyer:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('buyer_name', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Vendor:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('vendor_name', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Amount:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold; font-size: 18px; color: #0891b2;">₹{data.get('total_amount', 0):,.2f}</td></tr>
+                        <tr><td style="padding: 8px; color: #64748b;">Status:</td><td style="padding: 8px;">{data.get('status', 'N/A')}</td></tr>
+                    </table>
+                </div>
+            </div>
+            """
+        }
+    }
+    
+    template = templates.get(event_type)
+    if not template:
+        logger.warning(f"Unknown admin notification type: {event_type}")
+        return None
+    
+    try:
+        params = {
+            "from": SENDER_EMAIL,
+            "to": [ADMIN_EMAIL],
+            "subject": f"[OEMLinker Admin] {template['subject']}",
+            "html": template["html"]
+        }
+        result = await asyncio.to_thread(resend.Emails.send, params)
+        logger.info(f"Admin notification sent for {event_type}: {result.get('id')}")
+        return result
+    except Exception as e:
+        logger.error(f"Failed to send admin notification for {event_type}: {str(e)}")
+        return None
+
 def get_email_template(template_type: str, data: dict) -> tuple:
     """Get email subject and HTML content for various notification types"""
     
@@ -1028,6 +1185,15 @@ async def register(user_data: UserCreate, request: Request):
     
     # Log successful registration
     logger.info(f"New user registered: {email} (ID: {user_id}) from IP: {client_ip}")
+    
+    # Send admin notification for new user
+    asyncio.create_task(send_admin_notification("new_user", {
+        "name": name,
+        "email": email,
+        "role": user_data.role,
+        "company_name": user_data.company_name if user_data.role == "vendor" else "N/A",
+        "created_at": now
+    }))
     
     # If vendor role with company details, create vendor profile
     vendor_company_name = None
@@ -2597,6 +2763,18 @@ async def create_rfq(rfq: RFQCreate, user: dict = Depends(get_current_user)):
     }
     
     await db.rfqs.insert_one(rfq_doc)
+    
+    # Send admin notification for new RFQ
+    asyncio.create_task(send_admin_notification("new_rfq", {
+        "rfq_id": rfq_id,
+        "title": rfq.title,
+        "buyer_name": user.get("name", "Unknown"),
+        "buyer_email": user.get("email", ""),
+        "material_type": rfq.material_type,
+        "quantity": rfq.quantity,
+        "created_at": now
+    }))
+    
     return RFQ(**rfq_doc)
 
 @api_router.get("/rfqs")
@@ -4320,6 +4498,17 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     
     qualified_vendors = [v for v in matched_vendors if v.get("suitability_score", 0) >= 50]
     
+    # Send admin notification for vendor matching
+    top_vendor = matched_vendors[0] if matched_vendors else {}
+    asyncio.create_task(send_admin_notification("vendor_matching", {
+        "rfq_id": rfq_id,
+        "rfq_title": rfq.get("title", "Untitled"),
+        "buyer_name": buyer_name,
+        "matched_count": len(matched_vendors),
+        "top_vendor": top_vendor.get("company_name", "N/A"),
+        "top_score": top_vendor.get("suitability_score", 0)
+    }))
+    
     for matched in qualified_vendors:
         vendor_user = await db.users.find_one({"user_id": matched.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
         if vendor_user and vendor_user.get("email"):
@@ -4451,6 +4640,16 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
             "link": f"/buyer/rfq/{quote.rfq_id}"
         }
     )
+    
+    # Send admin notification for new quotation
+    asyncio.create_task(send_admin_notification("new_quotation", {
+        "quote_id": quote_id,
+        "rfq_title": rfq.get("title", "Untitled"),
+        "vendor_name": vendor.get("company_name", "Unknown"),
+        "buyer_name": buyer.get("name", "Unknown") if buyer else "Unknown",
+        "total_amount": quote.price,
+        "lead_time": quote.lead_time_days
+    }))
     
     return Quote(**quote_doc)
 
@@ -4931,6 +5130,28 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
             message=f"Your quote for '{rfq.get('title', 'RFQ')}' has been accepted. Order #{po_number}",
             data={"order_id": order_id, "rfq_id": quote["rfq_id"], "quote_id": quote_id, "po_number": po_number}
         )
+        
+        # Send admin notification for quotation accepted and new PO
+        buyer = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "name": 1})
+        asyncio.create_task(send_admin_notification("quotation_accepted", {
+            "po_number": po_number,
+            "order_id": order_id,
+            "rfq_title": rfq.get("title", "Untitled"),
+            "buyer_name": buyer.get("name", "Unknown") if buyer else "Unknown",
+            "vendor_name": vendor.get("company_name", "Unknown"),
+            "total_amount": quote["price"],
+            "payment_terms": PAYMENT_TERMS_LABELS.get(payment_terms, payment_terms)
+        }))
+        
+        asyncio.create_task(send_admin_notification("new_po", {
+            "po_number": po_number,
+            "order_id": order_id,
+            "rfq_title": rfq.get("title", "Untitled"),
+            "buyer_name": buyer.get("name", "Unknown") if buyer else "Unknown",
+            "vendor_name": vendor.get("company_name", "Unknown"),
+            "total_amount": quote["price"],
+            "status": "pending_payment"
+        }))
     
     return {"message": "Quote accepted", "order_id": order_id}
 
