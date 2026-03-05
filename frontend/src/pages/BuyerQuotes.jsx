@@ -286,7 +286,7 @@ const BuyerQuotes = () => {
         {sortedGroups.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
-              <DollarSign className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+              <div className="text-6xl text-slate-300 mx-auto mb-4">₹</div>
               <h3 className="text-lg font-medium text-slate-900 mb-2">
                 {quotes.length === 0 ? "No quotes received yet" : "No quotes match your filters"}
               </h3>
@@ -496,10 +496,10 @@ const BuyerQuotes = () => {
                               <div className="flex items-center gap-4">
                                 <div className="text-right">
                                   <div className="flex items-center gap-1 text-xl font-bold text-slate-900">
-                                    <DollarSign className="w-4 h-4" />
-                                    {quote.price?.toLocaleString()}
+                                    <span>₹</span>
+                                    {quote.price?.toLocaleString('en-IN', {minimumFractionDigits: 2})}
                                   </div>
-                                  <p className="text-xs text-slate-500">{quote.currency || "USD"}</p>
+                                  <p className="text-xs text-slate-500">INR</p>
                                 </div>
                                 <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${getStatusBadge(quote.status)}`}>
                                   {getStatusIcon(quote.status)}

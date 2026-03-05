@@ -756,7 +756,7 @@ class Quote(BaseModel):
     rfq_id: str
     vendor_id: str
     price: float
-    currency: str = "USD"
+    currency: str = "INR"
     lead_time_days: int
     notes: Optional[str] = None
     proposed_payment_terms: Optional[str] = PaymentTerms.NET_30
@@ -769,7 +769,7 @@ class Quote(BaseModel):
 class QuoteCreate(BaseModel):
     rfq_id: str
     price: float
-    currency: str = "USD"
+    currency: str = "INR"
     lead_time_days: int
     notes: Optional[str] = None
     proposed_payment_terms: Optional[str] = PaymentTerms.NET_30
@@ -804,7 +804,7 @@ class Order(BaseModel):
     buyer_id: str
     vendor_id: str
     total_amount: float
-    currency: str = "USD"
+    currency: str = "INR"
     status: str = OrderStatus.PENDING_PAYMENT
     payment_status: str = "pending"
     payment_terms: Optional[str] = None  # Finalized payment terms

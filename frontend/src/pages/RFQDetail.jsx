@@ -1041,8 +1041,8 @@ const RFQDetail = () => {
                           )}
                           {quote.currency && (
                             <div className="flex items-center gap-2">
-                              <DollarSign className="w-4 h-4 text-slate-400" />
-                              <span className="text-slate-600">Currency: {quote.currency}</span>
+                              <span className="text-slate-400 font-medium">₹</span>
+                              <span className="text-slate-600">Currency: INR</span>
                             </div>
                           )}
                           {quote.expires_at && (
