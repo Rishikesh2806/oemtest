@@ -109,7 +109,7 @@ const LoginPage = () => {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md">
           <Link to="/" className="flex items-center gap-2 mb-8">
-            <img src="/logo.svg" alt="OEMLinker" className="w-[180px] h-[48px]" />
+            <img src="/logo.png" alt="OEMLinker" className="w-[320px] h-[80px]" />
           </Link>
 
           <div className="flex items-center gap-2 mb-2">
@@ -194,7 +194,7 @@ const LoginPage = () => {
       <div className="flex-1 flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md">
           <Link to="/" className="flex items-center gap-2 mb-8">
-            <img src="/logo.svg" alt="OEMLinker" className="w-[180px] h-[48px]" />
+            <img src="/logo.png" alt="OEMLinker" className="w-[320px] h-[80px]" />
           </Link>
 
           <h1 className="font-heading text-3xl font-bold text-slate-900 mb-2">Welcome back</h1>
