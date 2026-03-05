@@ -455,6 +455,7 @@ class UserResponse(BaseModel):
     role: str
     picture: Optional[str] = None
     company_name: Optional[str] = None
+    email_verified: bool = False
     created_at: str
 
 class LoginRequest(BaseModel):
@@ -925,6 +926,44 @@ async def create_notification(
 
 # ============== AUTH ROUTES ==============
 
+async def send_verification_email(email: str, name: str, verification_token: str):
+    """Send email verification link to new user"""
+    # Use frontend URL for the verification link
+    frontend_url = os.environ.get("FRONTEND_URL", "https://oemlinker.com")
+    verification_link = f"{frontend_url}/verify-email?token={verification_token}"
+    
+    email_html = f'''
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); padding: 30px; text-align: center;">
+            <h1 style="color: white; margin: 0;">Welcome to OEMLinker!</h1>
+        </div>
+        <div style="padding: 30px; background: #f8fafc;">
+            <p style="font-size: 16px; color: #334155;">Hello {name},</p>
+            <p style="font-size: 16px; color: #334155;">Thank you for registering with OEMLinker - the AI-Powered Manufacturing Marketplace.</p>
+            <p style="font-size: 16px; color: #334155;">Please verify your email address to activate your account and start connecting with manufacturers.</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="{verification_link}" style="background: #f97316; color: white; padding: 14px 35px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">Verify Email Address</a>
+            </div>
+            
+            <p style="font-size: 14px; color: #64748b;">This verification link will expire in 24 hours.</p>
+            <p style="font-size: 14px; color: #64748b;">If you didn't create an account, please ignore this email.</p>
+            
+            <div style="background: #fff; border-radius: 8px; padding: 15px; margin-top: 20px; border-left: 4px solid #f97316;">
+                <p style="margin: 0; font-size: 12px; color: #64748b;">
+                    <strong>Can't click the button?</strong> Copy and paste this link into your browser:<br/>
+                    <span style="color: #3b82f6; word-break: break-all;">{verification_link}</span>
+                </p>
+            </div>
+        </div>
+        <div style="padding: 20px; text-align: center; color: #94a3b8; font-size: 12px;">
+            <p>OEMLinker - Connecting OEMs with Trusted Vendors</p>
+        </div>
+    </div>
+    '''
+    
+    await send_email_async(email, "Verify Your OEMLinker Account", email_html)
+
 @api_router.post("/auth/register", response_model=TokenResponse)
 async def register(user_data: UserCreate, request: Request):
     # Get client IP for rate limiting
@@ -956,6 +995,11 @@ async def register(user_data: UserCreate, request: Request):
     user_id = f"user_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
     
+    # Generate email verification token
+    verification_token = generate_secure_token(32)
+    verification_token_hash = hash_token(verification_token)
+    verification_expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+    
     user_doc = {
         "user_id": user_id,
         "email": email,
@@ -965,6 +1009,8 @@ async def register(user_data: UserCreate, request: Request):
         "picture": None,
         "company_name": None,
         "email_verified": False,
+        "verification_token_hash": verification_token_hash,
+        "verification_expires": verification_expires,
         "created_at": now,
         "last_login": now,
         "login_count": 1,
@@ -976,6 +1022,9 @@ async def register(user_data: UserCreate, request: Request):
     }
     
     await db.users.insert_one(user_doc)
+    
+    # Send verification email
+    asyncio.create_task(send_verification_email(email, name, verification_token))
     
     # Log successful registration
     logger.info(f"New user registered: {email} (ID: {user_id}) from IP: {client_ip}")
@@ -1028,9 +1077,82 @@ async def register(user_data: UserCreate, request: Request):
             role=user_data.role,
             picture=None,
             company_name=vendor_company_name,
+            email_verified=False,
             created_at=user_doc["created_at"]
         )
     )
+
+# ============== EMAIL VERIFICATION ENDPOINTS ==============
+
+class EmailVerificationRequest(BaseModel):
+    token: str
+
+@api_router.post("/auth/verify-email")
+async def verify_email(verification_data: EmailVerificationRequest):
+    """Verify user's email address using token from email"""
+    token_hash = hash_token(verification_data.token)
+    
+    # Find user with this verification token
+    user = await db.users.find_one({"verification_token_hash": token_hash}, {"_id": 0})
+    
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link")
+    
+    # Check if already verified
+    if user.get("email_verified"):
+        return {"message": "Email already verified", "already_verified": True}
+    
+    # Check expiration
+    expires_at = user.get("verification_expires")
+    if expires_at:
+        if isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at)
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc):
+            raise HTTPException(status_code=400, detail="Verification link has expired. Please request a new one.")
+    
+    # Mark email as verified
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {
+            "$set": {"email_verified": True},
+            "$unset": {"verification_token_hash": "", "verification_expires": ""}
+        }
+    )
+    
+    logger.info(f"Email verified for user: {user['email']}")
+    
+    return {"message": "Email verified successfully", "email": user["email"]}
+
+@api_router.post("/auth/resend-verification")
+async def resend_verification_email(user: dict = Depends(get_current_user)):
+    """Resend verification email to current user"""
+    if user.get("email_verified"):
+        return {"message": "Email already verified"}
+    
+    # Generate new verification token
+    verification_token = generate_secure_token(32)
+    verification_token_hash = hash_token(verification_token)
+    verification_expires = (datetime.now(timezone.utc) + timedelta(hours=24)).isoformat()
+    
+    # Update user with new token
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {
+            "$set": {
+                "verification_token_hash": verification_token_hash,
+                "verification_expires": verification_expires
+            }
+        }
+    )
+    
+    # Send verification email
+    asyncio.create_task(send_verification_email(user["email"], user["name"], verification_token))
+    
+    logger.info(f"Verification email resent to: {user['email']}")
+    
+    return {"message": "Verification email sent. Please check your inbox."}
 
 # ============== ADMIN SETUP (ONE-TIME USE) ==============
 class AdminSetup(BaseModel):
@@ -1198,6 +1320,7 @@ async def login(login_data: LoginRequest, request: Request):
             role=user["role"],
             picture=user.get("picture"),
             company_name=user.get("company_name"),
+            email_verified=user.get("email_verified", False),
             created_at=user["created_at"]
         )
     )
@@ -1258,6 +1381,7 @@ async def verify_otp_endpoint(otp_data: OTPVerifyRequest, request: Request):
             role=user["role"],
             picture=user.get("picture"),
             company_name=user.get("company_name"),
+            email_verified=user.get("email_verified", False),
             created_at=user["created_at"]
         )
     )
@@ -1443,6 +1567,7 @@ async def get_me(user: dict = Depends(get_current_user)):
         "role": user["role"],
         "picture": user.get("picture"),
         "company_name": user.get("company_name"),
+        "email_verified": user.get("email_verified", False),
         "created_at": user["created_at"]
     }
 

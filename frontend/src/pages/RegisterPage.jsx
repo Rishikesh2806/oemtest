@@ -215,7 +215,9 @@ const RegisterPage = () => {
         phone: userData.phone
       });
       
-      toast.success("Account created successfully!");
+      toast.success("Account created! Please check your email to verify your account.", {
+        duration: 6000
+      });
       
       if (user.role === "vendor") {
         navigate("/vendor/profile");

@@ -3,10 +3,11 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth, api } from "../../App";
 import { Button } from "../ui/button";
 import NotificationBell from "../NotificationBell";
+import { toast } from "sonner";
 import { 
   Factory, LayoutDashboard, FileText, Package, Settings, 
   LogOut, Menu, X, Wrench, Building2, Users, DollarSign,
-  ChevronDown, Bell, MessageSquare, User
+  ChevronDown, Bell, MessageSquare, User, Mail, AlertTriangle
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -22,6 +23,7 @@ const DashboardLayout = ({ children }) => {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [resendingVerification, setResendingVerification] = useState(false);
 
   useEffect(() => {
     fetchUnreadCount();
@@ -35,6 +37,18 @@ const DashboardLayout = ({ children }) => {
       setUnreadCount(response.data.unread_count);
     } catch (e) {
       // Ignore errors
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResendingVerification(true);
+    try {
+      await api.post("/auth/resend-verification");
+      toast.success("Verification email sent! Please check your inbox.");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to send verification email");
+    } finally {
+      setResendingVerification(false);
     }
   };
 
@@ -219,6 +233,32 @@ const DashboardLayout = ({ children }) => {
 
         {/* Page Content */}
         <div className="p-6 lg:p-8 pt-20 lg:pt-8">
+          {/* Email Verification Banner */}
+          {user && user.email_verified === false && (
+            <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between" data-testid="email-verification-banner">
+              <div className="flex items-center gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                <div>
+                  <p className="text-amber-800 font-medium">Please verify your email address</p>
+                  <p className="text-amber-700 text-sm">We sent a verification link to <strong>{user.email}</strong>. Check your inbox.</p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResendVerification}
+                disabled={resendingVerification}
+                className="border-amber-400 text-amber-700 hover:bg-amber-100 flex-shrink-0"
+              >
+                {resendingVerification ? (
+                  <Mail className="w-4 h-4 animate-pulse mr-2" />
+                ) : (
+                  <Mail className="w-4 h-4 mr-2" />
+                )}
+                Resend Email
+              </Button>
+            </div>
+          )}
           {children}
         </div>
       </main>
