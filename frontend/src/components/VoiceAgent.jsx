@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { api } from "../App";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { toast } from "sonner";
-import { Mic, MicOff, Volume2, Loader2, X, MessageSquare } from "lucide-react";
+import { Mic, MicOff, Volume2, Loader2, X, MessageSquare, ExternalLink, ArrowRight } from "lucide-react";
 
 const VoiceAgent = ({ isOpen, onClose }) => {
+  const navigate = useNavigate();
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -28,6 +30,25 @@ const VoiceAgent = ({ isOpen, onClose }) => {
       }
     };
   }, []);
+
+  // Handle close - cleanup and close
+  const handleClose = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsListening(false);
+    setIsSpeaking(false);
+    onClose();
+  };
+
+  // Navigate to RFQ detail
+  const handleViewRFQ = (rfqId) => {
+    handleClose();
+    navigate(`/vendor/rfq/${rfqId}`);
+  };
 
   const startListening = async () => {
     try {
@@ -158,22 +179,27 @@ const VoiceAgent = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" data-testid="voice-agent-modal">
-      <Card className="w-full max-w-lg bg-white shadow-2xl">
+    <div 
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm" 
+      data-testid="voice-agent-modal"
+      onClick={(e) => e.target === e.currentTarget && handleClose()}
+    >
+      <Card className="w-full max-w-lg bg-white shadow-2xl relative">
+        {/* Close Button - Top Right Corner */}
+        <button
+          onClick={handleClose}
+          className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-100 transition-colors z-10 border border-gray-200"
+          data-testid="voice-agent-close-btn"
+        >
+          <X className="w-5 h-5 text-gray-600" />
+        </button>
+        
         <CardHeader className="bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-t-lg">
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <MessageSquare className="w-5 h-5" />
               Voice Assistant
             </CardTitle>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={onClose}
-              className="text-white hover:bg-white/20"
-            >
-              <X className="w-5 h-5" />
-            </Button>
           </div>
           <p className="text-orange-100 text-sm mt-1">
             Speak in English, Hindi, Tamil, Telugu, or any Indian language
@@ -242,36 +268,57 @@ const VoiceAgent = ({ isOpen, onClose }) => {
             </div>
           )}
 
-          {/* Matched RFQs Summary */}
+          {/* Matched RFQs Summary with Links */}
           {matchedRFQs.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-gray-700">Your Matched RFQs:</p>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-gray-700">Your Matched RFQs:</p>
+                <span className="text-xs text-gray-500">{matchedRFQs.length} results</span>
+              </div>
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                 {matchedRFQs.map((rfq, index) => (
                   <div 
                     key={rfq.rfq_id} 
-                    className="bg-white border rounded-lg p-3 text-sm hover:border-orange-300 transition-colors"
+                    className="bg-white border rounded-lg p-3 text-sm hover:border-orange-400 hover:shadow-md transition-all cursor-pointer group"
+                    onClick={() => handleViewRFQ(rfq.rfq_id)}
+                    data-testid={`rfq-link-${rfq.rfq_id}`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-800 truncate flex-1">
+                      <span className="font-medium text-gray-800 truncate flex-1 group-hover:text-orange-600">
                         {rfq.title}
                       </span>
-                      <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
-                        rfq.match_score >= 70 
-                          ? "bg-green-100 text-green-700" 
-                          : rfq.match_score >= 50 
-                            ? "bg-yellow-100 text-yellow-700"
-                            : "bg-gray-100 text-gray-600"
-                      }`}>
-                        {rfq.match_score}%
+                      <div className="flex items-center gap-2">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          rfq.match_score >= 70 
+                            ? "bg-green-100 text-green-700" 
+                            : rfq.match_score >= 50 
+                              ? "bg-yellow-100 text-yellow-700"
+                              : "bg-gray-100 text-gray-600"
+                        }`}>
+                          {rfq.match_score}%
+                        </span>
+                        <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-orange-500 group-hover:translate-x-1 transition-all" />
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-gray-500 text-xs">
+                        {rfq.material} • Qty: {rfq.quantity}
+                      </p>
+                      <span className="text-xs text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                        View Details
                       </span>
                     </div>
-                    <p className="text-gray-500 text-xs mt-1">
-                      {rfq.material} • Qty: {rfq.quantity}
-                    </p>
                   </div>
                 ))}
               </div>
+              
+              {/* View All Link */}
+              <button
+                onClick={() => { handleClose(); navigate('/vendor/matched-rfqs'); }}
+                className="w-full text-center text-sm text-orange-600 hover:text-orange-700 font-medium py-2 border-t flex items-center justify-center gap-1"
+              >
+                View All Matched RFQs <ExternalLink className="w-3 h-3" />
+              </button>
             </div>
           )}
 
