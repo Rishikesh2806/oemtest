@@ -1032,6 +1032,66 @@ async def register(user_data: UserCreate, request: Request):
         )
     )
 
+# ============== ADMIN SETUP (ONE-TIME USE) ==============
+class AdminSetup(BaseModel):
+    email: str
+    password: str
+    name: str
+    setup_key: str
+
+@api_router.post("/admin/setup")
+async def setup_admin(setup_data: AdminSetup):
+    """
+    One-time admin setup endpoint. 
+    Requires ADMIN_SETUP_KEY environment variable to be set.
+    Creates an admin user if no admin exists.
+    """
+    # Check setup key
+    expected_key = os.environ.get("ADMIN_SETUP_KEY", "OEMLinker2024SecureSetup!")
+    if setup_data.setup_key != expected_key:
+        raise HTTPException(status_code=403, detail="Invalid setup key")
+    
+    # Check if admin already exists
+    existing_admin = await db.users.find_one({"role": "admin"})
+    if existing_admin:
+        raise HTTPException(status_code=400, detail="Admin already exists. Use login instead.")
+    
+    # Check if email already taken
+    existing_email = await db.users.find_one({"email": setup_data.email.lower()})
+    if existing_email:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    # Create admin user
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    
+    admin_doc = {
+        "user_id": user_id,
+        "email": setup_data.email.lower().strip(),
+        "password_hash": hash_password(setup_data.password),
+        "name": setup_data.name,
+        "role": "admin",
+        "is_verified": True,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.users.insert_one(admin_doc)
+    logger.info(f"Admin user created: {setup_data.email}")
+    
+    token = create_jwt_token(user_id, setup_data.email, "admin")
+    
+    return {
+        "message": "Admin account created successfully",
+        "access_token": token,
+        "user": {
+            "user_id": user_id,
+            "email": setup_data.email,
+            "name": setup_data.name,
+            "role": "admin"
+        }
+    }
+
 @api_router.post("/auth/login")
 async def login(login_data: LoginRequest, request: Request):
     # Get client IP for logging
