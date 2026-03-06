@@ -137,6 +137,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - /app/test_reports/iteration_10.json - Dimension Input Feature (100% pass)
 - /app/test_reports/iteration_11.json - Vendor Location Matching (100% pass)
 - /app/test_reports/iteration_12.json - RFQ Urgency Feature (100% pass)
+- /app/test_reports/iteration_13.json - Availability Prioritization (100% pass)
 
 ## Test Credentials
 - **Admin**: admin@offoadex.com / admin123
@@ -156,6 +157,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Notification system ✓
 - Payment terms ✓
 - RFQ Urgency & Deadline feature ✓ (Mar 6, 2026)
+- Availability prioritization for urgent RFQs ✓ (Mar 6, 2026)
 
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check
@@ -204,6 +206,18 @@ Allow buyers to specify urgency level and deadline for RFQs:
   - RFQ Detail page: Urgency badge in header (for non-normal), colored urgency row with deadline
 - **Color Coding**: Red for urgent, orange for high, green for normal, blue for low
 - **Test Report**: /app/test_reports/iteration_12.json (100% pass)
+
+## Availability Prioritization for Urgent RFQs (Added Mar 6, 2026)
+Enhanced vendor matching algorithm to prioritize vendors with available machines for urgent jobs:
+- **Availability Scoring**: +10-20 bonus points for vendors with available machines on urgent/high priority RFQs
+- **Score Penalty**: Vendors without available machines get 20% penalty for urgent RFQs
+- **Machine Status Tracking**: Each machine shows availability status (available, engaged, maintenance, offline)
+- **Smart Deadline Check**: If machine is engaged but will be free before RFQ deadline, it's still considered
+- **Frontend Display**:
+  - "Available Now" badge (emerald with pulsing dot) for vendors with available machines
+  - Machine availability count (X/Y Available) in Matching Machines section
+  - Green/Amber status indicators on individual machines
+- **Test Report**: /app/test_reports/iteration_13.json (100% pass)
 
 ## Voice Agent (Added Mar 5, 2026)
 Web-based voice assistant for vendors to query matched RFQs:
