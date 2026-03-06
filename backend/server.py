@@ -27,6 +27,20 @@ from io import BytesIO
 # Voice Agent imports
 from emergentintegrations.llm.openai import OpenAISpeechToText, OpenAITextToSpeech, LlmChat, UserMessage
 
+# ============== MODULAR IMPORTS (NEW) ==============
+# Import from new modular structure for reusability
+# Note: server.py maintains backward compatibility while modules are being refactored
+import sys
+sys.path.insert(0, str(Path(__file__).parent))
+
+# These imports will gradually replace inline definitions
+# from app.config import *
+# from app.database import db
+# from app.services.security import *
+# from app.services.email_service import *
+# from app.models import *
+# ===================================================
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 

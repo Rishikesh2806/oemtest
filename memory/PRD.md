@@ -12,12 +12,26 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 
 ## Architecture Overview
 - **Frontend**: React 19 + Tailwind CSS + Shadcn UI
-- **Backend**: FastAPI (Python)
+- **Backend**: FastAPI (Python) - Refactored modular structure
 - **Database**: MongoDB
 - **AI**: OpenAI GPT-5.2 Vision (via Emergent LLM Key)
 - **Auth**: JWT + Emergent Google OAuth + 2FA Email OTP
 - **Payments**: Stripe (test mode) - planned
 - **Email**: Resend API
+
+### Backend Structure (Refactored Mar 6, 2026)
+```
+/app/backend/
+├── app/                    # NEW: Modular package
+│   ├── config.py           # Settings, constants
+│   ├── database.py         # MongoDB connection
+│   ├── main.py             # FastAPI app factory
+│   ├── models/             # Pydantic models (7 files)
+│   ├── services/           # security.py, email_service.py
+│   └── routes/             # API routes (gradual migration)
+├── server.py               # Main entry (~7500 lines)
+└── .env
+```
 
 ## AI Drawing Analysis - Supported Formats
 
