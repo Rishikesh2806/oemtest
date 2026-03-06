@@ -3957,6 +3957,22 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     
     matched_vendors = []
     
+    # ============== GET RFQ URGENCY FOR SCORING ==============
+    rfq_urgency = rfq.get("urgency", "normal")  # urgent, high, normal, low
+    rfq_deadline = rfq.get("deadline")
+    is_urgent_rfq = rfq_urgency in ["urgent", "high"]
+    
+    # Urgency score multipliers
+    urgency_multipliers = {
+        "urgent": 1.25,  # 25% boost for urgent RFQs
+        "high": 1.15,    # 15% boost for high priority
+        "normal": 1.0,
+        "low": 0.95      # Slight reduction for low priority (availability less important)
+    }
+    urgency_multiplier = urgency_multipliers.get(rfq_urgency, 1.0)
+    
+    logger.info(f"RFQ urgency: {rfq_urgency}, deadline: {rfq_deadline}, urgency_multiplier: {urgency_multiplier}")
+    
     for vendor in vendors:
         # Get vendor's machines
         machines = await db.machines.find(
@@ -4160,8 +4176,33 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         geometry_compatible = False
         rejection_reasons = []
         
+        # Track machine availability for urgency scoring
+        available_machine_count = 0
+        total_matching_machines = 0
+        has_available_machine = False
+        
         for machine in machines:
             machine_type_lower = machine.get("machine_type", "").lower()
+            
+            # ============== MACHINE AVAILABILITY CHECK ==============
+            machine_availability = machine.get("availability_status", "available")
+            is_machine_available = machine_availability == "available"
+            
+            # For urgent RFQs, strongly prefer available machines
+            # For non-urgent, engaged machines can still be considered
+            if is_urgent_rfq and not is_machine_available:
+                # Skip non-available machines for urgent RFQs unless no alternatives
+                engaged_until = machine.get("engaged_until")
+                if engaged_until and rfq_deadline:
+                    # Check if machine will be available before deadline
+                    try:
+                        engaged_date = datetime.fromisoformat(engaged_until.replace('Z', '+00:00'))
+                        deadline_date = datetime.fromisoformat(rfq_deadline + "T00:00:00+00:00")
+                        if engaged_date < deadline_date:
+                            # Machine will be free before deadline, can consider
+                            is_machine_available = True
+                    except:
+                        pass
             machine_category = machine.get("machine_category", "").lower()
             machine_name = f"{machine.get('machine_type', '')} - {machine.get('brand', '')} {machine.get('model', '')}"
             machine_score = 0
@@ -4522,25 +4563,42 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                     keyword_matches.append(keyword)
                     machine_score += 2  # 2 points per keyword match
             
+            # ============== AVAILABILITY BONUS FOR URGENT RFQS ==============
+            if is_machine_available:
+                available_machine_count += 1
+                has_available_machine = True
+                if is_urgent_rfq:
+                    machine_score += 10  # Bonus for available machine on urgent RFQ
+            
+            total_matching_machines += 1
+            
             matching_machines.append({
                 "name": machine_name,
                 "category": machine.get("machine_category", ""),
-                "score": min(machine_score, 50),  # Cap individual machine score
+                "score": min(machine_score, 60),  # Cap individual machine score (increased for availability)
                 "tolerance": machine_tolerance,
                 "dimension_fit": dimension_fit,
                 "weight_fit": weight_fit,
                 "envelope": f"{machine.get('max_x', 0)}x{machine.get('max_y', 0)}x{machine.get('max_z', 0)}mm" if machine.get('max_x') else f"Ø{machine.get('max_diameter', 0)}x{machine.get('max_length', 0)}mm",
-                "max_weight": machine_max_weight
+                "max_weight": machine_max_weight,
+                "availability_status": machine_availability,
+                "is_available": is_machine_available,
+                "engaged_until": machine.get("engaged_until")
             })
         
         # Only include vendor if they have at least one suitable machine
         if has_suitable_machine and matching_machines:
-            # Sort machines by score
-            matching_machines.sort(key=lambda x: x["score"], reverse=True)
+            # Sort machines by score, prioritizing available machines for urgent RFQs
+            if is_urgent_rfq:
+                # For urgent RFQs, available machines get priority even with lower scores
+                matching_machines.sort(key=lambda x: (x.get("is_available", False), x["score"]), reverse=True)
+            else:
+                matching_machines.sort(key=lambda x: x["score"], reverse=True)
+            
             best_machine_score = matching_machines[0]["score"]
             
             # ============== CALCULATE FINAL SCORE ==============
-            # Base score from best machine (max 50)
+            # Base score from best machine (max 60 - increased to accommodate availability)
             final_score = best_machine_score
             
             # Experience bonus (max 35 - increased weightage)
@@ -4560,6 +4618,26 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             
             # Keyword matching bonus (max 10)
             final_score += min(len(keyword_matches) * 2, 10)
+            
+            # ============== AVAILABILITY SCORING FOR URGENT RFQS (max 20) ==============
+            availability_score = 0
+            availability_ratio = available_machine_count / total_matching_machines if total_matching_machines > 0 else 0
+            
+            if is_urgent_rfq:
+                if has_available_machine:
+                    # Base bonus for having at least one available machine
+                    availability_score = 10
+                    # Additional bonus based on ratio of available machines
+                    availability_score += int(availability_ratio * 10)  # Up to 10 extra points
+                else:
+                    # Penalty for vendors without available machines on urgent RFQs
+                    final_score = int(final_score * 0.8)  # 20% penalty
+            elif rfq_urgency == "high":
+                if has_available_machine:
+                    availability_score = 5
+                    availability_score += int(availability_ratio * 5)
+            
+            final_score += availability_score
             
             # ============== LOCATION PREFERENCE SCORING (max 15) ==============
             location_score = 0
@@ -4620,7 +4698,13 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 "rating": vendor.get("rating", 0),
                 "total_jobs": vendor.get("total_jobs", 0),
                 "certifications": vendor.get("certifications", [])[:3],
-                "part_geometry": part_geometry
+                "part_geometry": part_geometry,
+                # NEW: Availability data for urgency
+                "has_available_machine": has_available_machine,
+                "available_machine_count": available_machine_count,
+                "total_matching_machines": total_matching_machines,
+                "availability_score": availability_score,
+                "availability_ratio": round(availability_ratio, 2)
             })
     
     # Sort by score
@@ -4691,7 +4775,11 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         "vendors_notified": len(qualified_vendors),
         "notification_threshold": "50%",
         "dimensions_from_text": dimensions_from_text,
-        "text_extracted_dimensions": text_dims if dimensions_from_text else None
+        "text_extracted_dimensions": text_dims if dimensions_from_text else None,
+        # Urgency info
+        "rfq_urgency": rfq_urgency,
+        "urgency_applied": is_urgent_rfq,
+        "availability_prioritized": is_urgent_rfq
     }
 
 @api_router.post("/rfqs/{rfq_id}/submit")

@@ -811,6 +811,13 @@ const RFQDetail = () => {
                           
                           {/* Capability Badges */}
                           <div className="flex flex-wrap gap-2 mt-3">
+                            {/* Available Now Badge - Priority for urgent RFQs */}
+                            {vendor.has_available_machine && (rfq.urgency === 'urgent' || rfq.urgency === 'high') && (
+                              <span className="flex items-center gap-1 text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded border border-emerald-300 font-medium">
+                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                                Available Now
+                              </span>
+                            )}
                             {vendor.location_match && (
                               <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded ${
                                 vendor.location_match === 'city' 
@@ -934,13 +941,36 @@ const RFQDetail = () => {
                             </div>
                           )}
 
-                          {/* Matching Machines */}
+                          {/* Matching Machines with Availability Status */}
                           <div className="mt-3">
                             <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
                               Matching Machines
+                              {vendor.has_available_machine && (
+                                <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs normal-case font-medium">
+                                  {vendor.available_machine_count}/{vendor.total_matching_machines} Available
+                                </span>
+                              )}
                             </p>
                             <div className="flex flex-wrap gap-1">
-                              {vendor.matching_machines?.map((machine, j) => (
+                              {vendor.machine_details?.map((machine, j) => (
+                                <span 
+                                  key={j} 
+                                  className={`text-xs px-2 py-1 rounded font-mono flex items-center gap-1 ${
+                                    machine.is_available 
+                                      ? "bg-green-100 text-green-800 border border-green-200" 
+                                      : machine.availability_status === "engaged"
+                                        ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                        : "bg-slate-200 text-slate-700"
+                                  }`}
+                                  title={machine.is_available ? "Available Now" : `Status: ${machine.availability_status}`}
+                                >
+                                  <span className={`w-2 h-2 rounded-full ${
+                                    machine.is_available ? "bg-green-500" : 
+                                    machine.availability_status === "engaged" ? "bg-amber-500" : "bg-slate-400"
+                                  }`}></span>
+                                  {machine.name}
+                                </span>
+                              )) || vendor.matching_machines?.map((machine, j) => (
                                 <span key={j} className="text-xs bg-slate-200 text-slate-700 px-2 py-1 rounded font-mono">
                                   {machine}
                                 </span>

@@ -1,0 +1,67 @@
+{
+  "summary": "Tested availability prioritization for urgent RFQs - both backend API and frontend UI. All tests PASSED. Backend correctly returns availability data (has_available_machine, availability_score, available_machine_count) and urgency flags (urgency_applied, availability_prioritized). Frontend correctly displays 'Available Now' badge for vendors with available machines on urgent RFQs, and machine details show green availability status indicators.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_availability_prioritization.py",
+    "/app/test_reports/pytest/availability_prioritization_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backend matching algorithm correctly adds +10-20 points for vendors with available machines on urgent/high priority RFQs (lines 4566-4639)",
+    "Vendors without available machines get 20% score penalty for urgent RFQs (line 4634: final_score * 0.8)",
+    "Machine availability status ('available', 'engaged', 'maintenance', 'offline') is tracked and returned in vendor matching results",
+    "Frontend RFQDetail.jsx (lines 813-823) correctly displays 'Available Now' badge with emerald styling and pulsing animation for urgent RFQs",
+    "Machine details (lines 956-978) show availability indicator (green dot for available, amber for engaged) with status in title attribute",
+    "data-testid attributes present for key elements enabling robust automated testing"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_availability_prioritization.py"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 tests passed)",
+    "frontend": "100% (All UI checks passed)"
+  },
+  "test_credentials": {
+    "buyer_email": "buyer@offoadex.com",
+    "buyer_password": "buyer123",
+    "vendor_email": "vendor@offoadex.com",
+    "vendor_password": "vendor123"
+  },
+  "seed_data_creation": "Used existing urgent RFQ: rfq_ff88d4dd6ba0 (URGENT - CNC Shaft 100mm diameter). Created test RFQs during test execution: rfq_dd81cde16968 (urgent), rfq_671d6df3e879 (urgent)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Availability prioritization feature fully tested. Backend adds availability scoring (+10-20 bonus) for urgent/high RFQs. Frontend shows 'Available Now' badge (emerald with pulsing green dot) and machine availability indicators (green=available, amber=engaged). Test RFQ rfq_ff88d4dd6ba0 can be used for reference.",
+  "features_tested": {
+    "backend_api": {
+      "urgent_rfq_availability_data": "PASS - matched_vendors include has_available_machine, availability_score, available_machine_count fields",
+      "urgency_flags_in_response": "PASS - match endpoint returns urgency_applied: true, availability_prioritized: true for urgent RFQs",
+      "availability_scoring_bonus": "PASS - vendors with available machines have availability_score: 20 (max bonus for urgent)",
+      "machine_details_availability": "PASS - machine_details include availability_status and is_available fields",
+      "normal_rfq_no_prioritization": "PASS - normal priority RFQs return urgency_applied: false, availability_prioritized: false",
+      "high_priority_partial_bonus": "PASS - high priority RFQs also apply availability prioritization"
+    },
+    "frontend_ui": {
+      "urgency_badge_in_header": "PASS - Red 'Urgent - ASAP' badge displayed for urgent RFQs (data-testid='rfq-urgency-badge')",
+      "available_now_badge": "PASS - Found 4 'Available Now' badges (emerald styling) for vendors with available machines",
+      "machine_availability_count": "PASS - Shows 'X/Y Available' format next to MATCHING MACHINES section",
+      "green_availability_dots": "PASS - Found 10+ green dots indicating available machines",
+      "machine_name_with_status": "PASS - Machine names displayed with green dot indicator for available status"
+    }
+  },
+  "test_rfqs_used": {
+    "rfq_ff88d4dd6ba0": {
+      "title": "URGENT - CNC Shaft 100mm diameter",
+      "urgency": "urgent",
+      "deadline": "2026-03-15",
+      "matched_vendors": 4
+    }
+  }
+}
