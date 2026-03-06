@@ -22,16 +22,18 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 ### Backend Structure (Refactored Mar 6, 2026)
 ```
 /app/backend/
-├── app/                    # NEW: Modular package
+├── app/                    # Modular package
 │   ├── config.py           # Settings, constants
 │   ├── database.py         # MongoDB connection
+│   ├── dependencies.py     # Auth helpers (get_current_user)
 │   ├── main.py             # FastAPI app factory
 │   ├── models/             # Pydantic models (7 files)
 │   ├── services/           # security.py, email_service.py
-│   └── routes/             # API routes (gradual migration)
+│   └── routes/             # auth.py (15 endpoints), users.py (2 endpoints)
 ├── server.py               # Main entry (~7500 lines)
 └── .env
 ```
+Migration: Phase 1-2 done (models, services, auth routes). Phase 3 next (vendor/RFQ routes).
 
 ## AI Drawing Analysis - Supported Formats
 

@@ -5,5 +5,13 @@ from fastapi import APIRouter
 # Create main API router
 api_router = APIRouter()
 
-# Import route modules (will be populated as we refactor)
-# from app.routes import auth, users, vendors, machines, rfqs, quotes, orders, admin, notifications, voice, dashboard
+# Import route modules
+from app.routes.auth import router as auth_router
+from app.routes.users import router as users_router
+
+# Include routers
+# Note: For gradual migration, these routers are not yet mounted.
+# The main server.py still handles all routes directly.
+# Once migration is complete, uncomment:
+# api_router.include_router(auth_router)
+# api_router.include_router(users_router)
