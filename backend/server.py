@@ -7157,30 +7157,63 @@ async def voice_query(request: Request, user: dict = Depends(get_current_user)):
                 "language": detected_language
             }
         
-        # Get matched RFQs for this vendor
+        # Get matched RFQs for this vendor - only open, non-quoted, non-expired
+        now = datetime.now(timezone.utc).isoformat()
+        
+        # First get all RFQs where this vendor is matched
         matched_rfqs = await db.rfqs.find(
             {
                 "matched_vendors.vendor_id": vendor["vendor_id"],
-                "status": {"$in": ["matching", "quoted"]}
+                "status": {"$in": ["matching", "open", "published"]},  # Only open statuses
+                "$or": [
+                    {"deadline": {"$exists": False}},
+                    {"deadline": None},
+                    {"deadline": ""},
+                    {"deadline": {"$gte": now}}  # Not expired
+                ]
             },
             {"_id": 0, "rfq_id": 1, "title": 1, "material_type": 1, "quantity": 1, 
-             "tolerance": 1, "matched_vendors": 1, "created_at": 1}
-        ).sort("created_at", -1).to_list(20)
+             "tolerance": 1, "matched_vendors": 1, "created_at": 1, "deadline": 1}
+        ).sort("created_at", -1).to_list(50)
         
-        # Filter to get this vendor's match info
+        # Get quotes submitted by this vendor to filter out already quoted RFQs
+        vendor_quotes = await db.quotes.find(
+            {"vendor_id": vendor["vendor_id"]},
+            {"_id": 0, "rfq_id": 1}
+        ).to_list(1000)
+        quoted_rfq_ids = set(q["rfq_id"] for q in vendor_quotes)
+        
+        # Filter to get this vendor's match info - exclude already quoted RFQs
         rfq_summaries = []
         for rfq in matched_rfqs:
+            # Skip if vendor already quoted this RFQ
+            if rfq["rfq_id"] in quoted_rfq_ids:
+                continue
+                
             vendor_match = next((v for v in rfq.get("matched_vendors", []) if v.get("vendor_id") == vendor["vendor_id"]), None)
             if vendor_match:
-                rfq_summaries.append({
-                    "rfq_id": rfq["rfq_id"],
-                    "title": rfq["title"],
-                    "material": rfq.get("material_type", "Not specified"),
-                    "quantity": rfq.get("quantity", "N/A"),
-                    "match_score": vendor_match.get("suitability_score", 0),
-                    "matching_machines": vendor_match.get("matching_machines", [])[:2],
-                    "created_at": rfq.get("created_at", "")
-                })
+                # Check deadline
+                deadline = rfq.get("deadline")
+                is_expired = False
+                if deadline:
+                    try:
+                        if isinstance(deadline, str) and deadline:
+                            deadline_dt = datetime.fromisoformat(deadline.replace('Z', '+00:00'))
+                            is_expired = deadline_dt < datetime.now(timezone.utc)
+                    except:
+                        pass
+                
+                if not is_expired:
+                    rfq_summaries.append({
+                        "rfq_id": rfq["rfq_id"],
+                        "title": rfq["title"],
+                        "material": rfq.get("material_type", "Not specified"),
+                        "quantity": rfq.get("quantity", "N/A"),
+                        "match_score": vendor_match.get("suitability_score", 0),
+                        "matching_machines": vendor_match.get("matching_machines", [])[:2],
+                        "created_at": rfq.get("created_at", ""),
+                        "deadline": rfq.get("deadline", "")
+                    })
         
         # Build context for AI - with multilingual support
         language_instruction = f"\n\nIMPORTANT: Respond ONLY in {language_name}. Do not mix languages."
@@ -7191,17 +7224,18 @@ async def voice_query(request: Request, user: dict = Depends(get_current_user)):
                 for r in rfq_summaries[:5]
             ])
             system_prompt = f"""You are a helpful voice assistant for OEMLinker, a manufacturing marketplace.
-The vendor has {len(rfq_summaries)} matched RFQs. Here are the most recent ones:
+The vendor has {len(rfq_summaries)} OPEN RFQs waiting for quotes. These are active opportunities that have not been quoted yet and are not expired.
+Here are the most recent ones:
 {rfq_context}
 
 Respond naturally and concisely to the vendor's question. Keep responses under 100 words.
-Focus on the most relevant information. Mention match scores and key details.{language_instruction}"""
+Focus on the most relevant information. Mention match scores and encourage them to submit quotes.{language_instruction}"""
         else:
             system_prompt = f"""You are a helpful voice assistant for OEMLinker, a manufacturing marketplace.
-The vendor currently has no matched RFQs. Encourage them to:
-1. Complete their profile with all machines
-2. Add past experiences
-3. Check back soon for new opportunities
+The vendor currently has no open RFQs waiting for quotes. This could mean:
+1. They have already quoted on all matched RFQs
+2. No new matching opportunities at the moment
+Encourage them to check back soon for new opportunities.
 Keep responses friendly and under 50 words.{language_instruction}"""
         
         # Use AI to generate natural response
