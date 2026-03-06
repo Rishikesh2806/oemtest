@@ -2278,8 +2278,11 @@ async def verify_gstin(gstin: str):
     state_code = gstin[:2]
     state = state_codes.get(state_code, "Unknown")
     
+    # Extract PAN from GSTIN (characters 3-12)
+    pan = gstin[2:12]
+    
     try:
-        # Fetch from GSTIN Check API with API key
+        # Try primary API - gstincheck.co.in with API key
         async with httpx.AsyncClient(timeout=15.0) as client:
             api_url = f"http://sheet.gstincheck.co.in/check/{GSTIN_API_KEY}/{gstin}"
             logger.info(f"Verifying GSTIN: {gstin}")
@@ -2324,22 +2327,47 @@ async def verify_gstin(gstin: str):
                         "last_updated": gst_data.get("lstupdt", "")
                     }
                 else:
-                    # GSTIN not found or invalid
+                    # Check error code
+                    error_code = data.get("errorCode", "")
+                    error_message = data.get("message", "GSTIN verification failed")
+                    
+                    # If API key issue or GST server issue, return partial data from GSTIN structure
+                    if error_code in ["API_KEY_INVALID", "API_KEY_EXPIRED", "NO_BALANCE", "GST_SERVER_UNDER_MAINTENANCE"]:
+                        logger.warning(f"GSTIN API issue: {error_code}")
+                        # Return basic info extracted from GSTIN format
+                        return {
+                            "valid": True,
+                            "gstin": gstin,
+                            "legal_name": "",
+                            "trade_name": "",
+                            "status": "Verification Pending",
+                            "taxpayer_type": "",
+                            "state": state,
+                            "city": "",
+                            "pincode": "",
+                            "address": "",
+                            "constitution": "",
+                            "registration_date": "",
+                            "last_updated": "",
+                            "pan": pan,
+                            "note": f"GSTIN format valid. Manual verification recommended. ({error_message})"
+                        }
+                    
+                    # GSTIN not found in database
                     return {
                         "valid": False,
                         "gstin": gstin,
-                        "error": data.get("message", "GSTIN not found in GST database"),
-                        "state": state
+                        "error": error_message,
+                        "state": state,
+                        "pan": pan
                     }
             else:
-                # API error, return basic info from GSTIN structure
                 logger.warning(f"GSTIN API error: {response.status_code}")
                 
     except Exception as e:
         logger.error(f"GSTIN verification error: {str(e)}")
     
     # Fallback: Extract basic info from GSTIN structure
-    pan = gstin[2:12]
     entity_type_codes = {
         "P": "Individual/Proprietor", "F": "Firm/LLP", "C": "Company",
         "H": "HUF", "A": "AOP", "B": "BOI", "T": "Trust", "G": "Government",
@@ -2352,15 +2380,17 @@ async def verify_gstin(gstin: str):
         "gstin": gstin,
         "legal_name": "",
         "trade_name": "",
-        "status": "Unable to verify online",
+        "status": "Format Valid - Online verification unavailable",
         "taxpayer_type": entity_type,
         "state": state,
         "city": "",
         "pincode": "",
         "address": "",
         "constitution": entity_type,
+        "registration_date": "",
+        "last_updated": "",
         "pan": pan,
-        "note": "Basic info extracted from GSTIN. Full details not available."
+        "note": "GSTIN format is valid. Company details will be manually verified."
     }
 
 # ============== LOCATION/CITIES ROUTES ==============
