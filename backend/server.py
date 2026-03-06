@@ -732,6 +732,11 @@ class Machine(BaseModel):
     materials: Optional[List[str]] = None
     monthly_capacity_hours: int = 160
     is_active: bool = True
+    # Availability status
+    availability_status: str = "available"  # available, engaged, maintenance, offline
+    engaged_until: Optional[str] = None  # ISO date when machine becomes available
+    engaged_order_id: Optional[str] = None  # Order ID the machine is engaged with
+    availability_note: Optional[str] = None  # Optional note about availability
     created_at: str
 
 class MachineCreate(BaseModel):
@@ -791,6 +796,10 @@ class MachineCreate(BaseModel):
     materials_supported: List[str] = []
     materials: Optional[List[str]] = None
     monthly_capacity_hours: int = 160
+    # Availability status
+    availability_status: str = "available"  # available, engaged, maintenance, offline
+    engaged_until: Optional[str] = None
+    availability_note: Optional[str] = None
 
 class RFQStatus:
     DRAFT = "draft"
@@ -2779,6 +2788,89 @@ async def delete_machine(machine_id: str, user: dict = Depends(get_current_user)
         raise HTTPException(status_code=404, detail="Machine not found")
     
     return {"message": "Machine deleted"}
+
+# Machine Availability Update
+class MachineAvailabilityUpdate(BaseModel):
+    availability_status: str  # available, engaged, maintenance, offline
+    engaged_until: Optional[str] = None  # ISO date
+    availability_note: Optional[str] = None
+
+@api_router.put("/machines/{machine_id}/availability")
+async def update_machine_availability(
+    machine_id: str, 
+    availability: MachineAvailabilityUpdate, 
+    user: dict = Depends(get_current_user)
+):
+    """Update machine availability status"""
+    if user["role"] != UserRole.VENDOR:
+        raise HTTPException(status_code=403, detail="Only vendors can update machine availability")
+    
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor profile not found")
+    
+    # Validate status
+    valid_statuses = ["available", "engaged", "maintenance", "offline"]
+    if availability.availability_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+    
+    # Update machine
+    update_data = {
+        "availability_status": availability.availability_status,
+        "availability_note": availability.availability_note
+    }
+    
+    if availability.availability_status == "engaged" and availability.engaged_until:
+        update_data["engaged_until"] = availability.engaged_until
+    elif availability.availability_status == "available":
+        update_data["engaged_until"] = None
+        update_data["engaged_order_id"] = None
+    
+    result = await db.machines.update_one(
+        {"machine_id": machine_id, "vendor_id": vendor["vendor_id"]},
+        {"$set": update_data}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    
+    updated = await db.machines.find_one({"machine_id": machine_id}, {"_id": 0})
+    return updated
+
+@api_router.get("/machines/availability/summary")
+async def get_machines_availability_summary(user: dict = Depends(get_current_user)):
+    """Get summary of all machines availability for a vendor"""
+    if user["role"] != UserRole.VENDOR:
+        raise HTTPException(status_code=403, detail="Only vendors can view machine availability")
+    
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor profile not found")
+    
+    machines = await db.machines.find(
+        {"vendor_id": vendor["vendor_id"]},
+        {"_id": 0, "machine_id": 1, "name": 1, "machine_type": 1, "brand": 1, "model": 1,
+         "availability_status": 1, "engaged_until": 1, "availability_note": 1}
+    ).to_list(100)
+    
+    # Count by status
+    summary = {
+        "available": 0,
+        "engaged": 0,
+        "maintenance": 0,
+        "offline": 0,
+        "total": len(machines)
+    }
+    
+    for m in machines:
+        status = m.get("availability_status", "available")
+        if status in summary:
+            summary[status] += 1
+    
+    return {
+        "summary": summary,
+        "machines": machines
+    }
 
 # ============== RFQ ROUTES ==============
 

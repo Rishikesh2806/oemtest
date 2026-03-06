@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { toast } from "sonner";
 import { 
   Plus, Wrench, Loader2, Edit2, Trash2, 
-  Cog, Maximize2, Settings
+  Cog, Maximize2, Settings, CheckCircle2, Clock, AlertTriangle, Power
 } from "lucide-react";
 
 const MATERIALS = [
@@ -48,6 +48,21 @@ const MachineManagement = () => {
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState(emptyMachine);
   const [machineCategories, setMachineCategories] = useState({});
+  
+  // Availability management
+  const [availabilityDialogOpen, setAvailabilityDialogOpen] = useState(false);
+  const [selectedMachine, setSelectedMachine] = useState(null);
+  const [availabilityData, setAvailabilityData] = useState({
+    availability_status: "available",
+    engaged_until: "",
+    availability_note: ""
+  });
+  const [updatingAvailability, setUpdatingAvailability] = useState(false);
+  
+  // Availability summary
+  const [availabilitySummary, setAvailabilitySummary] = useState({
+    available: 0, engaged: 0, maintenance: 0, offline: 0, total: 0
+  });
 
   useEffect(() => {
     fetchMachines();
@@ -58,6 +73,13 @@ const MachineManagement = () => {
     try {
       const response = await api.get("/machines");
       setMachines(response.data);
+      // Calculate availability summary
+      const summary = { available: 0, engaged: 0, maintenance: 0, offline: 0, total: response.data.length };
+      response.data.forEach(m => {
+        const status = m.availability_status || "available";
+        if (summary[status] !== undefined) summary[status]++;
+      });
+      setAvailabilitySummary(summary);
     } catch (error) {
       toast.error("Failed to load machines");
     } finally {
@@ -72,6 +94,45 @@ const MachineManagement = () => {
     } catch (error) {
       console.error("Failed to load categories");
     }
+  };
+
+  // Open availability dialog
+  const openAvailabilityDialog = (machine) => {
+    setSelectedMachine(machine);
+    setAvailabilityData({
+      availability_status: machine.availability_status || "available",
+      engaged_until: machine.engaged_until || "",
+      availability_note: machine.availability_note || ""
+    });
+    setAvailabilityDialogOpen(true);
+  };
+
+  // Update machine availability
+  const updateAvailability = async () => {
+    if (!selectedMachine) return;
+    setUpdatingAvailability(true);
+    try {
+      await api.put(`/machines/${selectedMachine.machine_id}/availability`, availabilityData);
+      toast.success("Machine availability updated");
+      setAvailabilityDialogOpen(false);
+      fetchMachines();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to update availability");
+    } finally {
+      setUpdatingAvailability(false);
+    }
+  };
+
+  // Get availability badge
+  const getAvailabilityBadge = (machine) => {
+    const status = machine.availability_status || "available";
+    const badges = {
+      available: { icon: CheckCircle2, color: "bg-green-100 text-green-700", label: "Available" },
+      engaged: { icon: Clock, color: "bg-blue-100 text-blue-700", label: "Engaged" },
+      maintenance: { icon: AlertTriangle, color: "bg-yellow-100 text-yellow-700", label: "Maintenance" },
+      offline: { icon: Power, color: "bg-gray-100 text-gray-500", label: "Offline" }
+    };
+    return badges[status] || badges.available;
   };
 
   // Get dimension fields based on selected category
@@ -458,7 +519,10 @@ const MachineManagement = () => {
         {/* Machines Grid */}
         {machines.length > 0 ? (
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {machines.map((machine) => (
+            {machines.map((machine) => {
+              const availBadge = getAvailabilityBadge(machine);
+              const AvailIcon = availBadge.icon;
+              return (
               <Card key={machine.machine_id} className="border-slate-200 hover:border-orange-200 transition-colors">
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
@@ -473,11 +537,22 @@ const MachineManagement = () => {
                         </p>
                       </div>
                     </div>
-                    {(machine.machine_category || detectCategoryFromType(machine.machine_type)) && (
-                      <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
-                        {machine.machine_category || detectCategoryFromType(machine.machine_type)}
-                      </span>
-                    )}
+                    <div className="flex flex-col items-end gap-1">
+                      {(machine.machine_category || detectCategoryFromType(machine.machine_type)) && (
+                        <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
+                          {machine.machine_category || detectCategoryFromType(machine.machine_type)}
+                        </span>
+                      )}
+                      {/* Availability Badge */}
+                      <button
+                        onClick={() => openAvailabilityDialog(machine)}
+                        className={`text-xs ${availBadge.color} px-2 py-1 rounded flex items-center gap-1 hover:opacity-80 transition-opacity`}
+                        data-testid={`availability-${machine.machine_id}`}
+                      >
+                        <AvailIcon className="w-3 h-3" />
+                        {availBadge.label}
+                      </button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -536,7 +611,8 @@ const MachineManagement = () => {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+            );
+            })}
           </div>
         ) : (
           <Card className="border-slate-200">
@@ -557,6 +633,132 @@ const MachineManagement = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Availability Summary */}
+        {machines.length > 0 && (
+          <div className="mt-8">
+            <h3 className="font-semibold text-slate-900 mb-4">Machine Availability Summary</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <Card className="border-green-200 bg-green-50">
+                <CardContent className="p-4 text-center">
+                  <CheckCircle2 className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                  <div className="text-2xl font-bold text-green-700">{availabilitySummary.available}</div>
+                  <div className="text-sm text-green-600">Available</div>
+                </CardContent>
+              </Card>
+              <Card className="border-blue-200 bg-blue-50">
+                <CardContent className="p-4 text-center">
+                  <Clock className="w-8 h-8 text-blue-600 mx-auto mb-2" />
+                  <div className="text-2xl font-bold text-blue-700">{availabilitySummary.engaged}</div>
+                  <div className="text-sm text-blue-600">Engaged</div>
+                </CardContent>
+              </Card>
+              <Card className="border-yellow-200 bg-yellow-50">
+                <CardContent className="p-4 text-center">
+                  <AlertTriangle className="w-8 h-8 text-yellow-600 mx-auto mb-2" />
+                  <div className="text-2xl font-bold text-yellow-700">{availabilitySummary.maintenance}</div>
+                  <div className="text-sm text-yellow-600">Maintenance</div>
+                </CardContent>
+              </Card>
+              <Card className="border-gray-200 bg-gray-50">
+                <CardContent className="p-4 text-center">
+                  <Power className="w-8 h-8 text-gray-500 mx-auto mb-2" />
+                  <div className="text-2xl font-bold text-gray-600">{availabilitySummary.offline}</div>
+                  <div className="text-sm text-gray-500">Offline</div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        )}
+
+        {/* Availability Dialog */}
+        <Dialog open={availabilityDialogOpen} onOpenChange={setAvailabilityDialogOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Update Machine Availability</DialogTitle>
+            </DialogHeader>
+            {selectedMachine && (
+              <div className="space-y-4 py-4">
+                <div className="text-sm text-slate-600 mb-4">
+                  <strong>{getMachineName(selectedMachine)}</strong>
+                  <br />
+                  {selectedMachine.brand} {selectedMachine.model}
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={availabilityData.availability_status}
+                    onValueChange={(v) => setAvailabilityData({...availabilityData, availability_status: v})}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="available">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-green-600" /> Available
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="engaged">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-blue-600" /> Engaged
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="maintenance">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-yellow-600" /> Maintenance
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="offline">
+                        <div className="flex items-center gap-2">
+                          <Power className="w-4 h-4 text-gray-500" /> Offline
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {availabilityData.availability_status === "engaged" && (
+                  <div className="space-y-2">
+                    <Label>Engaged Until (Expected Available Date)</Label>
+                    <Input
+                      type="date"
+                      value={availabilityData.engaged_until?.split('T')[0] || ""}
+                      onChange={(e) => setAvailabilityData({...availabilityData, engaged_until: e.target.value})}
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label>Note (Optional)</Label>
+                  <Input
+                    placeholder="E.g., Working on PO-12345..."
+                    value={availabilityData.availability_note || ""}
+                    onChange={(e) => setAvailabilityData({...availabilityData, availability_note: e.target.value})}
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setAvailabilityDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    className="flex-1 bg-orange-600 hover:bg-orange-700"
+                    onClick={updateAvailability}
+                    disabled={updatingAvailability}
+                  >
+                    {updatingAvailability ? <Loader2 className="w-4 h-4 animate-spin" /> : "Update"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );
