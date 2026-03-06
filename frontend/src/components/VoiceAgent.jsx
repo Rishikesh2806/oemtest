@@ -2,9 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../App";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { toast } from "sonner";
-import { Mic, MicOff, Volume2, Loader2, X, MessageSquare, ExternalLink, ArrowRight } from "lucide-react";
+import { Mic, MicOff, Volume2, Loader2, X, MessageSquare, ArrowRight, ChevronRight } from "lucide-react";
 
 const VoiceAgent = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
@@ -14,14 +13,22 @@ const VoiceAgent = ({ isOpen, onClose }) => {
   const [transcript, setTranscript] = useState("");
   const [response, setResponse] = useState(null);
   const [matchedRFQs, setMatchedRFQs] = useState([]);
+  const [totalMatches, setTotalMatches] = useState(0);
   
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioRef = useRef(null);
 
   useEffect(() => {
-    // Cleanup on unmount
+    // Prevent body scroll when modal is open
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    
     return () => {
+      document.body.style.overflow = 'unset';
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.stop();
       }
@@ -29,9 +36,8 @@ const VoiceAgent = ({ isOpen, onClose }) => {
         audioRef.current.pause();
       }
     };
-  }, []);
+  }, [isOpen]);
 
-  // Handle close - cleanup and close
   const handleClose = () => {
     if (audioRef.current) {
       audioRef.current.pause();
@@ -41,10 +47,12 @@ const VoiceAgent = ({ isOpen, onClose }) => {
     }
     setIsListening(false);
     setIsSpeaking(false);
+    setTranscript("");
+    setResponse(null);
+    setMatchedRFQs([]);
     onClose();
   };
 
-  // Navigate to RFQ detail
   const handleViewRFQ = (rfqId) => {
     handleClose();
     navigate(`/vendor/rfq/${rfqId}`);
@@ -94,7 +102,6 @@ const VoiceAgent = ({ isOpen, onClose }) => {
     setIsProcessing(true);
     
     try {
-      // Step 1: Transcribe audio (auto-detects language)
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
       
@@ -112,7 +119,6 @@ const VoiceAgent = ({ isOpen, onClose }) => {
         return;
       }
       
-      // Step 2: Process query with detected language
       const queryResponse = await api.post('/voice/query', {
         query: userQuery,
         language: detectedLanguage
@@ -120,8 +126,8 @@ const VoiceAgent = ({ isOpen, onClose }) => {
       
       setResponse(queryResponse.data.response_text);
       setMatchedRFQs(queryResponse.data.matched_rfqs || []);
+      setTotalMatches(queryResponse.data.total_matches || 0);
       
-      // Step 3: Play audio response
       if (queryResponse.data.audio_base64) {
         playAudioResponse(queryResponse.data.audio_base64);
       }
@@ -134,22 +140,36 @@ const VoiceAgent = ({ isOpen, onClose }) => {
     }
   };
 
+  const handleQuickQuery = async (query, lang = 'en') => {
+    setTranscript(query);
+    setIsProcessing(true);
+    try {
+      const queryResponse = await api.post('/voice/query', { query, language: lang });
+      setResponse(queryResponse.data.response_text);
+      setMatchedRFQs(queryResponse.data.matched_rfqs || []);
+      setTotalMatches(queryResponse.data.total_matches || 0);
+      if (queryResponse.data.audio_base64) {
+        playAudioResponse(queryResponse.data.audio_base64);
+      }
+    } catch (err) {
+      toast.error("Query failed");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const playAudioResponse = (base64Audio) => {
     try {
       setIsSpeaking(true);
-      
       const audioData = atob(base64Audio);
       const audioArray = new Uint8Array(audioData.length);
       for (let i = 0; i < audioData.length; i++) {
         audioArray[i] = audioData.charCodeAt(i);
       }
-      
       const audioBlob = new Blob([audioArray], { type: 'audio/mp3' });
       const audioUrl = URL.createObjectURL(audioBlob);
       
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
+      if (audioRef.current) audioRef.current.pause();
       
       audioRef.current = new Audio(audioUrl);
       audioRef.current.onended = () => {
@@ -161,9 +181,7 @@ const VoiceAgent = ({ isOpen, onClose }) => {
         URL.revokeObjectURL(audioUrl);
       };
       audioRef.current.play();
-      
     } catch (error) {
-      console.error("Audio playback error:", error);
       setIsSpeaking(false);
     }
   };
@@ -180,115 +198,121 @@ const VoiceAgent = ({ isOpen, onClose }) => {
 
   return (
     <div 
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm" 
+      className="fixed inset-0 bg-black/70 z-50 flex items-end sm:items-center justify-center"
       data-testid="voice-agent-modal"
-      onClick={(e) => e.target === e.currentTarget && handleClose()}
     >
-      <Card className="w-full max-w-lg bg-white shadow-2xl relative">
-        {/* Close Button - Top Right Corner */}
-        <button
-          onClick={handleClose}
-          className="absolute -top-3 -right-3 w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-100 transition-colors z-10 border border-gray-200"
-          data-testid="voice-agent-close-btn"
-        >
-          <X className="w-5 h-5 text-gray-600" />
-        </button>
+      {/* Mobile-optimized full-screen modal */}
+      <div className="w-full h-full sm:h-auto sm:max-h-[90vh] sm:max-w-lg bg-white sm:rounded-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300">
         
-        <CardHeader className="bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-t-lg">
+        {/* Header with Close Button */}
+        <div className="bg-gradient-to-r from-orange-500 to-orange-600 text-white p-4 sm:p-5 flex-shrink-0">
           <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <MessageSquare className="w-5 h-5" />
-              Voice Assistant
-            </CardTitle>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                <MessageSquare className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Voice Assistant</h2>
+                <p className="text-orange-100 text-xs">English, Hindi & Indian languages</p>
+              </div>
+            </div>
+            
+            {/* Close Button - Always Visible */}
+            <button
+              onClick={handleClose}
+              className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center transition-colors"
+              data-testid="voice-agent-close-btn"
+            >
+              <X className="w-6 h-6 text-white" />
+            </button>
           </div>
-          <p className="text-orange-100 text-sm mt-1">
-            Speak in English, Hindi, Tamil, Telugu, or any Indian language
-          </p>
-        </CardHeader>
-        
-        <CardContent className="p-6 space-y-6">
+        </div>
+
+        {/* Scrollable Content Area */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+          
           {/* Microphone Button */}
-          <div className="flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center py-4">
             <button
               onClick={isListening ? stopListening : startListening}
               disabled={isProcessing}
-              className={`w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 ${
+              className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
                 isListening 
-                  ? "bg-red-500 hover:bg-red-600 animate-pulse" 
+                  ? "bg-red-500 hover:bg-red-600 animate-pulse shadow-red-200" 
                   : isProcessing
                     ? "bg-gray-400 cursor-not-allowed"
-                    : "bg-orange-500 hover:bg-orange-600 hover:scale-105"
+                    : "bg-orange-500 hover:bg-orange-600 hover:scale-105 shadow-orange-200"
               }`}
               data-testid="voice-mic-button"
             >
               {isProcessing ? (
-                <Loader2 className="w-10 h-10 text-white animate-spin" />
+                <Loader2 className="w-8 h-8 sm:w-10 sm:h-10 text-white animate-spin" />
               ) : isListening ? (
-                <MicOff className="w-10 h-10 text-white" />
+                <MicOff className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
               ) : (
-                <Mic className="w-10 h-10 text-white" />
+                <Mic className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
               )}
             </button>
-            
-            <p className="text-sm text-gray-600">
-              {isListening 
-                ? "Listening... Click to stop" 
-                : isProcessing 
-                  ? "Processing your request..."
-                  : "Click to start speaking"}
+            <p className="text-sm text-gray-500 mt-3 text-center">
+              {isListening ? "Listening... Tap to stop" : isProcessing ? "Processing..." : "Tap to speak"}
             </p>
           </div>
 
           {/* Transcript */}
           {transcript && (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-xs text-gray-500 mb-1">You said:</p>
+            <div className="bg-gray-50 rounded-xl p-4">
+              <p className="text-xs text-gray-400 mb-1 uppercase tracking-wide">You said</p>
               <p className="text-gray-800">{transcript}</p>
             </div>
           )}
 
-          {/* Response */}
+          {/* AI Response */}
           {response && (
-            <div className="bg-orange-50 rounded-lg p-4">
+            <div className="bg-orange-50 rounded-xl p-4 border border-orange-100">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-orange-600 font-medium">Assistant:</p>
-                {isSpeaking ? (
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
+                <p className="text-xs text-orange-500 uppercase tracking-wide font-medium">Assistant</p>
+                {isSpeaking && (
+                  <button 
                     onClick={stopSpeaking}
-                    className="text-orange-600 h-6 px-2"
+                    className="flex items-center gap-1 text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded-full"
                   >
-                    <Volume2 className="w-4 h-4 mr-1 animate-pulse" />
-                    Stop
-                  </Button>
-                ) : null}
+                    <Volume2 className="w-3 h-3 animate-pulse" /> Stop
+                  </button>
+                )}
               </div>
-              <p className="text-gray-800">{response}</p>
+              <p className="text-gray-800 leading-relaxed">{response}</p>
             </div>
           )}
 
-          {/* Matched RFQs Summary with Links */}
+          {/* RFQ Results */}
           {matchedRFQs.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-700">Your Matched RFQs:</p>
-                <span className="text-xs text-gray-500">{matchedRFQs.length} results</span>
+                <h3 className="font-semibold text-gray-800">Open RFQs</h3>
+                <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded-full">
+                  {totalMatches} opportunities
+                </span>
               </div>
-              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-                {matchedRFQs.map((rfq, index) => (
-                  <div 
-                    key={rfq.rfq_id} 
-                    className="bg-white border rounded-lg p-3 text-sm hover:border-orange-400 hover:shadow-md transition-all cursor-pointer group"
+              
+              <div className="space-y-2">
+                {matchedRFQs.map((rfq) => (
+                  <button
+                    key={rfq.rfq_id}
                     onClick={() => handleViewRFQ(rfq.rfq_id)}
+                    className="w-full bg-white border border-gray-200 rounded-xl p-4 text-left hover:border-orange-300 hover:shadow-md transition-all group"
                     data-testid={`rfq-link-${rfq.rfq_id}`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-800 truncate flex-1 group-hover:text-orange-600">
-                        {rfq.title}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-medium text-gray-800 truncate group-hover:text-orange-600">
+                          {rfq.title}
+                        </h4>
+                        <p className="text-sm text-gray-500 mt-0.5">
+                          {rfq.material} • Qty: {rfq.quantity}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 ml-3">
+                        <span className={`px-2 py-1 rounded-lg text-xs font-semibold ${
                           rfq.match_score >= 70 
                             ? "bg-green-100 text-green-700" 
                             : rfq.match_score >= 50 
@@ -297,65 +321,57 @@ const VoiceAgent = ({ isOpen, onClose }) => {
                         }`}>
                           {rfq.match_score}%
                         </span>
-                        <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-orange-500 group-hover:translate-x-1 transition-all" />
+                        <ChevronRight className="w-5 h-5 text-gray-400 group-hover:text-orange-500 group-hover:translate-x-1 transition-all" />
                       </div>
                     </div>
-                    <div className="flex items-center justify-between mt-1">
-                      <p className="text-gray-500 text-xs">
-                        {rfq.material} • Qty: {rfq.quantity}
-                      </p>
-                      <span className="text-xs text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity">
-                        View Details
-                      </span>
-                    </div>
-                  </div>
+                  </button>
                 ))}
               </div>
               
-              {/* View All Link */}
+              {/* View All Button */}
               <button
                 onClick={() => { handleClose(); navigate('/vendor/matched-rfqs'); }}
-                className="w-full text-center text-sm text-orange-600 hover:text-orange-700 font-medium py-2 border-t flex items-center justify-center gap-1"
+                className="w-full py-3 text-center text-orange-600 hover:text-orange-700 font-medium border border-orange-200 rounded-xl hover:bg-orange-50 transition-colors"
               >
-                View All Matched RFQs <ExternalLink className="w-3 h-3" />
+                View All Matched RFQs →
               </button>
             </div>
           )}
 
-          {/* Sample Questions - English & Hindi */}
-          <div className="border-t pt-4">
-            <p className="text-xs text-gray-500 mb-2">Try asking (English or Hindi):</p>
-            <div className="flex flex-wrap gap-2">
-              {[
-                "What new RFQs match my machines?",
-                "मेरी मशीनों से कौन से RFQ मिलते हैं?",
-                "Show me high-priority opportunities",
-                "आज कोई urgent काम है?"
-              ].map((suggestion, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    setTranscript(suggestion);
-                    const lang = suggestion.match(/[अ-ह]/) ? 'hi' : 'en';
-                    api.post('/voice/query', { query: suggestion, language: lang })
-                      .then(res => {
-                        setResponse(res.data.response_text);
-                        setMatchedRFQs(res.data.matched_rfqs || []);
-                        if (res.data.audio_base64) {
-                          playAudioResponse(res.data.audio_base64);
-                        }
-                      })
-                      .catch(err => toast.error("Query failed"));
-                  }}
-                  className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-full transition-colors"
-                >
-                  "{suggestion}"
-                </button>
-              ))}
+          {/* Quick Questions */}
+          {!response && !isProcessing && (
+            <div className="pt-2">
+              <p className="text-xs text-gray-400 mb-3 uppercase tracking-wide">Quick Questions</p>
+              <div className="space-y-2">
+                {[
+                  { text: "What open RFQs can I quote?", lang: "en" },
+                  { text: "मेरे लिए कौन से RFQ हैं?", lang: "hi" },
+                  { text: "Show high priority matches", lang: "en" },
+                ].map((q, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleQuickQuery(q.text, q.lang)}
+                    className="w-full text-left text-sm bg-gray-50 hover:bg-gray-100 text-gray-700 px-4 py-3 rounded-xl transition-colors border border-gray-100"
+                  >
+                    "{q.text}"
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          )}
+        </div>
+
+        {/* Bottom Close Button for Mobile */}
+        <div className="flex-shrink-0 p-4 border-t bg-gray-50 sm:hidden">
+          <Button
+            onClick={handleClose}
+            variant="outline"
+            className="w-full py-6 text-base font-medium"
+          >
+            <X className="w-5 h-5 mr-2" /> Close
+          </Button>
+        </div>
+      </div>
     </div>
   );
 };
