@@ -14,7 +14,7 @@ import {
   FileText, Package, Star, MapPin, Loader2, 
   CheckCircle2, Send, DollarSign, Clock, ArrowLeft,
   Building2, Cpu, Wrench, AlertCircle, Target, MessageSquare, Eye,
-  BarChart3, CreditCard, ExternalLink, Truck, Globe
+  BarChart3, CreditCard, ExternalLink, Truck, Globe, Zap
 } from "lucide-react";
 import QuoteComparison from "../components/quotes/QuoteComparison";
 import QuoteDetailModal from "../components/QuoteDetailModal";
@@ -53,6 +53,18 @@ const INCOTERMS_LABELS = {
 
 const getIncotermsLabel = (value) => {
   return INCOTERMS_LABELS[value] || value || "Not specified";
+};
+
+const URGENCY_MAP = {
+  urgent: { label: "Urgent - ASAP", color: "bg-red-100 text-red-700 border-red-200", icon: "🔴" },
+  high: { label: "High Priority", color: "bg-orange-100 text-orange-700 border-orange-200", icon: "🟠" },
+  normal: { label: "Normal", color: "bg-green-100 text-green-700 border-green-200", icon: "🟢" },
+  low: { label: "Low Priority", color: "bg-blue-100 text-blue-700 border-blue-200", icon: "🔵" }
+};
+
+const getUrgencyBadge = (urgency) => {
+  const config = URGENCY_MAP[urgency] || URGENCY_MAP.normal;
+  return config;
 };
 
 const RFQDetail = () => {
@@ -189,9 +201,21 @@ const RFQDetail = () => {
           >
             <ArrowLeft className="w-4 h-4 mr-2" /> Back
           </Button>
-          <span className={`status-badge ${getStatusBadge(rfq.status)}`}>
-            {rfq.status.replace("_", " ")}
-          </span>
+          <div className="flex items-center gap-2">
+            {/* Urgency Badge */}
+            {rfq.urgency && rfq.urgency !== "normal" && (
+              <span 
+                className={`px-3 py-1 rounded-full text-xs font-medium border flex items-center gap-1 ${getUrgencyBadge(rfq.urgency).color}`}
+                data-testid="rfq-urgency-badge"
+              >
+                <Zap className="w-3 h-3" />
+                {getUrgencyBadge(rfq.urgency).label}
+              </span>
+            )}
+            <span className={`status-badge ${getStatusBadge(rfq.status)}`}>
+              {rfq.status.replace("_", " ")}
+            </span>
+          </div>
         </div>
 
         {/* RFQ Info */}
@@ -338,6 +362,45 @@ const RFQDetail = () => {
                 <p className="text-slate-900 font-medium mt-1">{rfq.surface_finish || "Not specified"}</p>
               </div>
             </div>
+
+            {/* Urgency & Deadline Row */}
+            {(rfq.urgency || rfq.deadline) && (
+              <div className="mt-4 p-4 rounded-lg border flex items-center gap-6" style={{
+                backgroundColor: rfq.urgency === 'urgent' ? '#fef2f2' : 
+                                 rfq.urgency === 'high' ? '#fff7ed' : '#f0fdf4',
+                borderColor: rfq.urgency === 'urgent' ? '#fecaca' : 
+                             rfq.urgency === 'high' ? '#fed7aa' : '#bbf7d0'
+              }}>
+                <div className="flex items-center gap-3">
+                  <Zap className={`w-5 h-5 ${
+                    rfq.urgency === 'urgent' ? 'text-red-600' : 
+                    rfq.urgency === 'high' ? 'text-orange-600' : 'text-green-600'
+                  }`} />
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Urgency</p>
+                    <p className={`font-medium ${
+                      rfq.urgency === 'urgent' ? 'text-red-700' : 
+                      rfq.urgency === 'high' ? 'text-orange-700' : 'text-green-700'
+                    }`}>
+                      {getUrgencyBadge(rfq.urgency || 'normal').label}
+                    </p>
+                  </div>
+                </div>
+                {rfq.deadline && (
+                  <div className="flex items-center gap-3 border-l pl-6" style={{ borderColor: 'rgba(0,0,0,0.1)' }}>
+                    <Clock className="w-5 h-5 text-slate-500" />
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Deadline</p>
+                      <p className="font-medium text-slate-900">
+                        {new Date(rfq.deadline).toLocaleDateString('en-IN', { 
+                          day: 'numeric', month: 'short', year: 'numeric' 
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Material Supply Type */}
             <div className="mt-4 p-4 bg-slate-50 rounded-lg flex items-center gap-3">

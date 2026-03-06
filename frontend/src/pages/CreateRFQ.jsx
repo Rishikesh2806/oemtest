@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { 
   Upload, FileText, ArrowRight, ArrowLeft, 
   CheckCircle2, Loader2, X, Cpu, Target, Package,
-  AlertTriangle, Ruler, Scale, MapPin, Truck, Globe, Building2
+  AlertTriangle, Ruler, Scale, MapPin, Truck, Globe, Building2, Clock, Zap
 } from "lucide-react";
 
 const MATERIALS = [
@@ -24,6 +24,13 @@ const MATERIALS = [
 const SURFACE_FINISHES = [
   "As Machined", "Anodized", "Powder Coated", "Painted",
   "Polished", "Brushed", "Chrome Plated", "Zinc Plated", "None"
+];
+
+const URGENCY_OPTIONS = [
+  { value: "urgent", label: "Urgent - Need ASAP", icon: "🔴", color: "text-red-600" },
+  { value: "high", label: "High Priority", icon: "🟠", color: "text-orange-600" },
+  { value: "normal", label: "Normal", icon: "🟢", color: "text-green-600" },
+  { value: "low", label: "Low Priority - Flexible", icon: "🔵", color: "text-blue-600" }
 ];
 
 const PAYMENT_TERMS = [
@@ -145,6 +152,7 @@ const CreateRFQ = () => {
     surface_finish: "",
     supply_type: "vendor_material",
     deadline: "",
+    urgency: "normal",
     preferred_payment_terms: "net_30",
     payment_terms_notes: "",
     // Delivery location
@@ -568,6 +576,53 @@ const CreateRFQ = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              {/* Urgency & Deadline */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <Zap className="w-3 h-3 inline mr-1" /> Urgency Level
+                  </Label>
+                  <Select
+                    value={formData.urgency}
+                    onValueChange={(value) => handleInputChange("urgency", value)}
+                  >
+                    <SelectTrigger className="mt-1" data-testid="urgency-select">
+                      <SelectValue placeholder="Select urgency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {URGENCY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          <span className="flex items-center gap-2">
+                            <span>{option.icon}</span>
+                            <span>{option.label}</span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Helps vendors prioritize your request
+                  </p>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <Clock className="w-3 h-3 inline mr-1" /> Deadline (Optional)
+                  </Label>
+                  <Input
+                    type="date"
+                    value={formData.deadline}
+                    onChange={(e) => handleInputChange("deadline", e.target.value)}
+                    className="mt-1"
+                    min={new Date().toISOString().split('T')[0]}
+                    data-testid="deadline-input"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    When do you need this delivered?
+                  </p>
                 </div>
               </div>
 

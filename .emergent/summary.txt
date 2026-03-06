@@ -1,4 +1,4 @@
-<analysis>**original_problem_statement:** The user wants to build a full-stack web application called **OEMLinker** (originally MachinoMatch), an AI-driven on-demand manufacturing marketplace. The core functionality involves buyers uploading RFQs with engineering drawings. An AI engine analyzes these drawings to extract technical specifications (now geometry-aware), which a smart matching algorithm uses to connect buyers with suitable manufacturing vendors based on capabilities, dimensions, and location.
+<analysis>**original_problem_statement:** The user wants to build a full-stack web application called **OEMLinker**, an AI-driven on-demand manufacturing marketplace. The core functionality involves buyers uploading RFQs with engineering drawings. An AI engine analyzes these drawings to extract technical specifications, which a smart matching algorithm uses to connect buyers with suitable manufacturing vendors based on capabilities, dimensions, and location.
 
 The platform must support a complete workflow: RFQ -> AI Analysis -> Vendor Matching -> Quotation -> Purchase Order -> Delivery -> Payment. It should handle different user roles (Buyer, Vendor, Admin) and include features like a vendor capability database, dashboards for each role, and a secure escrow payment system.
 
@@ -8,99 +8,76 @@ The platform must support a complete workflow: RFQ -> AI Analysis -> Vendor Matc
 -   **Matching:** A smart algorithm to match RFQs to vendors based on machine type, capacity, location, and past project experience.
 -   **Workflow:** A complete RFQ-to-payment lifecycle management module.
 -   **Security:** Secure user authentication with 2FA, password policies, and rate limiting.
--   **Commercials:** Escrow payments, platform commissions, and currency support (now INR).
+-   **Commercials:** Escrow payments, platform commissions, and currency support (INR).
 -   **Dashboards:** Dedicated dashboards for buyers, vendors, and admins.
 -   **Tech Stack:** React frontend, Python (FastAPI) backend, and a MongoDB database.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The OEMLinker application is a mature full-stack platform with a React frontend, a monolithic FastAPI backend, and a MongoDB database.
+OEMLinker is a comprehensive full-stack application featuring a React frontend, a monolithic FastAPI backend, and a MongoDB database.
 
 **Key Implemented Features:**
--   **Core Platform:** Full JWT authentication (login, register, 2FA, password reset), user role management, and dashboards.
--   **RFQ Workflow:** Users can create RFQs, upload multiple drawings (PDF/Image for analysis, CAD as attachments), and receive AI-driven analysis of specifications. The system supports upload cancellation.
--   **Advanced Vendor Matching:** The algorithm matches vendors based on a weighted score considering:
-    -   Machine capabilities vs. part geometry/requirements.
-    -   Dimensional/weight capacity.
-    -   **Location Preferences:** Prioritizes vendors in the buyer's preferred cities.
-    -   **Past Experience:** A significant matching component that scores vendors based on keywords, part types, materials, and industries from their project history.
-    -   **Text-Based Fallback:** Uses RFQ title and description to infer dimensions and processes if drawing analysis is inconclusive.
--   **Vendor Profiles:** Vendors can manage their company details and add a portfolio of Past Experiences to improve their match potential.
--   **UI/UX:** The UI has been updated to use INR (₹) as the currency. It features a hybrid city selector that auto-loads Indian cities, highlighting those with registered vendors. It also provides clear user feedback on drawing analysis status (analyzed vs. CAD attachment).
--   **Admin:** A secure, one-time endpoint () exists to create the initial admin user in a new production environment.
+-   **Core Platform:** JWT authentication (login, register, 2FA, password reset), user roles, and dashboards.
+-   **Email Verification:** New users receive a verification email upon registration, and a banner is displayed in the dashboard until their email is verified.
+-   **RFQ Workflow:** Buyers can create RFQs, upload multiple drawings, cancel uploads, and now specify an **Urgency Status** (Normal, Urgent, Critical).
+-   **Advanced Vendor Matching:** A sophisticated algorithm matches vendors based on machine capabilities, dimensions, location, and Past Experience.
+-   **Vendor Profiles:** Vendors can manage company details, a portfolio of Past Experiences, and now set the **availability status** (Available, Engaged, Maintenance, Offline) for each of their machines.
+-   **AI Voice Agent:** A web-based voice assistant on the vendor dashboard allows vendors to query for open RFQs using natural language in English and multiple Indian languages.
+-   **Admin Notifications:** The admin () receives email notifications for key events like new user sign-ups, RFQ creation, vendor matching, new quotations, and purchase order creation.
+-   **GSTIN Verification:** Vendor registration includes a verification step using a paid, third-party API to auto-fill company details from a GSTIN.
+-   **UI/UX:** The application uses INR (₹) as its currency. The UI includes a new 320x80 logo and a mobile-responsive, accessible popup for the voice agent.
 
 **Last working item**:
--   Last item agent was working: The user reported that for the account , newly added Past Experience entries disappear after logging out and back in. The agent began investigating this persistence issue.
+-   Last item agent was working: Adding an Urgency status field to RFQs. The backend models and API endpoint were updated. Work was in progress on the frontend to add a UI selector on the RFQ creation page.
 -   Status: IN PROGRESS
 -   Agent Testing Done: N
--   Which testing method agent to use? manual testing by curl
+-   Which testing method agent to use? frontend testing agent
 -   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Past Experience Not Persisting for  (Priority: P0)**
-    -   **Attempted fixes:** The agent confirmed the  API works correctly in the preview environment and added fallback logic to auto-create a vendor profile if one doesn't exist upon adding an experience. The investigation for the specific user account had just begun.
+-   **Issue 1: Production Login Failure with Password (Priority: P0)**
+    -   **Description:** The user reported that password-based login fails on the production site, but Google login works. The agent identified the cause as the production deployment using an incorrect  (pointing to a preview environment). A fix was implemented to use a relative URL (), but the user must redeploy the application for the fix to take effect.
     -   **Next debug checklist:**
-        1.  Log in as  using .
-        2.  Add a new past experience item via the  endpoint.
-        3.  Verify the experience was added by calling the GET  endpoint immediately after.
-        4.  Log out and log back in as the same user.
-        5.  Call GET  again to check if the data persists.
-        6.  Inspect the GET/POST logic in  for the  endpoint and the  hook in  that fetches the data to identify any potential race conditions or state management flaws.
-    -   **Why fix this issue and what will be achieved with the fix?** The Past Experience feature is a critical part of the vendor matching algorithm. If vendors cannot save their data, the matching quality is severely degraded.
-    -   **Status:** IN PROGRESS
-    -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** both
-    -   **Blocked on other issue:** None
-
--   **Issue 2: Verify GSTIN Integration for Vendor Registration (Priority: P1)**
-    -   **Attempted fixes:** None in this session. This is a carry-over from a previous handoff.
-    -   **Next debug checklist:**
-        1.  Go to the registration page and select the Vendor role.
-        2.  Enter a valid test GSTIN and click Verify.
-        3.  Confirm company details are auto-populated.
-        4.  Complete the registration and verify the vendor is created.
-    -   **Why fix this issue and what will be achieved with the fix?** To ensure the automated vendor verification flow, a key trust and safety feature, works end-to-end.
-    -   **Status:** USER VERIFICATION PENDING
-    -   **Is recurring issue?** N
+        1.  Confirm with the user that they have deployed the latest code.
+        2.  Attempt to log in on the production site using password credentials ( / ).
+        3.  If it still fails, check the browser's network tab to confirm the API calls are being sent to the correct production domain () and not a preview domain.
+    -   **Status:** BLOCKED (Awaiting user deployment)
+    -   **Is recurring issue?** Y
     -   **Should Test frontend/backend/both after fix?** frontend
-    -   **Blocked on other issue:** None
+    -   **Blocked on other issue:** User action (Deployment)
 
 **In progress Task List**:
--   None.
+-   **Task 1: Complete RFQ Urgency Feature (Priority: P0)**
+    -   **Where to resume:** Continue editing  to add the UI selector for Urgency.
+    -   **What will be achieved with this?** This will allow buyers to mark RFQs as Normal, Urgent, or Critical, enabling better prioritization for vendors and the system.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** both
+    -   **Blocked on something:** None
 
 **Upcoming and Future Tasks**
 **Upcoming Tasks:**
--   **AI Voice Agent (P1):** Implement an AI voice agent for vendors to check machine availability for recent RFQs.
--   **Payment Integration (P1):** Integrate Stripe to handle escrow payments.
+-   **Refactor  Monolith (P0):** The user has been briefed on the benefits of breaking the ~7,000-line  into a structured project (routes, models, services). This is a critical technical debt item to improve maintainability.
+-   **WhatsApp Integration for Voice Agent (P1):** The user inquired about adding the voice agent functionality to WhatsApp. This requires a Twilio integration.
+-   **Stripe Integration (P1):** Implement the planned escrow payment system using Stripe.
 
 **Future Tasks:**
 -   Instant AI auto-quote for simple parts.
 -   API for ERP integration.
 -   Capacity forecasting for vendors.
--   **Refactor the monolithic ** into a more scalable structure (routes, models, services).
 
 **Completed work in this session**
--   **Feature: Advanced Vendor Matching:**
-    -   Implemented and tested location-based scoring for vendor matching.
-    -   Added Past Experience to vendor profiles, with full CRUD, and integrated it as a heavily weighted component in the matching algorithm.
-    -   Enhanced matching to use RFQ title/description as a fallback for dimension extraction.
-    -   Added conventional machine types for matching rough/heavy machining jobs.
--   **Feature: Multi-Drawing & CAD File Handling:**
-    -   Enabled analysis of multiple drawings in a single RFQ.
-    -   The system now intelligently skips unsupported CAD files (DWG, STEP) for AI analysis but retains them as RFQ attachments.
-    -   Updated UI to show AI Analyzed vs. CAD Attachment badges.
--   **Feature: City Auto-Loading (India Focus):**
-    -   Implemented a hybrid city selector on RFQ and registration forms that auto-loads all major Indian cities, highlighting those with registered vendors.
--   **Feature: Upload Cancellation:** Added a Cancel button to the drawing upload process.
--   **Enhancement: Currency Change to INR:** Changed all currency displays and inputs from USD ($) to Indian Rupees (₹) across the entire application.
--   **Admin: Secure Setup Endpoint:** Created a one-time, secure endpoint () for creating the initial admin user on a new production deployment.
--   **Bug Fix:** Resolved an issue where spaces in process names within Past Experience were not being saved correctly.
--   **Bug Fix:** Fixed a critical API route-ordering issue that prevented vendor experiences from being retrieved.
--   **Verification:** Confirmed that vendors can already see all necessary RFQ fields (Delivery Location, Incoterms), correcting an inaccuracy in the previous handoff summary.
+-   **Bug Fix:** Resolved an issue where saving a vendor's profile would erase their Past Experience entries.
+-   **Feature:** Implemented a complete email verification flow for new users.
+-   **Feature:** Added admin email notifications for all major platform events.
+-   **Feature:** Built and integrated a multilingual (English & Indian languages) AI Voice Agent for vendors to find open RFQs.
+-   **Feature:** Added machine availability status management for vendors.
+-   **Feature:** Successfully integrated and tested the user's paid API key for GSTIN verification.
+-   **UI/UX:** Resized the application logo, improved the voice agent popup with a close button and clickable links, and made it mobile-responsive.
+-   **Admin:** Guided the user on deploying to production and creating the initial admin account.
 
 **Earlier issues found/mentioned but not fixed**
--   The **Made with Emergent badge** cannot be removed via code in the preview environment, as it's injected by a platform script. The solution is to deploy to a custom server or contact support for paid plans.
+-   The **Made with Emergent badge** cannot be removed via code in the preview environment as it's injected by a platform script. The user must deploy to a custom server or contact support for paid plans to remove it.
 
 **Known issue recurrence from previous fork**
 -   None.
@@ -110,75 +87,77 @@ The OEMLinker application is a mature full-stack platform with a React frontend,
 
 **Key Technical Concepts**
 -   **Backend:** FastAPI
--   **Frontend:** React (functional components, hooks)
+-   **Frontend:** React (Hooks, Context API)
 -   **Database:** MongoDB
--   **Security:** JWT, bcrypt, Rate Limiting, 2FA, Pwned Passwords validation.
--   **AI Integration:** OpenAI GPT-5.2 (Vision API) via .
--   **Frontend State:**  for handling upload cancellation.
+-   **AI Integration:**
+    -   OpenAI GPT-5.2 (Vision) for drawing analysis.
+    -   OpenAI Whisper (Speech-to-Text) and TTS for the voice agent, orchestrated via .
+-   **Email Notifications:** Resend API.
+-   **API Integration:**  for GSTIN validation.
 
 **key DB schema**
 -   **users:** 
--   **PastExperience:**  (New model, stored within )
--   **rfqs:** 
+-   **vendor_profile.machines:** 
+-   **rfqs:**  (Enum: Normal, Urgent, Critical)
 
 **changes in tech stack**
 -   None.
 
 **All files of reference**
--   : Heavily modified for all new features and bug fixes (matching, experience, city API, admin setup, currency).
--   : Modified for multi-file upload, cancel button, text guidance, and India-specific city selection.
--   : Modified for country/city selection.
--   : Modified to display enhanced experience matching data and file analysis status badges.
--   : New file to allow vendors to manage their past experiences.
--   : Updated the global register function.
--   Multiple frontend files (, , , etc.) were updated to change currency from  to .
+-   : Heavily modified for email verification, admin notifications, voice agent, machine availability, RFQ urgency, and GSTIN API integration.
+-   : Currently being edited to add the Urgency dropdown.
+-   : Overhauled to display and manage machine availability status.
+-   : New file containing the full UI and logic for the voice assistant.
+-   : New file for the email verification flow.
+-   : Modified to show the verify email banner.
+-   : Modified to launch the voice agent.
+-   : Modified to use  as a fallback, fixing a critical production bug.
 
 **Areas that need refactoring**:
--    is now extremely large and complex. It is a high-priority candidate for being broken down into a proper project structure (e.g., separate directories for routes, models, services, security).
+-    is critically oversized and complex. It must be broken down into separate files for routes, models, and services to ensure future scalability and maintainability.
 
 **key api endpoints**
--    (POST) - New endpoint for one-time admin creation.
--    (GET) - New endpoint to fetch a hybrid list of cities.
--    (GET, POST, DELETE) - New endpoints for vendor past experience CRUD.
--    (POST) - Modified to handle multiple files and skip CAD.
--    (GET) - Modified to include location and experience scoring.
--    (POST) - Modified to handle vendor-specific fields.
+-   : Sends a new verification email.
+-   : Verifies a user's email address.
+-   : Transcribes user audio to text.
+-   : Processes transcribed text to find RFQs.
+-   : Updates a machine's status.
+-   : Modified to accept an  field.
 
 **Critical Info for New Agent**
--   The immediate priority is debugging the Past Experience not persisting issue for the  account. The feature works in the preview environment, so this may be a data-specific or edge-case bug.
--   The production site () and the preview environment use separate databases. The user has been provided instructions for using the  endpoint to create their production admin account.
--   Be extremely careful when adding new routes to  due to its monolithic nature. The agent previously fixed a critical bug caused by incorrect route ordering. New, more specific routes must be defined *before* general routes with path parameters (e.g.,  must come before ).
+-   Your first priority is to complete the **RFQ Urgency feature**. Resume work in  to add the UI, then update  to display the new status.
+-   The user is experiencing login issues on their production site. A fix has been committed (using relative URLs in ), but **the user must deploy the latest code** for it to work. Be prepared to guide them on this if the issue is raised again.
+-   The GSTIN validation API is working correctly. Any future failures are likely due to invalid test GSTINs or an issue with the user's API key balance on .
+-   The refactoring of the monolithic  is the most important upcoming task after the current feature is complete. Plan to propose this to the user next.
 
 **documents and test reports created in this job**
 -   : Updated with all new features.
--   : Generated after verifying the location matching fix.
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **user:** change currency in rupees symbol (Status: **Completed**)
-2.  **user:** Proceed (with currency changes) (Status: **Completed**)
-3.  **user:** What is admin credentials for deployed app (Status: **Answered** - Explained DB separation and provided solution)
-4.  **user:** Is not working in oemlinker.com (Status: **Answered** - Explained DB separation)
-5.  **user:** Past experience is not being saved (Status: **In Progress** - Investigation started)
-6.  **user:** vendor@offoadex.com, password - vendor123 past experience is added but not shown after login again (Status: **In Progress** - This is the current active bug being investigated)
-7.  **user:** use description and title for drawing analysis and matching if dimensions are not found accurately from drawing file (Status: **Completed**)
-8.  **user:** match results with past experience data also and give weightage in matching results (Status: **Completed**)
-9.  **user:** check processes used in vendor experience space is not taking between texts (Status: **Completed**)
-10. **user:** add past experience in vendor profile match with title, description if drawing analyzed results are not sufficient for matching... (Status: **Completed**)
+1.  **user:** Add Urgency of RFQs status (Status: **In Progress**)
+2.  **user:** Add feature to machines to show if they are available or engaged (Status: **Completed**)
+3.  **user:** Make proper popup page of results of voice agent in mobile view to enable user to close (Status: **Completed**)
+4.  **user:** In voice agent results show only open RFQ which are not quoted or not expired (Status: **Completed**)
+5.  **user:** Check with this GSTIN 19AADCS8427M1ZQ (Status: **Completed**)
+6.  **user:** GSTIN failing (Status: **Resolved**)
+7.  **user:** Can this voice feature added into whatsapp (Status: **Acknowledged**, added to upcoming tasks)
+8.  **user:** Modify voice agent popup with cross sign to close popup and link with all results generated from voice agent (Status: **Completed**)
+9.  **user:** Implement this for GSTIN validation (with API key) (Status: **Completed**)
+10. **user:** can it be in all indian language including english (for voice agent) (Status: **Completed**)
 
 **Project Health Check:**
--   **Broken:** None
--   **Mocked:**
-    -   Stripe payment integration.
-    -   AI Voice Agent.
+-   **Broken:** None in the preview environment. The production login is broken pending user deployment of the fix.
+-   **Mocked:** Stripe payment integration, WhatsApp integration.
 
 **3rd Party Integrations**
 -   **OpenAI GPT-5.2 (Vision):** Used for AI drawing analysis. Uses Emergent LLM Key.
--   **Resend:** Used for sending transactional emails. Configured with user key for .
--   **GSTIN Check API:** Free API for vendor data verification.
+-   **OpenAI Whisper & TTS:** Powers the voice agent. Uses Emergent LLM Key.
+-   **Resend:** Used for sending transactional emails (user registration, admin notifications). Requires user-provided key.
+-   **GSTIN Check API ():** For vendor data verification. Requires user-provided key.
 -   **Stripe:** Planned for payments.
 
 **Testing status**
--   Testing agent used after significant changes: YES
+-   Testing agent used after significant changes: NO
 -   Troubleshoot agent used after agent stuck in loop: NO
 -   Test files created: []
 -   Known regressions: None.
@@ -190,12 +169,9 @@ The OEMLinker application is a mature full-stack platform with a React frontend,
 -   **Buyer:**
     -   Email: 
     -   Password: 
--   **Vendor (with experience issue):**
-    -   Email: 
-    -   Password: 
--   **Other Test Vendor:**
+-   **Vendor:**
     -   Email: 
     -   Password: 
 
 **What agent forgot to execute**
--   The agent was actively working on the user's latest bug report and had not forgotten any tasks. The next logical step is to continue debugging the persistence issue.</analysis>
+-   The agent was in the middle of implementing the RFQ Urgency feature when the session ended. No other requested tasks were forgotten.</analysis>
