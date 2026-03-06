@@ -155,6 +155,22 @@ Migration: Phase 1-2 done (models, services, auth routes). Phase 3 next (vendor/
 - /app/test_reports/iteration_12.json - RFQ Urgency Feature (100% pass)
 - /app/test_reports/iteration_13.json - Availability Prioritization (100% pass)
 
+## Admin Analytics Dashboard (Added Mar 6, 2026)
+Comprehensive platform analytics for business tracking:
+- **Key Metrics**: Users, RFQs, Quotes, Orders, Revenue, GMV
+- **Platform Health**: RFQ Match Rate, Quote Conversion, Vendor Approval, Machine Availability
+- **Revenue Trend**: 6-month bar chart with total/paid/pending breakdown
+- **User Breakdown**: Buyers vs Vendors, verification rate, new users (today/week/month)
+- **RFQ Analysis**: Status distribution, urgency breakdown, match statistics
+- **Quote Metrics**: Conversion rate, accepted/pending/rejected, avg quote value
+- **Order Status**: Status distribution, completion tracking
+- **Vendor Statistics**: Approval rate, top vendors by jobs with ratings
+- **Machine Statistics**: Availability, category distribution
+- **Recent Activity**: Latest users, RFQs, quotes, orders with timestamps
+- **Export**: CSV export of order data
+- **Auto-refresh**: Every 5 minutes
+- **Route**: /admin/analytics
+
 ## Test Credentials
 - **Admin**: admin@offoadex.com / admin123
 - **Test Buyer**: testbuyer_loc@test.com / SecureP@ss#7291

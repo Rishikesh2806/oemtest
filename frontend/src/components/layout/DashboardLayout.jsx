@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { 
   Factory, LayoutDashboard, FileText, Package, Settings, 
   LogOut, Menu, X, Wrench, Building2, Users, DollarSign,
-  ChevronDown, Bell, MessageSquare, User, Mail, AlertTriangle
+  ChevronDown, Bell, MessageSquare, User, Mail, AlertTriangle, BarChart3
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -77,6 +77,7 @@ const DashboardLayout = ({ children }) => {
 
   const adminNavItems = [
     { path: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { path: "/admin/analytics", label: "Analytics", icon: BarChart3 },
   ];
 
   const getNavItems = () => {

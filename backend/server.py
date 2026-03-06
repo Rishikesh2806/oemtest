@@ -7215,6 +7215,272 @@ async def get_vendor_dashboard(user: dict = Depends(get_current_user)):
         "recent_orders": orders[:5]
     }
 
+# ============== PLATFORM ANALYTICS (ADMIN) ==============
+
+@api_router.get("/admin/analytics")
+async def get_platform_analytics(user: dict = Depends(get_current_user)):
+    """Get comprehensive platform analytics for admin dashboard"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_ago = now - timedelta(days=7)
+    month_ago = now - timedelta(days=30)
+    
+    # ============== USER METRICS ==============
+    total_users = await db.users.count_documents({})
+    total_buyers = await db.users.count_documents({"role": "buyer"})
+    total_vendors = await db.users.count_documents({"role": "vendor"})
+    
+    # New users this week/month
+    new_users_week = await db.users.count_documents({
+        "created_at": {"$gte": week_ago.isoformat()}
+    })
+    new_users_month = await db.users.count_documents({
+        "created_at": {"$gte": month_ago.isoformat()}
+    })
+    new_users_today = await db.users.count_documents({
+        "created_at": {"$gte": today_start.isoformat()}
+    })
+    
+    # Verified users
+    verified_users = await db.users.count_documents({"email_verified": True})
+    
+    # ============== VENDOR METRICS ==============
+    total_vendor_profiles = await db.vendors.count_documents({})
+    approved_vendors = await db.vendors.count_documents({"is_approved": True})
+    pending_vendors = await db.vendors.count_documents({"is_approved": False})
+    
+    # Top vendors by jobs
+    top_vendors = await db.vendors.find(
+        {"is_approved": True},
+        {"_id": 0, "company_name": 1, "total_jobs": 1, "rating": 1, "city": 1}
+    ).sort("total_jobs", -1).to_list(10)
+    
+    # ============== MACHINE METRICS ==============
+    total_machines = await db.machines.count_documents({})
+    active_machines = await db.machines.count_documents({"is_active": True})
+    available_machines = await db.machines.count_documents({"availability_status": "available"})
+    engaged_machines = await db.machines.count_documents({"availability_status": "engaged"})
+    
+    # Machines by category
+    machine_categories = await db.machines.aggregate([
+        {"$match": {"is_active": True}},
+        {"$group": {"_id": "$machine_category", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10}
+    ]).to_list(10)
+    
+    # ============== RFQ METRICS ==============
+    total_rfqs = await db.rfqs.count_documents({})
+    
+    # RFQs by status
+    rfq_statuses = await db.rfqs.aggregate([
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}}
+    ]).to_list(20)
+    rfq_by_status = {s["_id"]: s["count"] for s in rfq_statuses}
+    
+    # RFQs by urgency
+    rfq_urgencies = await db.rfqs.aggregate([
+        {"$group": {"_id": "$urgency", "count": {"$sum": 1}}}
+    ]).to_list(10)
+    rfq_by_urgency = {u["_id"] or "normal": u["count"] for u in rfq_urgencies}
+    
+    # New RFQs this week/month
+    new_rfqs_week = await db.rfqs.count_documents({
+        "created_at": {"$gte": week_ago.isoformat()}
+    })
+    new_rfqs_month = await db.rfqs.count_documents({
+        "created_at": {"$gte": month_ago.isoformat()}
+    })
+    new_rfqs_today = await db.rfqs.count_documents({
+        "created_at": {"$gte": today_start.isoformat()}
+    })
+    
+    # RFQs with matches
+    rfqs_with_matches = await db.rfqs.count_documents({
+        "matched_vendors": {"$exists": True, "$ne": []}
+    })
+    
+    # ============== QUOTE METRICS ==============
+    total_quotes = await db.quotes.count_documents({})
+    accepted_quotes = await db.quotes.count_documents({"status": "accepted"})
+    pending_quotes = await db.quotes.count_documents({"status": "pending"})
+    rejected_quotes = await db.quotes.count_documents({"status": "rejected"})
+    
+    # Quote values
+    all_quotes = await db.quotes.find({}, {"_id": 0, "price": 1, "status": 1}).to_list(10000)
+    total_quote_value = sum(q.get("price", 0) for q in all_quotes)
+    accepted_quote_value = sum(q.get("price", 0) for q in all_quotes if q.get("status") == "accepted")
+    avg_quote_value = total_quote_value / len(all_quotes) if all_quotes else 0
+    
+    # Quote conversion rate
+    quote_conversion_rate = (accepted_quotes / total_quotes * 100) if total_quotes > 0 else 0
+    
+    # ============== ORDER METRICS ==============
+    total_orders = await db.orders.count_documents({})
+    
+    # Orders by status
+    order_statuses = await db.orders.aggregate([
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}}
+    ]).to_list(20)
+    orders_by_status = {s["_id"]: s["count"] for s in order_statuses}
+    
+    # Revenue metrics
+    all_orders = await db.orders.find({}, {"_id": 0, "total_amount": 1, "payment_status": 1, "status": 1, "created_at": 1}).to_list(10000)
+    total_revenue = sum(o.get("total_amount", 0) for o in all_orders)
+    paid_revenue = sum(o.get("total_amount", 0) for o in all_orders if o.get("payment_status") == "paid")
+    pending_revenue = sum(o.get("total_amount", 0) for o in all_orders if o.get("payment_status") == "pending")
+    
+    completed_orders = await db.orders.count_documents({"status": "completed"})
+    active_orders = await db.orders.count_documents({
+        "status": {"$nin": ["completed", "cancelled"]}
+    })
+    
+    # Monthly revenue trend (last 6 months)
+    monthly_revenue = []
+    for i in range(6):
+        month_start = (now - timedelta(days=30 * i)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        month_end = (month_start + timedelta(days=32)).replace(day=1)
+        month_orders = [o for o in all_orders 
+                       if o.get("created_at") and month_start.isoformat() <= o["created_at"] < month_end.isoformat()]
+        month_total = sum(o.get("total_amount", 0) for o in month_orders)
+        monthly_revenue.append({
+            "month": month_start.strftime("%b %Y"),
+            "revenue": month_total,
+            "orders": len(month_orders)
+        })
+    monthly_revenue.reverse()
+    
+    # ============== RECENT ACTIVITY ==============
+    recent_users = await db.users.find(
+        {}, {"_id": 0, "user_id": 1, "name": 1, "email": 1, "role": 1, "created_at": 1}
+    ).sort("created_at", -1).to_list(5)
+    
+    recent_rfqs = await db.rfqs.find(
+        {}, {"_id": 0, "rfq_id": 1, "title": 1, "status": 1, "urgency": 1, "created_at": 1}
+    ).sort("created_at", -1).to_list(5)
+    
+    recent_quotes = await db.quotes.find(
+        {}, {"_id": 0, "quote_id": 1, "rfq_id": 1, "price": 1, "status": 1, "created_at": 1}
+    ).sort("created_at", -1).to_list(5)
+    
+    recent_orders = await db.orders.find(
+        {}, {"_id": 0, "order_id": 1, "total_amount": 1, "status": 1, "created_at": 1}
+    ).sort("created_at", -1).to_list(5)
+    
+    # ============== PLATFORM HEALTH ==============
+    # Calculate key rates
+    rfq_match_rate = (rfqs_with_matches / total_rfqs * 100) if total_rfqs > 0 else 0
+    vendor_approval_rate = (approved_vendors / total_vendor_profiles * 100) if total_vendor_profiles > 0 else 0
+    machine_availability_rate = (available_machines / active_machines * 100) if active_machines > 0 else 0
+    
+    return {
+        "generated_at": now.isoformat(),
+        "summary": {
+            "total_users": total_users,
+            "total_rfqs": total_rfqs,
+            "total_quotes": total_quotes,
+            "total_orders": total_orders,
+            "total_revenue": total_revenue,
+            "platform_gmv": total_quote_value
+        },
+        "users": {
+            "total": total_users,
+            "buyers": total_buyers,
+            "vendors": total_vendors,
+            "verified": verified_users,
+            "verification_rate": round(verified_users / total_users * 100, 1) if total_users > 0 else 0,
+            "new_today": new_users_today,
+            "new_this_week": new_users_week,
+            "new_this_month": new_users_month
+        },
+        "vendors": {
+            "total_profiles": total_vendor_profiles,
+            "approved": approved_vendors,
+            "pending_approval": pending_vendors,
+            "approval_rate": round(vendor_approval_rate, 1),
+            "top_vendors": top_vendors
+        },
+        "machines": {
+            "total": total_machines,
+            "active": active_machines,
+            "available": available_machines,
+            "engaged": engaged_machines,
+            "availability_rate": round(machine_availability_rate, 1),
+            "by_category": machine_categories
+        },
+        "rfqs": {
+            "total": total_rfqs,
+            "by_status": rfq_by_status,
+            "by_urgency": rfq_by_urgency,
+            "with_matches": rfqs_with_matches,
+            "match_rate": round(rfq_match_rate, 1),
+            "new_today": new_rfqs_today,
+            "new_this_week": new_rfqs_week,
+            "new_this_month": new_rfqs_month
+        },
+        "quotes": {
+            "total": total_quotes,
+            "accepted": accepted_quotes,
+            "pending": pending_quotes,
+            "rejected": rejected_quotes,
+            "conversion_rate": round(quote_conversion_rate, 1),
+            "total_value": total_quote_value,
+            "accepted_value": accepted_quote_value,
+            "average_value": round(avg_quote_value, 2)
+        },
+        "orders": {
+            "total": total_orders,
+            "completed": completed_orders,
+            "active": active_orders,
+            "by_status": orders_by_status
+        },
+        "revenue": {
+            "total": total_revenue,
+            "paid": paid_revenue,
+            "pending": pending_revenue,
+            "monthly_trend": monthly_revenue
+        },
+        "recent_activity": {
+            "users": recent_users,
+            "rfqs": recent_rfqs,
+            "quotes": recent_quotes,
+            "orders": recent_orders
+        },
+        "health": {
+            "rfq_match_rate": round(rfq_match_rate, 1),
+            "quote_conversion_rate": round(quote_conversion_rate, 1),
+            "vendor_approval_rate": round(vendor_approval_rate, 1),
+            "machine_availability_rate": round(machine_availability_rate, 1)
+        }
+    }
+
+@api_router.get("/admin/analytics/export")
+async def export_analytics_csv(user: dict = Depends(get_current_user)):
+    """Export analytics data as CSV"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    import csv
+    from io import StringIO
+    
+    # Get all orders for export
+    orders = await db.orders.find({}, {"_id": 0}).to_list(10000)
+    
+    output = StringIO()
+    if orders:
+        writer = csv.DictWriter(output, fieldnames=orders[0].keys())
+        writer.writeheader()
+        writer.writerows(orders)
+    
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=orders_export.csv"}
+    )
+
 # ============== HEALTH CHECK ==============
 
 @api_router.get("/")
