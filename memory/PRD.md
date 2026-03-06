@@ -136,6 +136,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - /app/test_reports/iteration_1-9.json - Previous features
 - /app/test_reports/iteration_10.json - Dimension Input Feature (100% pass)
 - /app/test_reports/iteration_11.json - Vendor Location Matching (100% pass)
+- /app/test_reports/iteration_12.json - RFQ Urgency Feature (100% pass)
 
 ## Test Credentials
 - **Admin**: admin@offoadex.com / admin123
@@ -154,6 +155,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Quote negotiation workflow ✓
 - Notification system ✓
 - Payment terms ✓
+- RFQ Urgency & Deadline feature ✓ (Mar 6, 2026)
 
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check
@@ -192,6 +194,16 @@ Admin receives email notifications at `oemlinker@gmail.com` for:
 - Vendor matching completed
 - Quotation accepted
 - New PO created
+
+## RFQ Urgency Feature (Added Mar 6, 2026)
+Allow buyers to specify urgency level and deadline for RFQs:
+- **Urgency Levels**: Urgent (🔴), High Priority (🟠), Normal (🟢), Low Priority (🔵)
+- **Deadline Field**: Optional date picker for delivery deadline
+- **UI Display**: 
+  - Create RFQ page (Step 1): Urgency dropdown + Deadline input after Surface Finish
+  - RFQ Detail page: Urgency badge in header (for non-normal), colored urgency row with deadline
+- **Color Coding**: Red for urgent, orange for high, green for normal, blue for low
+- **Test Report**: /app/test_reports/iteration_12.json (100% pass)
 
 ## Voice Agent (Added Mar 5, 2026)
 Web-based voice assistant for vendors to query matched RFQs:
