@@ -8965,46 +8965,6 @@ async def process_whatsapp_command(
     # First try to extract intent from natural language
     intent = extract_intent(text_normalized)
     
-    # Help command - expanded with Indian languages
-    help_variants = ["help", "hi", "hello", "menu", "start", "hey", "helo", "assist", "assistance",
-                     *hindi_help, *tamil_help, *telugu_help, *marathi_help,
-                     *bengali_help, *gujarati_help, *kannada_help, *punjabi_help]
-    if intent == "help" or matches_command(text_normalized, help_variants):
-        if vendor:
-            return f"""👋 Welcome to *OEMLinker*, {vendor.get('company_name', 'Vendor')}!
-
-📋 *Available Commands:*
-
-*rfqs* - View open RFQs matching your capabilities
-*details <rfq_id>* - Get details of a specific RFQ
-*my quotes* - View your submitted quotes
-*my orders* - View your active orders
-*profile* - View your vendor profile
-*help* - Show this menu
-
-🎤 *Voice Search:* Send a voice message to search!
-
-💡 You can also ask questions in natural language!
-
-Example: "Show me urgent RFQs for steel machining" """
-        else:
-            return """👋 Welcome to *OEMLinker*!
-
-Your phone number is not linked to a vendor account.
-
-To use WhatsApp features:
-1. Register as a vendor at oemlinker.com
-2. Add your phone number to your profile
-
-Need help? Contact support@oemlinker.com"""
-
-    # Must be a registered vendor for other commands
-    if not vendor:
-        return "⚠️ Please register and link your phone number at oemlinker.com to use this service."
-    
-    # Base URL for links
-    BASE_URL = "https://oemlinker.com"
-    
     # ===== INDIAN LANGUAGE SUPPORT =====
     # Hindi variants
     hindi_rfq = ["आरएफक्यू", "काम", "नौकरी", "अवसर", "काम दिखाओ", "आर्डर दिखाओ", "कोटेशन", "रिक्वेस्ट"]
@@ -9061,6 +9021,46 @@ Need help? Contact support@oemlinker.com"""
     punjabi_quotes = ["ਮੇਰੇ ਕੋਟਸ", "ਕੋਟਸ"]
     punjabi_profile = ["ਪ੍ਰੋਫਾਈਲ"]
     punjabi_help = ["ਮਦਦ", "ਮੀਨੂ"]
+    
+    # Help command - expanded with Indian languages
+    help_variants = ["help", "hi", "hello", "menu", "start", "hey", "helo", "assist", "assistance",
+                     *hindi_help, *tamil_help, *telugu_help, *marathi_help,
+                     *bengali_help, *gujarati_help, *kannada_help, *punjabi_help]
+    if intent == "help" or matches_command(text_normalized, help_variants):
+        if vendor:
+            return f"""👋 Welcome to *OEMLinker*, {vendor.get('company_name', 'Vendor')}!
+
+📋 *Available Commands:*
+
+*rfqs* - View open RFQs matching your capabilities
+*details <rfq_id>* - Get details of a specific RFQ
+*my quotes* - View your submitted quotes
+*my orders* - View your active orders
+*profile* - View your vendor profile
+*help* - Show this menu
+
+🎤 *Voice Search:* Send a voice message to search!
+
+💡 You can also ask questions in natural language!
+
+Example: "Show me urgent RFQs for steel machining" """
+        else:
+            return """👋 Welcome to *OEMLinker*!
+
+Your phone number is not linked to a vendor account.
+
+To use WhatsApp features:
+1. Register as a vendor at oemlinker.com
+2. Add your phone number to your profile
+
+Need help? Contact support@oemlinker.com"""
+
+    # Must be a registered vendor for other commands
+    if not vendor:
+        return "⚠️ Please register and link your phone number at oemlinker.com to use this service."
+    
+    # Base URL for links
+    BASE_URL = "https://oemlinker.com"
     
     # List RFQs command - expanded with Indian languages
     rfq_variants = ["rfqs", "rfq", "jobs", "opportunities", "open rfqs", "show rfqs", "list rfqs", 
