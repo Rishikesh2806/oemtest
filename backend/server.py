@@ -8873,21 +8873,63 @@ async def process_whatsapp_command(
     # Normalize text for fuzzy matching (voice transcription can be inaccurate)
     text_normalized = text.lower().strip()
     
-    # Helper function for fuzzy command matching
+    # Helper function for fuzzy command matching - works with sentences
     def matches_command(input_text: str, commands: list) -> bool:
         input_text = input_text.lower().strip()
+        input_no_spaces = input_text.replace(" ", "")
+        
         for cmd in commands:
-            if cmd in input_text or input_text in cmd:
+            # Direct match
+            if cmd in input_text:
                 return True
-            # Check for common voice transcription errors
-            # "my orders" -> "my odors", "my oders", "myorders"
-            if cmd.replace(" ", "") in input_text.replace(" ", ""):
+            # Reverse check (short input matches longer command)
+            if input_text in cmd:
                 return True
+            # No-space match for voice errors like "myorders"
+            if cmd.replace(" ", "") in input_no_spaces:
+                return True
+            # Word-based match - check if command words appear in the sentence
+            cmd_words = cmd.split()
+            if len(cmd_words) > 1:
+                # For multi-word commands, check if all words appear
+                if all(word in input_text for word in cmd_words):
+                    return True
         return False
+    
+    # Also check for action verbs + command patterns
+    def extract_intent(input_text: str) -> str:
+        """Extract intent from natural language sentences"""
+        input_text = input_text.lower()
+        
+        # Patterns for RFQs
+        if any(word in input_text for word in ["rfq", "rfqs", "job", "jobs", "opportunit", "request"]):
+            if "show" in input_text or "list" in input_text or "get" in input_text or "find" in input_text or "view" in input_text:
+                return "rfqs"
+        
+        # Patterns for orders
+        if "order" in input_text or "odor" in input_text:
+            return "orders"
+        
+        # Patterns for quotes
+        if "quote" in input_text or "quot" in input_text or "bid" in input_text:
+            return "quotes"
+        
+        # Patterns for profile
+        if "profile" in input_text or "profil" in input_text or "account" in input_text:
+            return "profile"
+        
+        # Patterns for help
+        if "help" in input_text or "command" in input_text or "what can" in input_text:
+            return "help"
+        
+        return ""
+    
+    # First try to extract intent from natural language
+    intent = extract_intent(text_normalized)
     
     # Help command - expanded variations
     help_variants = ["help", "hi", "hello", "menu", "start", "hey", "helo", "assist", "assistance"]
-    if matches_command(text_normalized, help_variants):
+    if intent == "help" or matches_command(text_normalized, help_variants):
         if vendor:
             return f"""👋 Welcome to *OEMLinker*, {vendor.get('company_name', 'Vendor')}!
 
@@ -8923,7 +8965,7 @@ Need help? Contact support@oemlinker.com"""
     # List RFQs command - expanded variations for voice
     rfq_variants = ["rfqs", "rfq", "jobs", "opportunities", "open rfqs", "show rfqs", "list rfqs", 
                     "our effects", "our fq", "r f q", "requests", "request for quote"]
-    if matches_command(text_normalized, rfq_variants):
+    if intent == "rfqs" or matches_command(text_normalized, rfq_variants):
         # Get matched RFQs for this vendor
         rfqs = await db.rfqs.find(
             {
@@ -9004,7 +9046,7 @@ Need help? Contact support@oemlinker.com"""
     # My Quotes command - expanded variations for voice
     quotes_variants = ["my quotes", "quotes", "my bids", "my quote", "my cords", "my courts", 
                        "myquotes", "show quotes", "list quotes", "my quotations"]
-    if matches_command(text_normalized, quotes_variants):
+    if intent == "quotes" or matches_command(text_normalized, quotes_variants):
         quotes = await db.quotes.find(
             {"vendor_id": vendor.get("vendor_id")},
             {"_id": 0}
@@ -9029,7 +9071,7 @@ Need help? Contact support@oemlinker.com"""
     # My Orders command - expanded variations for voice (common misheard: "my odors", "my oders")
     orders_variants = ["my orders", "orders", "active orders", "my order", "my odors", "my oders",
                        "myorders", "show orders", "list orders", "my auto", "my autos"]
-    if matches_command(text_normalized, orders_variants):
+    if intent == "orders" or matches_command(text_normalized, orders_variants):
         orders = await db.orders.find(
             {"vendor_id": vendor.get("vendor_id"), "status": {"$nin": ["cancelled", "completed"]}},
             {"_id": 0}
@@ -9058,7 +9100,7 @@ Need help? Contact support@oemlinker.com"""
     # Profile command - expanded variations for voice
     profile_variants = ["profile", "my profile", "account", "my account", "my profil", "profil",
                         "show profile", "my details", "vendor profile"]
-    if matches_command(text_normalized, profile_variants):
+    if intent == "profile" or matches_command(text_normalized, profile_variants):
         response = f"""👤 *Your Vendor Profile*
 
 🏢 *{vendor.get('company_name', 'N/A')}*
