@@ -5023,6 +5023,23 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                     "link": f"/vendor/rfq/{rfq_id}"
                 }
             )
+            
+            # Send WhatsApp notification
+            vendor_profile = await db.vendors.find_one({"user_id": matched.get("user_id")}, {"_id": 0, "phone": 1})
+            if vendor_profile and vendor_profile.get("phone") and whatsapp_service.is_configured():
+                urgency_label = URGENCY_LABELS.get(rfq.get("urgency", "normal"), "🟢 Normal")
+                wa_message = f"""🔔 *New RFQ Match on OEMLinker!*
+
+📋 *{rfq.get('title', 'New RFQ')}*
+{urgency_label}
+
+📦 Material: {rfq.get('material_type', 'N/A')}
+📏 Quantity: {rfq.get('quantity', 'N/A')} units
+🎯 Match Score: {matched.get('suitability_score', 0)}%
+
+🔗 View & Submit Quote:
+https://oemlinker.com/vendor/rfq/{rfq_id}"""
+                asyncio.create_task(whatsapp_service.send_text_message(vendor_profile["phone"], wa_message))
     
     return {
         "matched_vendors": matched_vendors, 
@@ -5138,6 +5155,23 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
         "total_amount": quote.price,
         "lead_time": quote.lead_time_days
     }))
+    
+    # Send WhatsApp notification to buyer about new quote
+    if buyer and whatsapp_service.is_configured():
+        buyer_profile = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "phone": 1})
+        if buyer_profile and buyer_profile.get("phone"):
+            wa_message = f"""💰 *New Quote Received!*
+
+📋 *{rfq.get('title', 'Your RFQ')}*
+
+🏭 Vendor: {vendor.get('company_name', 'Vendor')}
+💵 Price: ₹{quote.price:,.2f}
+📅 Lead Time: {quote.lead_time_days} days
+⭐ Vendor Rating: {vendor.get('rating', 0):.1f}/5
+
+🔗 Review Quote:
+https://oemlinker.com/buyer/rfq/{quote.rfq_id}"""
+            asyncio.create_task(whatsapp_service.send_text_message(buyer_profile["phone"], wa_message))
     
     return Quote(**quote_doc)
 
@@ -5450,6 +5484,30 @@ async def respond_to_negotiation(quote_id: str, negotiation_id: str, response: N
         }
     )
     
+    # Send WhatsApp notification to buyer about negotiation response
+    if whatsapp_service.is_configured():
+        buyer = await db.users.find_one({"user_id": negotiation["buyer_id"]}, {"_id": 0, "phone": 1})
+        if buyer and buyer.get("phone"):
+            action_emoji = {"accept": "✅", "counter": "🔄", "reject": "❌"}.get(response.action, "📨")
+            wa_message = f"""{action_emoji} *Negotiation Update!*
+
+📋 *{rfq.get('title', 'Your RFQ')}*
+
+🏭 Vendor: {vendor.get('company_name', 'Vendor')}
+📝 Response: {status_msg.title()}"""
+            
+            if response.action == "counter":
+                if response.counter_price:
+                    wa_message += f"\n💵 Counter Price: ₹{response.counter_price:,.2f}"
+                if response.counter_lead_time:
+                    wa_message += f"\n📅 Counter Lead Time: {response.counter_lead_time} days"
+            
+            wa_message += f"""
+
+🔗 View Details:
+https://oemlinker.com/buyer/rfq/{quote['rfq_id']}"""
+            asyncio.create_task(whatsapp_service.send_text_message(buyer["phone"], wa_message))
+    
     return {
         "message": f"Negotiation {status_msg}",
         "status": response.action
@@ -5640,6 +5698,26 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
             "total_amount": quote["price"],
             "status": "pending_payment"
         }))
+        
+        # Send WhatsApp notification to vendor about accepted quote and PO
+        if whatsapp_service.is_configured() and vendor.get("phone"):
+            wa_message = f"""🎉 *Congratulations! Quote Accepted!*
+
+📋 *{rfq.get('title', 'RFQ')}*
+
+🧾 *PO Number:* {po_number}
+💵 Amount: ₹{quote['price']:,.2f}
+📅 Lead Time: {quote.get('lead_time_days', 'N/A')} days
+💳 Payment Terms: {PAYMENT_TERMS_LABELS.get(payment_terms, payment_terms)}
+
+📦 Next Steps:
+1. Wait for payment confirmation
+2. Start production after payment
+3. Update order status regularly
+
+🔗 View Order:
+https://oemlinker.com/vendor/order/{order_id}"""
+            asyncio.create_task(whatsapp_service.send_text_message(vendor["phone"], wa_message))
     
     return {"message": "Quote accepted", "order_id": order_id}
 
@@ -5726,7 +5804,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     )
     
     # Notify vendor
-    vendor = await db.vendors.find_one({"vendor_id": order["vendor_id"]}, {"_id": 0, "user_id": 1})
+    vendor = await db.vendors.find_one({"vendor_id": order["vendor_id"]}, {"_id": 0, "user_id": 1, "phone": 1})
     if vendor:
         await create_notification(
             user_id=vendor["user_id"],
@@ -5735,6 +5813,42 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
             message=f"Order for '{rfq_title}' is now {status_label}",
             data={"order_id": order_id, "status": new_status}
         )
+    
+    # Send WhatsApp notifications for order status updates
+    if whatsapp_service.is_configured():
+        status_emoji = {
+            "pending_payment": "💳",
+            "paid": "✅",
+            "in_production": "🔨",
+            "quality_check": "🔍",
+            "dispatched": "🚚",
+            "delivered": "📬",
+            "completed": "🎉",
+            "cancelled": "❌"
+        }.get(new_status, "📋")
+        
+        wa_message = f"""{status_emoji} *Order Status Update*
+
+🧾 *PO #{order.get('po_number', order_id[:8])}*
+📋 {rfq_title}
+
+📊 Status: *{status_label}*"""
+        if note:
+            wa_message += f"\n📝 Note: {note}"
+        wa_message += f"""
+
+🔗 View Order:
+https://oemlinker.com/vendor/order/{order_id}"""
+
+        # Notify vendor via WhatsApp
+        if vendor and vendor.get("phone"):
+            asyncio.create_task(whatsapp_service.send_text_message(vendor["phone"], wa_message))
+        
+        # Notify buyer via WhatsApp
+        buyer = await db.users.find_one({"user_id": order["buyer_id"]}, {"_id": 0, "phone": 1})
+        if buyer and buyer.get("phone"):
+            buyer_wa_message = wa_message.replace("/vendor/order/", "/buyer/order/")
+            asyncio.create_task(whatsapp_service.send_text_message(buyer["phone"], buyer_wa_message))
     
     return {"message": "Status updated", "status": new_status}
 
