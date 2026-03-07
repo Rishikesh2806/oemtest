@@ -382,6 +382,33 @@ async def send_admin_notification(event_type: str, data: dict):
                 </div>
             </div>
             """
+        },
+        "new_dispute": {
+            "subject": f"⚠️ New Dispute Filed: {data.get('subject', 'Dispute')}",
+            "html": f"""
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <div style="background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%); padding: 20px; text-align: center;">
+                    <h2 style="color: white; margin: 0;">⚠️ New Dispute Filed</h2>
+                </div>
+                <div style="padding: 25px; background: #f8fafc;">
+                    <p style="font-size: 16px; color: #334155;"><strong>A dispute requires your attention:</strong></p>
+                    <table style="width: 100%; border-collapse: collapse; margin: 15px 0;">
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Dispute ID:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">{data.get('dispute_id', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Order ID:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-family: monospace;">{data.get('order_id', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Type:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #dc2626;">{data.get('dispute_type', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Subject:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">{data.get('subject', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Initiated By:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('initiated_by', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Buyer:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('buyer_name', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Vendor:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0;">{data.get('vendor_name', 'N/A')}</td></tr>
+                        <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b;">Order Amount:</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; font-weight: bold;">₹{data.get('order_amount', 0):,.2f}</td></tr>
+                        <tr><td style="padding: 8px; color: #64748b;">Filed At:</td><td style="padding: 8px;">{data.get('created_at', 'N/A')}</td></tr>
+                    </table>
+                    <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 12px; margin-top: 15px;">
+                        <p style="margin: 0; color: #991b1b; font-weight: bold;">Action Required: Please review this dispute in the admin dashboard.</p>
+                    </div>
+                </div>
+            </div>
+            """
         }
     }
     
@@ -7480,6 +7507,491 @@ async def export_analytics_csv(user: dict = Depends(get_current_user)):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=orders_export.csv"}
     )
+
+# ============== DISPUTE RESOLUTION SYSTEM ==============
+
+class DisputeType:
+    QUALITY_ISSUE = "quality_issue"
+    DELIVERY_DELAY = "delivery_delay"
+    WRONG_SPECIFICATIONS = "wrong_specifications"
+    PAYMENT_ISSUE = "payment_issue"
+    COMMUNICATION = "communication"
+    DAMAGED_GOODS = "damaged_goods"
+    INCOMPLETE_ORDER = "incomplete_order"
+    OTHER = "other"
+
+class DisputeStatus:
+    OPEN = "open"
+    UNDER_REVIEW = "under_review"
+    AWAITING_RESPONSE = "awaiting_response"
+    ESCALATED = "escalated"
+    RESOLVED = "resolved"
+    CLOSED = "closed"
+
+class ResolutionType:
+    FULL_REFUND = "full_refund"
+    PARTIAL_REFUND = "partial_refund"
+    REPLACEMENT = "replacement"
+    REWORK = "rework"
+    NO_ACTION = "no_action"
+    MUTUAL_AGREEMENT = "mutual_agreement"
+
+class DisputeCreate(BaseModel):
+    order_id: str
+    dispute_type: str
+    subject: str
+    description: str
+    expected_resolution: Optional[str] = None
+    evidence_urls: List[str] = []
+
+class DisputeResponse(BaseModel):
+    message: str
+    evidence_urls: List[str] = []
+
+class DisputeResolve(BaseModel):
+    resolution_type: str
+    resolution_notes: str
+    refund_amount: Optional[float] = None
+
+@api_router.post("/disputes")
+async def create_dispute(dispute_data: DisputeCreate, user: dict = Depends(get_current_user)):
+    """Create a new dispute for an order"""
+    # Verify order exists and user is involved
+    order = await db.orders.find_one({"order_id": dispute_data.order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Check if user is buyer or vendor of this order
+    is_buyer = order.get("buyer_id") == user["user_id"]
+    is_vendor = order.get("vendor_id") == user["user_id"]
+    
+    if not is_buyer and not is_vendor:
+        raise HTTPException(status_code=403, detail="You are not authorized to create a dispute for this order")
+    
+    # Check if dispute already exists for this order
+    existing_dispute = await db.disputes.find_one({
+        "order_id": dispute_data.order_id,
+        "status": {"$nin": [DisputeStatus.RESOLVED, DisputeStatus.CLOSED]}
+    })
+    if existing_dispute:
+        raise HTTPException(status_code=400, detail="An active dispute already exists for this order")
+    
+    dispute_id = f"dispute_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Get order details for context
+    rfq = await db.rfqs.find_one({"rfq_id": order.get("rfq_id")}, {"_id": 0, "title": 1})
+    
+    # Get user names
+    buyer = await db.users.find_one({"user_id": order.get("buyer_id")}, {"_id": 0, "name": 1, "email": 1})
+    vendor_profile = await db.vendors.find_one({"vendor_id": order.get("vendor_id")}, {"_id": 0, "company_name": 1})
+    
+    dispute_doc = {
+        "dispute_id": dispute_id,
+        "order_id": dispute_data.order_id,
+        "rfq_id": order.get("rfq_id"),
+        "rfq_title": rfq.get("title") if rfq else "N/A",
+        "buyer_id": order.get("buyer_id"),
+        "buyer_name": buyer.get("name") if buyer else "N/A",
+        "buyer_email": buyer.get("email") if buyer else "N/A",
+        "vendor_id": order.get("vendor_id"),
+        "vendor_name": vendor_profile.get("company_name") if vendor_profile else "N/A",
+        "initiated_by": "buyer" if is_buyer else "vendor",
+        "initiator_id": user["user_id"],
+        "initiator_name": user["name"],
+        "dispute_type": dispute_data.dispute_type,
+        "subject": dispute_data.subject,
+        "description": dispute_data.description,
+        "expected_resolution": dispute_data.expected_resolution,
+        "order_amount": order.get("total_amount", 0),
+        "status": DisputeStatus.OPEN,
+        "priority": "normal",
+        "resolution_type": None,
+        "resolution_notes": None,
+        "refund_amount": None,
+        "resolved_by": None,
+        "resolved_at": None,
+        "timeline": [
+            {
+                "event": "dispute_created",
+                "message": f"Dispute created by {user['name']}",
+                "user_id": user["user_id"],
+                "user_name": user["name"],
+                "user_role": "buyer" if is_buyer else "vendor",
+                "timestamp": now,
+                "evidence_urls": dispute_data.evidence_urls
+            }
+        ],
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.disputes.insert_one(dispute_doc)
+    
+    # Update order status
+    await db.orders.update_one(
+        {"order_id": dispute_data.order_id},
+        {"$set": {"has_dispute": True, "dispute_id": dispute_id}}
+    )
+    
+    # Notify the other party
+    other_party_id = order.get("vendor_id") if is_buyer else order.get("buyer_id")
+    notification_doc = {
+        "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+        "user_id": other_party_id,
+        "type": "dispute_created",
+        "title": "New Dispute Filed",
+        "message": f"A dispute has been filed for order #{dispute_data.order_id[:12]}",
+        "data": {"dispute_id": dispute_id, "order_id": dispute_data.order_id},
+        "is_read": False,
+        "created_at": now
+    }
+    await db.notifications.insert_one(notification_doc)
+    
+    # Notify admin
+    admin_notification = {
+        "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+        "user_id": "admin",
+        "type": "dispute_created",
+        "title": "New Dispute Requires Attention",
+        "message": f"Dispute #{dispute_id[:12]} filed for order #{dispute_data.order_id[:12]}",
+        "data": {"dispute_id": dispute_id, "order_id": dispute_data.order_id},
+        "is_read": False,
+        "created_at": now
+    }
+    await db.notifications.insert_one(admin_notification)
+    
+    # Send email to admin
+    asyncio.create_task(send_admin_notification("new_dispute", {
+        "dispute_id": dispute_id,
+        "order_id": dispute_data.order_id,
+        "dispute_type": dispute_data.dispute_type.replace("_", " ").title(),
+        "subject": dispute_data.subject,
+        "initiated_by": user["name"],
+        "buyer_name": buyer.get("name") if buyer else "N/A",
+        "vendor_name": vendor_profile.get("company_name") if vendor_profile else "N/A",
+        "order_amount": order.get("total_amount", 0),
+        "created_at": now
+    }))
+    
+    logger.info(f"Dispute created: {dispute_id} for order {dispute_data.order_id} by {user['email']}")
+    
+    dispute_doc.pop("_id", None)
+    return {"message": "Dispute created successfully", "dispute": dispute_doc}
+
+@api_router.get("/disputes")
+async def get_disputes(
+    status: Optional[str] = None,
+    limit: int = 50,
+    user: dict = Depends(get_current_user)
+):
+    """Get disputes for current user or all disputes for admin"""
+    if user["role"] == UserRole.ADMIN:
+        query = {}
+    else:
+        query = {"$or": [
+            {"buyer_id": user["user_id"]},
+            {"vendor_id": user["user_id"]}
+        ]}
+    
+    if status:
+        query["status"] = status
+    
+    disputes = await db.disputes.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    
+    # Get counts by status
+    status_counts = {}
+    for s in [DisputeStatus.OPEN, DisputeStatus.UNDER_REVIEW, DisputeStatus.AWAITING_RESPONSE, 
+              DisputeStatus.ESCALATED, DisputeStatus.RESOLVED, DisputeStatus.CLOSED]:
+        count_query = {"status": s}
+        if user["role"] != UserRole.ADMIN:
+            count_query["$or"] = [{"buyer_id": user["user_id"]}, {"vendor_id": user["user_id"]}]
+        status_counts[s] = await db.disputes.count_documents(count_query)
+    
+    return {
+        "disputes": disputes,
+        "total": len(disputes),
+        "status_counts": status_counts
+    }
+
+@api_router.get("/disputes/{dispute_id}")
+async def get_dispute_detail(dispute_id: str, user: dict = Depends(get_current_user)):
+    """Get detailed dispute information"""
+    dispute = await db.disputes.find_one({"dispute_id": dispute_id}, {"_id": 0})
+    
+    if not dispute:
+        raise HTTPException(status_code=404, detail="Dispute not found")
+    
+    # Check authorization
+    is_buyer = dispute.get("buyer_id") == user["user_id"]
+    is_vendor = dispute.get("vendor_id") == user["user_id"]
+    is_admin = user["role"] == UserRole.ADMIN
+    
+    if not (is_buyer or is_vendor or is_admin):
+        raise HTTPException(status_code=403, detail="Not authorized to view this dispute")
+    
+    # Get order details
+    order = await db.orders.find_one({"order_id": dispute.get("order_id")}, {"_id": 0})
+    
+    return {
+        "dispute": dispute,
+        "order": order,
+        "user_role": "admin" if is_admin else ("buyer" if is_buyer else "vendor")
+    }
+
+@api_router.post("/disputes/{dispute_id}/respond")
+async def respond_to_dispute(
+    dispute_id: str, 
+    response_data: DisputeResponse, 
+    user: dict = Depends(get_current_user)
+):
+    """Add a response/comment to a dispute"""
+    dispute = await db.disputes.find_one({"dispute_id": dispute_id}, {"_id": 0})
+    
+    if not dispute:
+        raise HTTPException(status_code=404, detail="Dispute not found")
+    
+    # Check authorization
+    is_buyer = dispute.get("buyer_id") == user["user_id"]
+    is_vendor = dispute.get("vendor_id") == user["user_id"]
+    is_admin = user["role"] == UserRole.ADMIN
+    
+    if not (is_buyer or is_vendor or is_admin):
+        raise HTTPException(status_code=403, detail="Not authorized to respond to this dispute")
+    
+    if dispute["status"] in [DisputeStatus.RESOLVED, DisputeStatus.CLOSED]:
+        raise HTTPException(status_code=400, detail="Cannot respond to a resolved or closed dispute")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Determine user role for timeline
+    if is_admin:
+        user_role = "admin"
+    elif is_buyer:
+        user_role = "buyer"
+    else:
+        user_role = "vendor"
+    
+    timeline_entry = {
+        "event": "response_added",
+        "message": response_data.message,
+        "user_id": user["user_id"],
+        "user_name": user["name"],
+        "user_role": user_role,
+        "timestamp": now,
+        "evidence_urls": response_data.evidence_urls
+    }
+    
+    # Update status based on who responded
+    new_status = dispute["status"]
+    if is_admin and dispute["status"] == DisputeStatus.OPEN:
+        new_status = DisputeStatus.UNDER_REVIEW
+    elif not is_admin and dispute["status"] == DisputeStatus.AWAITING_RESPONSE:
+        new_status = DisputeStatus.UNDER_REVIEW
+    
+    await db.disputes.update_one(
+        {"dispute_id": dispute_id},
+        {
+            "$push": {"timeline": timeline_entry},
+            "$set": {"status": new_status, "updated_at": now}
+        }
+    )
+    
+    # Notify other parties
+    notify_ids = []
+    if is_buyer:
+        notify_ids.append(dispute.get("vendor_id"))
+    elif is_vendor:
+        notify_ids.append(dispute.get("buyer_id"))
+    else:  # admin
+        notify_ids.extend([dispute.get("buyer_id"), dispute.get("vendor_id")])
+    
+    for notify_id in notify_ids:
+        if notify_id:
+            notification = {
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": notify_id,
+                "type": "dispute_response",
+                "title": "New Response in Dispute",
+                "message": f"{user['name']} responded to dispute #{dispute_id[:12]}",
+                "data": {"dispute_id": dispute_id},
+                "is_read": False,
+                "created_at": now
+            }
+            await db.notifications.insert_one(notification)
+    
+    logger.info(f"Response added to dispute {dispute_id} by {user['email']}")
+    
+    return {"message": "Response added successfully", "timeline_entry": timeline_entry}
+
+@api_router.put("/disputes/{dispute_id}/status")
+async def update_dispute_status(
+    dispute_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user)
+):
+    """Update dispute status (admin only for most statuses)"""
+    body = await request.json()
+    new_status = body.get("status")
+    notes = body.get("notes", "")
+    
+    if new_status not in [DisputeStatus.OPEN, DisputeStatus.UNDER_REVIEW, DisputeStatus.AWAITING_RESPONSE,
+                          DisputeStatus.ESCALATED, DisputeStatus.RESOLVED, DisputeStatus.CLOSED]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    
+    dispute = await db.disputes.find_one({"dispute_id": dispute_id}, {"_id": 0})
+    if not dispute:
+        raise HTTPException(status_code=404, detail="Dispute not found")
+    
+    # Only admin can escalate or change to certain statuses
+    is_admin = user["role"] == UserRole.ADMIN
+    if not is_admin and new_status in [DisputeStatus.ESCALATED, DisputeStatus.UNDER_REVIEW]:
+        raise HTTPException(status_code=403, detail="Only admin can set this status")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    timeline_entry = {
+        "event": "status_changed",
+        "message": f"Status changed from {dispute['status']} to {new_status}" + (f": {notes}" if notes else ""),
+        "user_id": user["user_id"],
+        "user_name": user["name"],
+        "user_role": "admin" if is_admin else ("buyer" if dispute.get("buyer_id") == user["user_id"] else "vendor"),
+        "timestamp": now,
+        "old_status": dispute["status"],
+        "new_status": new_status
+    }
+    
+    # Set priority for escalated disputes
+    update_data = {
+        "status": new_status,
+        "updated_at": now
+    }
+    if new_status == DisputeStatus.ESCALATED:
+        update_data["priority"] = "high"
+    
+    await db.disputes.update_one(
+        {"dispute_id": dispute_id},
+        {
+            "$push": {"timeline": timeline_entry},
+            "$set": update_data
+        }
+    )
+    
+    logger.info(f"Dispute {dispute_id} status changed to {new_status} by {user['email']}")
+    
+    return {"message": f"Status updated to {new_status}", "timeline_entry": timeline_entry}
+
+@api_router.put("/disputes/{dispute_id}/resolve")
+async def resolve_dispute(
+    dispute_id: str,
+    resolution_data: DisputeResolve,
+    user: dict = Depends(get_current_user)
+):
+    """Resolve a dispute (admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admin can resolve disputes")
+    
+    dispute = await db.disputes.find_one({"dispute_id": dispute_id}, {"_id": 0})
+    if not dispute:
+        raise HTTPException(status_code=404, detail="Dispute not found")
+    
+    if dispute["status"] in [DisputeStatus.RESOLVED, DisputeStatus.CLOSED]:
+        raise HTTPException(status_code=400, detail="Dispute is already resolved or closed")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    timeline_entry = {
+        "event": "dispute_resolved",
+        "message": f"Dispute resolved: {resolution_data.resolution_type.replace('_', ' ').title()}. {resolution_data.resolution_notes}",
+        "user_id": user["user_id"],
+        "user_name": user["name"],
+        "user_role": "admin",
+        "timestamp": now,
+        "resolution_type": resolution_data.resolution_type,
+        "refund_amount": resolution_data.refund_amount
+    }
+    
+    await db.disputes.update_one(
+        {"dispute_id": dispute_id},
+        {
+            "$push": {"timeline": timeline_entry},
+            "$set": {
+                "status": DisputeStatus.RESOLVED,
+                "resolution_type": resolution_data.resolution_type,
+                "resolution_notes": resolution_data.resolution_notes,
+                "refund_amount": resolution_data.refund_amount,
+                "resolved_by": user["user_id"],
+                "resolved_at": now,
+                "updated_at": now
+            }
+        }
+    )
+    
+    # Update order
+    await db.orders.update_one(
+        {"order_id": dispute.get("order_id")},
+        {"$set": {"dispute_resolved": True, "dispute_resolution": resolution_data.resolution_type}}
+    )
+    
+    # Notify both parties
+    for party_id in [dispute.get("buyer_id"), dispute.get("vendor_id")]:
+        if party_id:
+            notification = {
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": party_id,
+                "type": "dispute_resolved",
+                "title": "Dispute Resolved",
+                "message": f"Dispute #{dispute_id[:12]} has been resolved: {resolution_data.resolution_type.replace('_', ' ').title()}",
+                "data": {"dispute_id": dispute_id, "resolution_type": resolution_data.resolution_type},
+                "is_read": False,
+                "created_at": now
+            }
+            await db.notifications.insert_one(notification)
+    
+    # Send email notification
+    buyer = await db.users.find_one({"user_id": dispute.get("buyer_id")}, {"_id": 0, "email": 1, "name": 1})
+    if buyer:
+        resolution_email = f'''
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #059669 0%, #047857 100%); padding: 20px; text-align: center;">
+                <h2 style="color: white; margin: 0;">Dispute Resolved</h2>
+            </div>
+            <div style="padding: 25px; background: #f8fafc;">
+                <p>Hello {buyer.get("name", "User")},</p>
+                <p>Your dispute <strong>#{dispute_id[:12]}</strong> has been resolved.</p>
+                <div style="background: white; border-radius: 8px; padding: 16px; margin: 20px 0; border-left: 4px solid #059669;">
+                    <p style="margin: 0 0 8px 0;"><strong>Resolution:</strong> {resolution_data.resolution_type.replace('_', ' ').title()}</p>
+                    <p style="margin: 0 0 8px 0;"><strong>Notes:</strong> {resolution_data.resolution_notes}</p>
+                    {f'<p style="margin: 0;"><strong>Refund Amount:</strong> ₹{resolution_data.refund_amount:,.2f}</p>' if resolution_data.refund_amount else ''}
+                </div>
+                <p>If you have any questions, please contact our support team.</p>
+            </div>
+        </div>
+        '''
+        asyncio.create_task(send_email_async(buyer["email"], f"Dispute Resolved - #{dispute_id[:12]}", resolution_email))
+    
+    logger.info(f"Dispute {dispute_id} resolved by admin {user['email']}: {resolution_data.resolution_type}")
+    
+    return {"message": "Dispute resolved successfully", "resolution_type": resolution_data.resolution_type}
+
+@api_router.get("/orders/{order_id}/dispute")
+async def get_order_dispute(order_id: str, user: dict = Depends(get_current_user)):
+    """Get dispute for a specific order"""
+    order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Check authorization
+    is_buyer = order.get("buyer_id") == user["user_id"]
+    is_vendor = order.get("vendor_id") == user["user_id"]
+    is_admin = user["role"] == UserRole.ADMIN
+    
+    if not (is_buyer or is_vendor or is_admin):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    dispute = await db.disputes.find_one({"order_id": order_id}, {"_id": 0})
+    
+    return {"dispute": dispute, "has_dispute": dispute is not None}
 
 # ============== HEALTH CHECK ==============
 

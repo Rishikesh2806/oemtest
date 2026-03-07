@@ -27,6 +27,8 @@ import OrderDetail from "./pages/OrderDetail";
 import QuotesList from "./pages/QuotesList";
 import ChatPage from "./pages/ChatPage";
 import NotificationsPage from "./pages/NotificationsPage";
+import DisputesPage from "./pages/DisputesPage";
+import DisputeDetailPage from "./pages/DisputeDetailPage";
 
 // Use window.location.origin for API calls - this ensures requests go to the same domain
 // This fixes issues where REACT_APP_BACKEND_URL might point to a different host
@@ -343,6 +345,18 @@ const AppRouter = () => {
       <Route path="/admin/analytics" element={
         <ProtectedRoute allowedRoles={["admin"]}>
           <AdminAnalytics />
+        </ProtectedRoute>
+      } />
+      
+      {/* Dispute Routes */}
+      <Route path="/disputes" element={
+        <ProtectedRoute allowedRoles={["buyer", "vendor", "admin"]}>
+          <DisputesPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/disputes/:disputeId" element={
+        <ProtectedRoute allowedRoles={["buyer", "vendor", "admin"]}>
+          <DisputeDetailPage />
         </ProtectedRoute>
       } />
       

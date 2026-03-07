@@ -62,6 +62,7 @@ const DashboardLayout = ({ children }) => {
     { path: "/buyer/rfqs", label: "My RFQs", icon: FileText },
     { path: "/buyer/quotes", label: "Received Quotes", icon: DollarSign },
     { path: "/buyer/rfq/new", label: "New RFQ", icon: FileText },
+    { path: "/disputes", label: "Disputes", icon: AlertTriangle },
     { path: "/buyer/profile", label: "My Profile", icon: User },
     { path: "/chat", label: "Messages", icon: MessageSquare, badge: unreadCount },
   ];
@@ -72,12 +73,14 @@ const DashboardLayout = ({ children }) => {
     { path: "/vendor/profile", label: "Company Profile", icon: Building2 },
     { path: "/vendor/machines", label: "Machines", icon: Wrench },
     { path: "/vendor/quotes", label: "My Quotes", icon: DollarSign },
+    { path: "/disputes", label: "Disputes", icon: AlertTriangle },
     { path: "/chat", label: "Messages", icon: MessageSquare, badge: unreadCount },
   ];
 
   const adminNavItems = [
     { path: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { path: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+    { path: "/disputes", label: "Disputes", icon: AlertTriangle },
   ];
 
   const getNavItems = () => {

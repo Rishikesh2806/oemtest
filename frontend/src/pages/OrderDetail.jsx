@@ -13,8 +13,9 @@ import {
   Package, ArrowLeft, Loader2, CreditCard, 
   CheckCircle2, Clock, Truck, MapPin, AlertCircle,
   Star, MessageSquare, Building2, ThumbsUp, Send,
-  FileText, User, Box, Calendar
+  FileText, User, Box, Calendar, AlertTriangle
 } from "lucide-react";
+import RaiseDisputeForm from "../components/RaiseDisputeForm";
 
 const OrderDetail = () => {
   const { orderId } = useParams();
@@ -47,10 +48,16 @@ const OrderDetail = () => {
     note: ""
   });
   const [submittingTracking, setSubmittingTracking] = useState(false);
+  
+  // Dispute state
+  const [showDisputeForm, setShowDisputeForm] = useState(false);
+  const [hasDispute, setHasDispute] = useState(false);
+  const [existingDispute, setExistingDispute] = useState(null);
 
   useEffect(() => {
     fetchOrder();
     fetchOrderDetails();
+    fetchDisputeStatus();
   }, [orderId]);
 
   useEffect(() => {
@@ -78,6 +85,23 @@ const OrderDetail = () => {
     } catch (error) {
       console.error("Failed to load order details:", error);
     }
+  };
+  
+  const fetchDisputeStatus = async () => {
+    try {
+      const response = await api.get(`/orders/${orderId}/dispute`);
+      setHasDispute(response.data.has_dispute);
+      setExistingDispute(response.data.dispute);
+    } catch (error) {
+      console.error("Failed to load dispute status:", error);
+    }
+  };
+
+  const handleDisputeSuccess = (dispute) => {
+    setShowDisputeForm(false);
+    setHasDispute(true);
+    setExistingDispute(dispute);
+    navigate(`/disputes/${dispute.dispute_id}`);
   };
 
   const pollPaymentStatus = async (sessionId, attempts = 0) => {
@@ -277,15 +301,40 @@ const OrderDetail = () => {
             <ArrowLeft className="w-4 h-4 mr-2" /> Back
           </Button>
           
-          {canRate && (
-            <Button 
-              onClick={() => setRatingDialogOpen(true)}
-              className="bg-amber-500 hover:bg-amber-600"
-              data-testid="rate-vendor-btn"
-            >
-              <Star className="w-4 h-4 mr-2" /> Rate Vendor
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Dispute Button */}
+            {hasDispute && existingDispute ? (
+              <Button 
+                variant="outline"
+                onClick={() => navigate(`/disputes/${existingDispute.dispute_id}`)}
+                className="border-amber-300 text-amber-700 hover:bg-amber-50"
+                data-testid="view-dispute-btn"
+              >
+                <AlertTriangle className="w-4 h-4 mr-2" />
+                View Dispute ({existingDispute.status})
+              </Button>
+            ) : order.status !== 'completed' && order.status !== 'cancelled' && (
+              <Button 
+                variant="outline"
+                onClick={() => setShowDisputeForm(true)}
+                className="border-red-300 text-red-700 hover:bg-red-50"
+                data-testid="raise-dispute-btn"
+              >
+                <AlertTriangle className="w-4 h-4 mr-2" />
+                Raise Dispute
+              </Button>
+            )}
+            
+            {canRate && (
+              <Button 
+                onClick={() => setRatingDialogOpen(true)}
+                className="bg-amber-500 hover:bg-amber-600"
+                data-testid="rate-vendor-btn"
+              >
+                <Star className="w-4 h-4 mr-2" /> Rate Vendor
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Order Summary */}
@@ -817,6 +866,15 @@ const OrderDetail = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Raise Dispute Form */}
+      {showDisputeForm && (
+        <RaiseDisputeForm
+          orderId={orderId}
+          onClose={() => setShowDisputeForm(false)}
+          onSuccess={handleDisputeSuccess}
+        />
+      )}
     </DashboardLayout>
   );
 };

@@ -155,6 +155,21 @@ Migration: Phase 1-2 done (models, services, auth routes). Phase 3 next (vendor/
 - /app/test_reports/iteration_12.json - RFQ Urgency Feature (100% pass)
 - /app/test_reports/iteration_13.json - Availability Prioritization (100% pass)
 
+## Dispute Resolution System (Added Mar 6, 2026)
+Complete dispute management system for handling conflicts:
+- **Dispute Types**: Quality Issue, Delivery Delay, Wrong Specifications, Payment Issue, Communication, Damaged Goods, Incomplete Order, Other
+- **Status Flow**: Open → Under Review → Awaiting Response → Escalated → Resolved → Closed
+- **Resolution Types**: Full Refund, Partial Refund, Replacement, Rework, No Action, Mutual Agreement
+- **Features**:
+  - Raise dispute from Order Detail page (Buyer/Vendor)
+  - Timeline with all responses and status changes
+  - Evidence attachment support
+  - Admin resolution panel with refund amount entry
+  - Email notifications for dispute events
+  - Status filtering and search on Disputes page
+- **Routes**: /disputes, /disputes/:disputeId
+- **API Endpoints**: POST /disputes, GET /disputes, GET /disputes/:id, POST /disputes/:id/respond, PUT /disputes/:id/status, PUT /disputes/:id/resolve, GET /orders/:id/dispute
+
 ## Admin Analytics Dashboard (Added Mar 6, 2026)
 Comprehensive platform analytics for business tracking:
 - **Key Metrics**: Users, RFQs, Quotes, Orders, Revenue, GMV
