@@ -1542,14 +1542,19 @@ async def login(login_data: LoginRequest, request: Request):
     
     # If not found by email and looks like phone, try phone number variations
     if not user and is_phone_login:
-        # Try finding by email field (phone stored as email for WhatsApp users)
-        user = await db.users.find_one({"email": normalized_phone}, {"_id": 0})
+        # Get last 10 digits for lookup
+        phone_10digit = normalized_phone[-10:] if len(normalized_phone) >= 10 else normalized_phone
         
-        # Also try with country code variations
-        if not user and not normalized_phone.startswith("91"):
-            user = await db.users.find_one({"email": f"91{normalized_phone}"}, {"_id": 0})
-        if not user and normalized_phone.startswith("91") and len(normalized_phone) > 10:
-            user = await db.users.find_one({"email": normalized_phone[2:]}, {"_id": 0})
+        # Try finding by 10-digit phone (primary method)
+        user = await db.users.find_one({"email": phone_10digit}, {"_id": 0})
+        
+        # Also try with 91 prefix for backward compatibility
+        if not user:
+            user = await db.users.find_one({"email": f"91{phone_10digit}"}, {"_id": 0})
+        
+        # Try full normalized number as fallback
+        if not user and normalized_phone != phone_10digit:
+            user = await db.users.find_one({"email": normalized_phone}, {"_id": 0})
     
     if not user:
         # Record failed attempt (use login_id even if not found to prevent enumeration)
@@ -10174,8 +10179,13 @@ You can also register manually at https://oemlinker.com/register"""
         state = gst_data.get("pradr", {}).get("stcd", "")
         pincode = gst_data.get("pradr", {}).get("pncd", "")
         
-        # Use phone number as login ID (normalized - remove + and spaces)
-        phone_login = sender.replace("+", "").replace(" ", "").replace("-", "")
+        # Use 10-digit phone number as login ID (remove country code 91)
+        phone_normalized = sender.replace("+", "").replace(" ", "").replace("-", "")
+        # Extract last 10 digits (remove 91 prefix if present)
+        if phone_normalized.startswith("91") and len(phone_normalized) > 10:
+            phone_login = phone_normalized[-10:]
+        else:
+            phone_login = phone_normalized[-10:] if len(phone_normalized) >= 10 else phone_normalized
         
         # Generate 6-digit numeric password
         numeric_password = ''.join([str(random.randint(0, 9)) for _ in range(6)])
