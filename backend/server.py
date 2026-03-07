@@ -8856,10 +8856,13 @@ async def whatsapp_webhook(request: Request):
     try:
         payload = await request.json()
         logger.info(f"WhatsApp webhook received: {payload.get('type', 'unknown')}")
+        logger.info(f"WhatsApp webhook payload: {payload}")  # DEBUG: Log full payload
         
         parsed = parse_webhook_message(payload)
+        logger.info(f"WhatsApp parsed message: {parsed}")  # DEBUG: Log parsed result
         
         if not parsed:
+            logger.warning("WhatsApp webhook: Could not parse payload")
             return {"status": "ignored"}
         
         if parsed.get("type") == "status":
@@ -8918,14 +8921,20 @@ async def whatsapp_webhook(request: Request):
             text = parsed.get("text", "").strip().lower()
         
         if not sender or not text:
+            logger.warning(f"WhatsApp: Missing sender or text. Sender: {sender}, Text: '{text}'")
             return {"status": "ok"}
+        
+        logger.info(f"WhatsApp processing command: '{text}' from {sender[:6]}***")
         
         # Process commands
         response_message = await process_whatsapp_command(text, sender, vendor, user)
         
+        logger.info(f"WhatsApp response generated: {response_message[:100] if response_message else 'None'}...")
+        
         # Send text response
         if response_message and whatsapp_service.is_configured():
-            await whatsapp_service.send_text_message(sender, response_message)
+            send_result = await whatsapp_service.send_text_message(sender, response_message)
+            logger.info(f"WhatsApp send result: {send_result}")
             
             # Also send voice response for voice queries
             if msg_type == "audio" and EMERGENT_LLM_KEY:
