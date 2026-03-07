@@ -233,12 +233,12 @@ Comprehensive platform analytics for business tracking:
 - Revenue analytics charts
 
 ### P2 - Medium Priority
-- Bulk machine import (CSV)
 - SMS notifications (Phone OTP)
 - Repeat order feature
 
 ### Completed (P2)
 - WhatsApp notifications ✓ (Mar 7, 2026) - Gupshup integration
+- Bulk Machine Import (CSV) ✓ (Mar 7, 2026)
 
 ### P3 - Future
 - Instant AI auto-quote
@@ -328,6 +328,31 @@ WhatsApp Business API integration for vendor communication:
 - `/app/frontend/src/pages/WhatsAppAdmin.jsx` - Admin management page
 
 ### Test Report: /app/test_reports/iteration_14.json (100% pass)
+
+## Bulk Machine Import via CSV (Added Mar 7, 2026)
+Allows vendors to upload CSV files to import multiple machines at once:
+
+### Features:
+- **CSV Template**: Downloadable template with sample data and instructions
+- **Drag-and-Drop Upload**: Easy file upload with visual feedback
+- **Smart Validation**: Required fields check (machine_type, brand, model)
+- **Partial Import**: Valid rows are imported, invalid rows skipped with error details
+- **Error Reporting**: Per-row error messages with row numbers
+- **Success Summary**: Shows total, imported, and failed counts
+
+### API Endpoints:
+- `GET /api/machines/bulk-import/template` - Download CSV template with instructions
+- `POST /api/machines/bulk-import` - Upload CSV file (vendor only)
+
+### CSV Fields:
+- Required: `machine_type`, `brand`, `model`
+- Optional: `name`, `machine_category`, `max_x`, `max_y`, `max_z`, `max_diameter`, `max_length`, `max_swing`, `tolerance`, `materials_supported`, `monthly_capacity_hours`
+
+### Files:
+- `/app/backend/server.py` - Bulk import endpoints (lines 2920-3100)
+- `/app/frontend/src/pages/MachineManagement.jsx` - Bulk import UI
+
+### Test Report: /app/test_reports/iteration_15.json (100% pass)
 
 ## Database Collections
 - users, user_sessions, vendors, machines
