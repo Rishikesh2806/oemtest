@@ -8631,10 +8631,7 @@ async def whatsapp_webhook(request: Request):
         
         # Handle incoming message
         sender = parsed.get("sender", "")
-        text = parsed.get("text", "").strip().lower()
-        
-        if not sender or not text:
-            return {"status": "ok"}
+        msg_type = parsed.get("type", "text")
         
         # Find vendor by phone number
         vendor = await db.vendors.find_one(
@@ -8646,12 +8643,51 @@ async def whatsapp_webhook(request: Request):
         if vendor:
             user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0})
         
+        # Handle voice/audio messages
+        if msg_type == "audio" and parsed.get("audio_url"):
+            text = await process_voice_message(parsed.get("audio_url"), sender, vendor, user)
+            if not text:
+                # Failed to transcribe
+                if whatsapp_service.is_configured():
+                    await whatsapp_service.send_text_message(
+                        sender, 
+                        "⚠️ Sorry, I couldn't understand your voice message. Please try again or type your query."
+                    )
+                return {"status": "ok"}
+        else:
+            text = parsed.get("text", "").strip().lower()
+        
+        if not sender or not text:
+            return {"status": "ok"}
+        
         # Process commands
         response_message = await process_whatsapp_command(text, sender, vendor, user)
         
-        # Send response
+        # Send text response
         if response_message and whatsapp_service.is_configured():
             await whatsapp_service.send_text_message(sender, response_message)
+            
+            # Also send voice response for voice queries
+            if msg_type == "audio" and EMERGENT_LLM_KEY:
+                try:
+                    # Generate audio response (shorter version for WhatsApp)
+                    short_response = response_message[:500] if len(response_message) > 500 else response_message
+                    # Remove markdown formatting for TTS
+                    clean_response = short_response.replace("*", "").replace("_", "").replace("`", "")
+                    
+                    tts = TextToSpeech(api_key=EMERGENT_LLM_KEY)
+                    audio_bytes = await asyncio.to_thread(
+                        tts.generate_speech,
+                        clean_response,
+                        voice="nova"
+                    )
+                    
+                    if audio_bytes:
+                        # For now, we'll just send text - audio upload requires media endpoint
+                        # Future: Upload audio to Gupshup media API and send audio message
+                        logger.info(f"Voice response generated for {sender[:6]}***")
+                except Exception as e:
+                    logger.error(f"TTS generation error: {str(e)}")
         
         # Store conversation for context
         if sender not in whatsapp_sessions:
@@ -8665,6 +8701,7 @@ async def whatsapp_webhook(request: Request):
         whatsapp_sessions[sender]["conversation"].append({
             "role": "user",
             "content": text,
+            "type": msg_type,
             "timestamp": datetime.now(timezone.utc).isoformat()
         })
         whatsapp_sessions[sender]["last_active"] = datetime.now(timezone.utc)
@@ -8681,6 +8718,57 @@ async def whatsapp_webhook(request: Request):
     except Exception as e:
         logger.error(f"WhatsApp webhook error: {str(e)}")
         return {"status": "error", "message": str(e)}
+
+
+async def process_voice_message(audio_url: str, sender: str, vendor: Optional[dict], user: Optional[dict]) -> Optional[str]:
+    """
+    Process voice message: download audio, transcribe using Whisper, return text
+    """
+    if not EMERGENT_LLM_KEY:
+        logger.warning("Emergent LLM key not configured for voice processing")
+        return None
+    
+    try:
+        from app.services.whatsapp_service import download_audio_from_url
+        
+        # Download audio file
+        logger.info(f"Downloading voice message from {audio_url[:50]}...")
+        audio_bytes = await download_audio_from_url(audio_url)
+        
+        if not audio_bytes:
+            logger.error("Failed to download audio from Gupshup")
+            return None
+        
+        # Transcribe using Whisper
+        logger.info(f"Transcribing voice message ({len(audio_bytes)} bytes)...")
+        
+        stt = SpeechToText(api_key=EMERGENT_LLM_KEY)
+        audio_file = BytesIO(audio_bytes)
+        audio_file.name = "voice_message.ogg"  # WhatsApp voice messages are typically OGG
+        
+        transcription = await asyncio.to_thread(
+            stt.transcribe,
+            audio_file
+        )
+        
+        if transcription and transcription.strip():
+            logger.info(f"Voice transcription successful: '{transcription[:50]}...'")
+            
+            # Send transcription confirmation to user
+            if whatsapp_service.is_configured():
+                await whatsapp_service.send_text_message(
+                    sender,
+                    f"🎤 *Voice query received:*\n_{transcription}_"
+                )
+            
+            return transcription.strip().lower()
+        else:
+            logger.warning("Empty transcription result")
+            return None
+            
+    except Exception as e:
+        logger.error(f"Voice message processing error: {str(e)}")
+        return None
 
 
 async def process_whatsapp_command(
@@ -8704,6 +8792,8 @@ async def process_whatsapp_command(
 *my orders* - View your active orders
 *profile* - View your vendor profile
 *help* - Show this menu
+
+🎤 *Voice Search:* Send a voice message to search!
 
 💡 You can also ask questions in natural language!
 

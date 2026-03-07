@@ -308,9 +308,18 @@ WhatsApp Business API integration for vendor communication:
 ### Features:
 - **Vendor Notifications**: Notify matched vendors about new RFQs via WhatsApp
 - **AI-Powered Chat**: Vendors can query RFQs, quotes, orders via WhatsApp messages
+- **🎤 Voice Search**: Vendors can send voice messages - transcribed via Whisper and processed
 - **Commands**: `help`, `rfqs`, `details <id>`, `my quotes`, `my orders`, `profile`
 - **Natural Language**: AI responds to vendor queries in conversational format
 - **Webhook**: Receives incoming WhatsApp messages at `/api/whatsapp/webhook`
+- **Multi-language Support**: Whisper supports all Indian languages for voice messages
+
+### Voice Search Flow:
+1. Vendor sends voice message → WhatsApp
+2. Webhook receives audio URL from Gupshup
+3. Audio downloaded and transcribed via OpenAI Whisper
+4. AI processes transcribed query
+5. Text response sent back (+ confirmation of transcription)
 
 ### API Endpoints:
 - `GET /api/whatsapp/status` - Check integration status (public)

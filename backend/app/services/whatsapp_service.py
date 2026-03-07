@@ -283,6 +283,9 @@ def parse_webhook_message(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             elif msg_type == "document":
                 parsed["document_url"] = message_payload.get("payload", {}).get("url", "")
                 parsed["filename"] = message_payload.get("payload", {}).get("filename", "")
+            elif msg_type in ["audio", "voice"]:
+                parsed["audio_url"] = message_payload.get("payload", {}).get("url", "")
+                parsed["type"] = "audio"
             
             return parsed
             
@@ -303,3 +306,15 @@ def parse_webhook_message(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 # Singleton instance
 whatsapp_service = WhatsAppService()
+
+
+async def download_audio_from_url(audio_url: str) -> Optional[bytes]:
+    """Download audio file from Gupshup URL"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(audio_url, timeout=30.0)
+            if response.status_code == 200:
+                return response.content
+    except Exception as e:
+        logger.error(f"Failed to download audio: {str(e)}")
+    return None

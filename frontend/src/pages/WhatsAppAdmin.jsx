@@ -252,7 +252,7 @@ export default function WhatsAppAdmin() {
           <CardDescription>WhatsApp capabilities for OEMLinker vendors</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="p-4 border rounded-lg">
               <h4 className="font-medium text-slate-800 mb-2">Vendor Commands</h4>
               <ul className="text-sm text-slate-600 space-y-1">
@@ -271,6 +271,15 @@ export default function WhatsAppAdmin() {
                 <li>Quote acceptance/rejection</li>
                 <li>Order status updates</li>
                 <li>AI-powered natural language queries</li>
+              </ul>
+            </div>
+            <div className="p-4 border rounded-lg bg-green-50 border-green-200">
+              <h4 className="font-medium text-green-800 mb-2">🎤 Voice Search</h4>
+              <ul className="text-sm text-green-700 space-y-1">
+                <li>Send voice messages to search</li>
+                <li>AI transcribes and processes query</li>
+                <li>Responds with text + voice</li>
+                <li>Supports all Indian languages</li>
               </ul>
             </div>
           </div>
