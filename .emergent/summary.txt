@@ -4,58 +4,57 @@ The platform must support a complete workflow: RFQ -> AI Analysis -> Vendor Matc
 
 **PRODUCT REQUIREMENTS:**
 -   **User Roles:** Buyer, Vendor, Admin.
--   **AI Core:** An Intelligence Engine to read drawings (PDF, CAD, etc.), extract technical specifications, and use RFQ title/description as a fallback.
--   **Matching:** A smart algorithm to match RFQs to vendors based on machine type, capacity, location, and past project experience.
+-   **AI Core:** An Intelligence Engine to read drawings and an AI assistant for user interaction.
+-   **Matching:** A smart algorithm to match RFQs to vendors.
 -   **Workflow:** A complete RFQ-to-payment lifecycle management module.
--   **Security:** Secure user authentication with 2FA, password policies, and rate limiting.
--   **Commercials:** Escrow payments, platform commissions, and currency support (INR).
--   **Dashboards:** Dedicated dashboards for buyers, vendors, and admins.
+-   **Security:** Secure user authentication.
+-   **Commercials:** Escrow payments, platform commissions.
+-   **Integrations:** WhatsApp for vendor communication and onboarding.
 -   **Tech Stack:** React frontend, Python (FastAPI) backend, and a MongoDB database.
 
 **User's preferred language**: English
 
 **what currently exists?**
-OEMLinker is a feature-rich full-stack application with a React frontend, a FastAPI backend, and a MongoDB database. The backend, originally a single  monolith, is currently being refactored into a modular structure.
+The OEMLinker application is a full-stack platform with a React frontend, a FastAPI backend, and a MongoDB database. Key existing features include JWT authentication, role-based access, RFQ and vendor management, and an admin dashboard.
 
-**Key Implemented Features:**
--   **Core Platform:** JWT authentication, user roles, email verification, and dedicated dashboards.
--   **RFQ & Matching:** Buyers can create RFQs with an Urgency status. A sophisticated matching algorithm prioritizes vendors based on machine availability and RFQ urgency.
--   **Vendor & Machine Management:** Vendors can manage profiles, portfolios, and set the availability status for their machines.
--   **Admin Features:** A comprehensive Analytics Dashboard tracks key business metrics. Admin receives email notifications for platform events. A full Dispute Resolution System is in place.
--   **AI & Integrations:** An AI voice agent allows vendors to query RFQs. GSTIN validation is integrated for vendor onboarding.
--   **Legal & UI:** The application includes Terms of Service and Privacy Policy pages, accessible from the footer.
+A significant amount of work in this session focused on building a comprehensive **WhatsApp integration using the Gupshup API**. This includes:
+-   An AI-powered chatbot that handles text and voice queries from vendors.
+-   Voice commands are transcribed using OpenAI Whisper, with support for fuzzy matching and commands in multiple Indian languages.
+-   The bot can provide information on RFQs, quotes, and orders, with deep links back to the web application.
+-   Automated notifications are sent to users for key events like RFQ matches, new quotes, and order creation.
+-   A new admin page () was created to monitor the integration status and send test messages (text and voice).
+-   A new feature for vendors to import their machine inventory in bulk via a CSV upload has also been implemented.
 
 **Last working item**:
--   Last item agent was working: Implementing the Legal Pages (Terms of Service & Privacy Policy). The agent created the frontend pages, added the routes, and linked them in the application footer.
--   Status: FINISHED
--   Agent Testing Done: Y
--   Which testing method agent to use? NA
+-   Last item agent was working: The user requested a feature to allow vendors to register on the platform via WhatsApp by uploading an image of their GST (Goods and Services Tax) certificate. The agent was implementing the AI logic to extract the GST number from the uploaded image.
+-   Status: IN PROGRESS
+-   Agent Testing Done: N
+-   Which testing method agent to use? backend testing agent
 -   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Production Login Failure with Password (Priority: P0)**
-    -   **Description:** Password-based login fails on the production site () because the deployment was using an incorrect backend URL. A fix was implemented to use a relative URL (), but it requires the user to redeploy the application.
-    -   **Next debug checklist:**
-        1.  Confirm with the user that they have deployed the latest code.
-        2.  Attempt to log in on the production site using password credentials.
-        3.  If it fails, verify the browser's network requests are targeting the correct production domain.
+-   **Issue 1: Production Login Failure with Password (Priority: P2)**
+    -   **Description:** Password-based login fails on the production site. A fix was implemented, but it is blocked pending user deployment.
     -   **Status:** BLOCKED
     -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** frontend
-    -   **Blocked on other issue:** User action (Deployment).
+-   **Issue 2:  Refactoring (Priority: P1)**
+    -   **Description:** The main backend file, , is a large monolith. While a modular structure has been created in , a significant amount of logic (including all the new WhatsApp features) still resides in .
+    -   **Status:** IN PROGRESS (Paused)
+    -   **Is recurring issue?** N
 
 **In progress Task List**:
--   **Task 1: Complete Refactoring of  Monolith (Priority: P0)**
-    -   **Where to resume:** Phase 1 (creating structure and moving models) and the start of Phase 2 (moving auth/user routes) are complete. The next step is to continue Phase 2 by systematically moving the remaining endpoints (vendors, machines, RFQs, quotes, orders, etc.) from  into their respective files in the  directory.
-    -   **What will be achieved with this?** This will significantly improve the backend's maintainability, scalability, and readability, making future development faster and more reliable.
+-   **Task 1: Complete Vendor Registration via WhatsApp GST Certificate Upload (Priority: P0)**
+    -   **Where to resume:** The agent needs to implement the logic to process the uploaded GST certificate image. The webhook in  already identifies image messages.
+    -   **What will be achieved with this?** This will provide a seamless, mobile-first onboarding experience for vendors, reducing manual data entry and potential errors.
     -   **Status:** IN PROGRESS
     -   **Should Test frontend/backend/both after fix?** backend
     -   **Blocked on something:** None.
 
 **Upcoming and Future Tasks**
 **Upcoming Tasks:**
--   **Stripe Integration (P1):** Implement the escrow payment system. This is a critical prerequisite for launching the business and processing real transactions.
--   **WhatsApp Integration for Voice Agent (P1):** Allow vendors to interact with the AI voice assistant via WhatsApp, likely using the Twilio API.
+-   **Stripe Integration (P1):** Implement the escrow payment system. This is a critical prerequisite for launching the business.
+-   **Continue  Refactoring (P1):** Move the newly added WhatsApp routes and other remaining endpoints from  into the modular structure under .
+-   **SMS OTP Registration (P2):** Implement phone number-based registration using Gupshup's SMS API.
 
 **Future Tasks:**
 -   Instant AI auto-quote for simple parts.
@@ -64,15 +63,15 @@ OEMLinker is a feature-rich full-stack application with a React frontend, a Fast
 -   Full-scale stress testing before public launch.
 
 **Completed work in this session**
--   **Feature:** Completed the RFQ Urgency feature (UI and backend logic).
--   **Feature:** Enhanced the vendor matching algorithm to factor in machine availability and RFQ urgency.
--   **Refactoring:** Initiated the  monolith refactoring, creating a new modular structure in  and migrating models and auth/user routes.
--   **Feature:** Built a comprehensive Admin Analytics Dashboard ().
--   **Feature:** Implemented a complete Dispute Resolution System (backend API and frontend UI).
--   **Feature:** Added Legal Pages (Terms of Service, Privacy Policy) with footer links.
+-   **WhatsApp Integration (Gupshup):** Implemented a full-featured AI chatbot for vendors, including text/voice commands, multi-language support, automated notifications, and an admin management page.
+-   **Bulk Machine Import:** Added a feature for vendors to upload their machine inventory via a CSV file.
+-   **Bug Fix: WhatsApp Message Delivery:** Resolved an issue where messages were not being delivered by correcting the API payload format.
+-   **Bug Fix: Voice Command Recognition:** Fixed issues with voice transcription errors by implementing fuzzy matching and audio format conversion ().
+-   **Bug Fix: Duplicate Messages:** Solved the issue of processing the same webhook multiple times by implementing message deduplication.
+-   **Bug Fix:  not defined:** Resolved a crash during the WhatsApp registration flow by correctly defining the password hashing context.
 
 **Earlier issues found/mentioned but not fixed**
--   The **Made with Emergent badge** cannot be removed via code in the preview environment as it's injected by a platform script. The user must deploy to a custom server or contact support for paid plans to remove it.
+-   The **Made with Emergent badge** cannot be removed via code in the preview environment. This is a platform limitation and requires user action (upgrading the plan or contacting support).
 
 **Known issue recurrence from previous fork**
 -   None.
@@ -81,92 +80,81 @@ OEMLinker is a feature-rich full-stack application with a React frontend, a Fast
 
 
 **Key Technical Concepts**
--   **Backend:** FastAPI (transitioning from a monolith to a modular structure with APIRouters).
--   **Frontend:** React (Hooks, Context API), Recharts for data visualization.
+-   **Backend:** FastAPI (in a monolithic  file).
+-   **Frontend:** React, Shadcn UI, Recharts.
 -   **Database:** MongoDB.
--   **AI Integration:** OpenAI GPT (Vision), Whisper (STT), TTS.
--   **Email:** Resend API.
+-   **3rd Party Integrations:** Gupshup (WhatsApp), OpenAI (Whisper for STT, TTS, Vision for image analysis), Resend (Email).
+-   **Audio Processing:**  library for audio format conversion (OGG to MP3).
+-   **Text Processing:**  library for fuzzy string matching to improve command recognition.
 
 **key DB schema**
--   **rfqs:**  (Enum: Urgent, High Priority, Normal, Low Priority)
--   **disputes:**  (NEW)
+-   No database schema changes were made in this session. An in-memory  was added to  to handle message deduplication for WhatsApp webhooks.
 
 **changes in tech stack**
--   None.
+-   **Backend Dependencies Added:** , ,  were added to .
 
 **All files of reference**
--   : The monolithic file, which is actively being refactored. It contains the new analytics and dispute endpoints.
--   : The new directory containing the modular backend structure. Key files include  and the various model files in .
--   : The new admin analytics dashboard UI.
--    & : The new UI for the dispute resolution system.
--   : Modified to include the Raise Dispute functionality.
--    & : Modified to handle RFQ urgency.
--    & : New static legal pages.
--    & : Modified for new routes and navigation links.
+-   : The most heavily modified file, containing all the new logic for WhatsApp webhooks, command processing, automated notifications, and the bulk machine import endpoint.
+-   : A new service file created to handle interactions with the Gupshup WhatsApp API.
+-   : A new admin page for managing the WhatsApp integration.
+-   : Modified to add the UI for the bulk CSV import feature.
+-   : Modified to include a Notify via WhatsApp button for matched vendors.
+-    and : Updated to add the route and navigation link for the new WhatsApp admin page.
 
 **Areas that need refactoring**:
--   : The refactoring is **in progress** but is the highest priority technical debt. All endpoints outside of auth and user profiles still reside in this 7000+ line file and need to be migrated to the new modular structure in .
+-   : This file has grown substantially and urgently needs to be refactored. The new WhatsApp endpoints and logic should be extracted into a dedicated router file (e.g., ) to improve maintainability and adhere to the modular architecture.
 
 **key api endpoints**
--   : Retrieves all data for the admin analytics dashboard.
--   : Creates a new dispute for an order.
--   : Lists all disputes for the current user or all disputes for an admin.
--   : Retrieves details for a single dispute.
--   : Adds a message to a dispute thread.
--   : Updates the status of a dispute (admin only).
--   : Matching logic was significantly updated.
+-   : Receives all incoming messages (text, voice, image) from Gupshup.
+-   : Handles the upload and processing of the machine inventory CSV file.
+-   : Checks the connection status of the Gupshup integration.
+-   The following endpoints were modified to trigger automatic WhatsApp notifications: , , , , .
 
 **Critical Info for New Agent**
--   Your primary task is to **continue the refactoring of **. This is a large but critical undertaking. The next logical step is to migrate the vendor, machine, and RFQ-related endpoints into their own router files under . Follow the established pattern from .
--   The production login issue remains blocked on the user. Do not attempt to fix it again in the code; the solution is for the user to deploy the existing fix.
--   After making progress on the refactoring, the next major feature to propose is the **Stripe integration**, as it's essential for the platform to function as a real business.
+-   **Your immediate priority is to complete the GST certificate upload feature for vendor registration.** This involves implementing the AI vision logic in  inside the  function where image messages are handled. You will need to use the existing OpenAI integration to extract the GSTIN from the image and then call the  function.
+-   **The  file is now extremely large.** After completing the current feature, you should strongly recommend and prioritize refactoring this monolith. All the new WhatsApp-related logic should be migrated to a new router in .
+-   The WhatsApp integration depends on a 24-hour user-initiated session window. For business-initiated messages, pre-approved templates must be configured in the user's Gupshup account.
 
 **documents and test reports created in this job**
--   /app/test_reports/iteration_1.json
--   /app/test_reports/iteration_2.json
--   /app/memory/PRD.md
+-   
+-   
+-    (updated with completed features).
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **user:** Legal pages (Terms of Service, Privacy Policy) (Status: **Completed**)
-2.  **user:** Finish the process (regarding the Dispute System) (Status: **Completed**)
-3.  **user:** is the app ready for launch in market for onboarding real users and do business (Status: **Answered**)
-4.  **user:** Add Platform Analytics - Dashboard for you to track business (Status: **Completed**)
-5.  **user:** Dispute resolution system (Status: **Completed**)
-6.  **user:** Refactor server.py monolith (Status: **In Progress**)
-7.  **user:** yes (confirming to proceed with refactoring Phase 2) (Status: **Acknowledged**)
-8.  **user:** Match urgent and top priority job with available matching machines and give weightage in ranking (Status: **Completed**)
-9.  **user:** 1 (confirming plan to work on RFQ Urgency feature) (Status: **Acknowledged**)
-10. **user:** Please use ask_human tool and confirm your plan now. (Status: **Acknowledged**)
+1.  **user:** send rfq matching, quoted, negotiation reply, po messages to whatsapp automatically after event done (Status: **Completed**)
+2.  **user:** Is it possible to register as vendor with gst number on whatsapp (Status: **In Progress**)
+3.  **user:** I guess gst certificate uploading will be more effective as typing gst number may be mistaken (Status: **In Progress**)
+4.  **user:** no response in whatsapp (Status: **Resolved**)
+5.  **user:** add enquiry, inquiries, work, kaam(hindi) as rfqs (Status: **Completed**)
+6.  **user:** can command be recognised from other indian languages (Status: **Completed**)
+7.  **user:** add links to every rfq, pos, etc (Status: **Completed**)
+8.  **user:** same messages are sent multiple times (Status: **Resolved**)
+9.  **user:** can it find command in a sentence from voice message (Status: **Completed**)
+10. **user:** all commands in voice messages are not recognised except rfqs (Status: **Resolved**)
 
 **Project Health Check:**
--   **Broken:** The password login on the user's production deployment is broken, pending their action to deploy the provided fix.
--   **Mocked:** Stripe payment integration, WhatsApp integration.
+-   **Broken:** Password-based login on the production deployment remains broken, pending user action.
+-   **Mocked:** Stripe payment integration is planned but not yet implemented.
 
 **3rd Party Integrations**
--   **OpenAI GPT-5.2 (Vision):** Used for AI drawing analysis. Uses Emergent LLM Key.
--   **OpenAI Whisper & TTS:** Powers the voice agent. Uses Emergent LLM Key.
--   **Resend:** Used for sending transactional emails (user registration, admin notifications). Requires user-provided key.
--   **GSTIN Check API ():** For vendor data verification. Requires user-provided key.
+-   **OpenAI GPT (Vision, Whisper, TTS):** Powers the AI drawing analysis and the WhatsApp voice agent. Uses Emergent LLM Key.
+-   **Resend:** Used for sending transactional emails. Requires user-provided key.
+-   **Gupshup:** **(New)** Integrated for WhatsApp Business API. Requires user-provided key.
+-   **GSTIN Check API:** Used for vendor data verification. Requires user-provided key.
 -   **Stripe:** Planned for payments.
 
 **Testing status**
 -   Testing agent used after significant changes: YES
 -   Troubleshoot agent used after agent stuck in loop: NO
 -   Test files created:
-    - /app/test_reports/iteration_1.json
-    - /app/test_reports/iteration_2.json
+    - 
+    - 
 -   Known regressions: None.
 
 **Credentials to test flow:**
--   **Admin:**
-    -   Email: 
-    -   Password: 
--   **Buyer:**
-    -   Email: 
-    -   Password: 
--   **Vendor:**
-    -   Email: 
-    -   Password: 
+-   **Admin:** Email: , Password: 
+-   **Buyer:** Email: , Password: 
+-   **Vendor:** Email: , Password: 
 
 **What agent forgot to execute**
--   The agent completed the work for the Legal Pages task but the session ended just before it could call the  tool to formally conclude it and update the PRD.md for that specific item.</analysis>
+-   The agent was mid-task implementing the AI logic for GST certificate image extraction when the job ended. The core implementation of this feature is incomplete.</analysis>

@@ -2640,7 +2640,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://vendor-match-staging.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://smart-procurement-27.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -4980,7 +4980,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://vendor-match-staging.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://smart-procurement-27.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -5121,7 +5121,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://vendor-match-staging.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://smart-procurement-27.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -5373,7 +5373,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://vendor-match-staging.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://smart-procurement-27.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -5655,7 +5655,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://vendor-match-staging.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://smart-procurement-27.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -5786,7 +5786,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://vendor-match-staging.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://smart-procurement-27.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(
@@ -8829,8 +8829,6 @@ async def whatsapp_webhook(request: Request):
         if is_duplicate_message(message_id):
             logger.info(f"Duplicate message ignored: {message_id}")
             return {"status": "duplicate_ignored"}
-            logger.info(f"Message status update: {parsed.get('status')} for {parsed.get('message_id')}")
-            return {"status": "ok"}
         
         # Handle incoming message
         sender = parsed.get("sender", "")
@@ -8857,6 +8855,22 @@ async def whatsapp_webhook(request: Request):
                         "⚠️ Sorry, I couldn't understand your voice message. Please try again or type your query."
                     )
                 return {"status": "ok"}
+        # Handle image messages (GST certificate upload for registration)
+        elif msg_type == "image" and parsed.get("image_url"):
+            # Check if user is already registered
+            if vendor:
+                if whatsapp_service.is_configured():
+                    await whatsapp_service.send_text_message(
+                        sender,
+                        "📷 Image received! You're already registered.\n\nType *help* to see available commands."
+                    )
+                return {"status": "ok"}
+            
+            # Process image for GST certificate extraction
+            response_message = await process_gst_certificate_image(parsed.get("image_url"), sender)
+            if response_message and whatsapp_service.is_configured():
+                await whatsapp_service.send_text_message(sender, response_message)
+            return {"status": "ok"}
         else:
             text = parsed.get("text", "").strip().lower()
         
@@ -9011,6 +9025,158 @@ async def process_voice_message(audio_url: str, sender: str, vendor: Optional[di
     except Exception as e:
         logger.error(f"Voice message processing error: {str(e)}")
         return None
+
+
+
+async def process_gst_certificate_image(image_url: str, sender: str) -> str:
+    """
+    Process GST certificate image uploaded via WhatsApp.
+    Uses AI Vision to extract GSTIN from the certificate image.
+    
+    Args:
+        image_url: URL of the uploaded image from Gupshup
+        sender: WhatsApp sender phone number
+        
+    Returns:
+        Response message string
+    """
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+    import base64
+    
+    try:
+        # Download image from Gupshup URL
+        logger.info(f"Downloading GST certificate image from: {image_url[:50]}...")
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(image_url, timeout=30.0)
+            if response.status_code != 200:
+                logger.error(f"Failed to download image: HTTP {response.status_code}")
+                return """⚠️ *Image Download Failed*
+
+Could not download the image. Please try again.
+
+You can also register manually at https://oemlinker.com/register"""
+            
+            image_data = response.content
+        
+        # Convert to base64 for AI analysis
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+        
+        # Check if we have the API key
+        api_key = os.environ.get("EMERGENT_LLM_KEY")
+        if not api_key:
+            logger.error("EMERGENT_LLM_KEY not configured for GST extraction")
+            return """⚠️ *Service Unavailable*
+
+AI service is not configured. Please register manually at https://oemlinker.com/register"""
+        
+        # Use AI Vision to extract GSTIN from the certificate
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"gst_extraction_{sender}_{uuid.uuid4().hex[:8]}",
+            system_message="""You are an expert at reading Indian GST (Goods and Services Tax) certificates.
+            
+Your task is to extract the GSTIN (GST Identification Number) from the uploaded GST certificate image.
+
+GSTIN Format: 15 characters - 2 digits (state code) + 10 characters (PAN) + 1 digit (entity code) + 1 character (Z) + 1 check digit
+Example: 27AABCU9603R1ZM
+
+IMPORTANT:
+- Only extract the GSTIN number, nothing else
+- If you can clearly read the GSTIN, respond with ONLY the 15-character GSTIN number
+- If the image is not a GST certificate or GSTIN is not visible, respond with "NOT_FOUND"
+- If the image is blurry or unclear, respond with "UNCLEAR"
+- Do NOT include any other text, explanations, or formatting - just the GSTIN or error code"""
+        )
+        
+        # Create message with image
+        user_message = UserMessage(
+            text="Please extract the GSTIN number from this GST certificate image.",
+            file_contents=[ImageContent(image_base64=image_base64)]
+        )
+        
+        # Get AI response
+        ai_response = await chat.send_async(user_message)
+        extracted_text = ai_response.strip().upper()
+        
+        logger.info(f"AI extraction result for {sender[:6]}***: {extracted_text[:20]}...")
+        
+        # Validate the extracted GSTIN
+        if extracted_text == "NOT_FOUND":
+            return """⚠️ *GST Certificate Not Detected*
+
+The uploaded image doesn't appear to be a valid GST certificate.
+
+Please upload a clear image of your:
+📄 GST Registration Certificate
+📄 GST Certificate (Form GST REG-06)
+
+Make sure the GSTIN number is clearly visible.
+
+Or register manually at https://oemlinker.com/register"""
+        
+        if extracted_text == "UNCLEAR":
+            return """⚠️ *Image Not Clear*
+
+The GST number in the image is not clearly visible.
+
+Please upload a clearer image where the *GSTIN number* is easily readable.
+
+Tips:
+📸 Ensure good lighting
+📸 Avoid shadows on the certificate
+📸 Make sure the text is in focus
+
+Or register manually at https://oemlinker.com/register"""
+        
+        # Validate GSTIN format (15 characters, alphanumeric)
+        gstin_pattern = r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}[Z]{1}[0-9A-Z]{1}$'
+        if not re.match(gstin_pattern, extracted_text):
+            # Try to find GSTIN in the response if AI included extra text
+            gstin_match = re.search(r'[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}Z[0-9A-Z]{1}', extracted_text)
+            if gstin_match:
+                extracted_text = gstin_match.group()
+            else:
+                logger.warning(f"Invalid GSTIN format extracted: {extracted_text}")
+                return f"""⚠️ *Invalid GST Number*
+
+The extracted number doesn't match GSTIN format.
+
+Extracted: {extracted_text[:20]}...
+
+Please upload a clearer image or type your GST number directly:
+Example: *register 27AABCU9603R1ZM*
+
+Or register manually at https://oemlinker.com/register"""
+        
+        # Send confirmation message before registration
+        if whatsapp_service.is_configured():
+            await whatsapp_service.send_text_message(
+                sender,
+                f"""📋 *GST Number Extracted*
+
+GSTIN: *{extracted_text}*
+
+⏳ Verifying and registering your account..."""
+            )
+        
+        # Process registration with the extracted GSTIN
+        registration_result = await process_whatsapp_registration(sender, extracted_text)
+        return registration_result
+        
+    except Exception as e:
+        logger.error(f"GST certificate processing error: {str(e)}")
+        return f"""❌ *Processing Failed*
+
+An error occurred while processing your GST certificate.
+
+Please try again or register manually at https://oemlinker.com/register
+
+You can also type your GST number directly:
+*register YOUR_GST_NUMBER*
+
+Contact support@oemlinker.com for assistance."""
+
 
 
 async def process_whatsapp_registration(sender: str, gst_number: str) -> str:
