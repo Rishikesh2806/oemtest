@@ -234,8 +234,11 @@ Comprehensive platform analytics for business tracking:
 
 ### P2 - Medium Priority
 - Bulk machine import (CSV)
-- WhatsApp/SMS notifications
+- SMS notifications (Phone OTP)
 - Repeat order feature
+
+### Completed (P2)
+- WhatsApp notifications ✓ (Mar 7, 2026) - Gupshup integration
 
 ### P3 - Future
 - Instant AI auto-quote
@@ -295,6 +298,36 @@ Web-based voice assistant for vendors to query matched RFQs:
 - Accessible via "Voice Assistant" button on Vendor Dashboard
 - Features: Microphone recording, sample questions, audio playback
 - **Past Experience Persistence Fixed**: The PUT `/api/vendors/profile` endpoint was overwriting `past_experiences` with an empty array when saving profile changes. Fixed by excluding `past_experiences` from the `$set` operation - experiences are now managed separately via `/vendors/experiences` endpoints.
+
+## WhatsApp Integration via Gupshup (Added Mar 7, 2026)
+WhatsApp Business API integration for vendor communication:
+- **Provider**: Gupshup (https://www.gupshup.io)
+- **App Name**: OEMLinker
+- **Source Number**: 919831509919
+
+### Features:
+- **Vendor Notifications**: Notify matched vendors about new RFQs via WhatsApp
+- **AI-Powered Chat**: Vendors can query RFQs, quotes, orders via WhatsApp messages
+- **Commands**: `help`, `rfqs`, `details <id>`, `my quotes`, `my orders`, `profile`
+- **Natural Language**: AI responds to vendor queries in conversational format
+- **Webhook**: Receives incoming WhatsApp messages at `/api/whatsapp/webhook`
+
+### API Endpoints:
+- `GET /api/whatsapp/status` - Check integration status (public)
+- `POST /api/whatsapp/send` - Send message (admin only)
+- `POST /api/whatsapp/notify-rfq?rfq_id=xxx` - Notify vendors about RFQ (admin/buyer)
+- `POST /api/whatsapp/webhook` - Receive incoming messages (public)
+
+### Frontend:
+- **Admin Page**: `/admin/whatsapp` - View status, send test messages, webhook URL
+- **RFQ Detail**: "Notify via WhatsApp" button for buyers with matched vendors
+
+### Files:
+- `/app/backend/app/services/whatsapp_service.py` - Gupshup API service
+- `/app/backend/server.py` - WhatsApp endpoints (lines 8286+)
+- `/app/frontend/src/pages/WhatsAppAdmin.jsx` - Admin management page
+
+### Test Report: /app/test_reports/iteration_14.json (100% pass)
 
 ## Database Collections
 - users, user_sessions, vendors, machines

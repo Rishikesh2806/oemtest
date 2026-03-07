@@ -110,13 +110,13 @@ export default function WhatsAppAdmin() {
               <div className={`w-3 h-3 rounded-full ${status?.configured ? 'bg-green-500' : 'bg-red-500'}`} />
               <div>
                 <p className="text-sm text-slate-500">Status</p>
-                <p className="font-medium">
+                <div className="font-medium">
                   {status?.configured ? (
                     <Badge className="bg-green-100 text-green-700">Connected</Badge>
                   ) : (
                     <Badge variant="destructive">Not Configured</Badge>
                   )}
-                </p>
+                </div>
               </div>
             </div>
             <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg">
