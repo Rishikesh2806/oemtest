@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Gupshup Configuration
 GUPSHUP_API_URL = "https://api.gupshup.io/wa/api/v1/msg"
+GUPSHUP_MEDIA_URL = "https://api.gupshup.io/wa/api/v1/media"
 GUPSHUP_APP_NAME = os.environ.get("GUPSHUP_APP_NAME", "OEMLinker")
 GUPSHUP_API_KEY = os.environ.get("GUPSHUP_API_KEY", "")
 GUPSHUP_SOURCE_NUMBER = os.environ.get("GUPSHUP_SOURCE_NUMBER", "")  # WhatsApp Business Number
@@ -102,6 +103,161 @@ class WhatsAppService:
             logger.error(f"WhatsApp API error: {str(e)}")
             return {"success": False, "error": str(e)}
     
+    async def upload_media(
+        self,
+        file_data: bytes,
+        file_name: str = "audio.mp3",
+        content_type: str = "audio/mpeg"
+    ) -> Dict[str, Any]:
+        """
+        Upload media file to Gupshup for sending via WhatsApp
+        
+        Args:
+            file_data: Binary file data
+            file_name: Name of the file
+            content_type: MIME type (audio/mpeg, audio/ogg, etc.)
+            
+        Returns:
+            Dict with media_id or error
+        """
+        if not self.is_configured():
+            return {"success": False, "error": "WhatsApp not configured"}
+        
+        try:
+            # Gupshup media upload endpoint
+            upload_url = f"{GUPSHUP_MEDIA_URL}/{self.source_number}"
+            
+            headers = {
+                "apikey": self.api_key
+            }
+            
+            # Create multipart form data
+            files = {
+                "file": (file_name, file_data, content_type)
+            }
+            
+            data = {
+                "file_type": content_type
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    upload_url,
+                    headers=headers,
+                    files=files,
+                    data=data,
+                    timeout=60.0
+                )
+                
+                result = response.json() if response.text else {}
+                
+                if response.status_code in [200, 201, 202] and result.get("status") == "success":
+                    media_id = result.get("mediaId")
+                    logger.info(f"Media uploaded successfully: {media_id}")
+                    return {
+                        "success": True,
+                        "media_id": media_id,
+                        "response": result
+                    }
+                else:
+                    logger.error(f"Media upload failed: {result}")
+                    return {
+                        "success": False,
+                        "error": result.get("message", "Upload failed"),
+                        "response": result
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Media upload error: {str(e)}")
+            return {"success": False, "error": str(e)}
+    
+    async def send_audio_message(
+        self,
+        to_number: str,
+        audio_data: bytes,
+        file_name: str = "voice_response.mp3"
+    ) -> Dict[str, Any]:
+        """
+        Send an audio/voice message via WhatsApp
+        
+        Args:
+            to_number: Recipient phone number
+            audio_data: Audio file bytes (MP3 or OGG)
+            file_name: Name of the audio file
+            
+        Returns:
+            API response dict
+        """
+        if not self.is_configured():
+            return {"success": False, "error": "WhatsApp not configured"}
+        
+        # First upload the audio file
+        upload_result = await self.upload_media(
+            file_data=audio_data,
+            file_name=file_name,
+            content_type="audio/mpeg"
+        )
+        
+        if not upload_result.get("success"):
+            return upload_result
+        
+        media_id = upload_result.get("media_id")
+        
+        # Now send the audio message
+        to_number = to_number.replace("+", "").replace(" ", "").replace("-", "")
+        
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "apikey": self.api_key
+        }
+        
+        import json
+        message_payload = json.dumps({
+            "type": "audio",
+            "audio": {
+                "id": media_id
+            }
+        })
+        
+        payload = {
+            "channel": "whatsapp",
+            "source": self.source_number,
+            "destination": to_number,
+            "message": message_payload,
+            "src.name": self.app_name
+        }
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    self.api_url,
+                    headers=headers,
+                    data=payload,
+                    timeout=30.0
+                )
+                
+                result = response.json() if response.text else {}
+                
+                if response.status_code in [200, 201, 202]:
+                    logger.info(f"Audio message sent to {to_number[:6]}***")
+                    return {
+                        "success": True,
+                        "message_id": result.get("messageId"),
+                        "media_id": media_id,
+                        "response": result
+                    }
+                else:
+                    logger.error(f"Audio message send failed: {result}")
+                    return {
+                        "success": False,
+                        "error": result.get("message", "Send failed"),
+                        "response": result
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Audio message API error: {str(e)}")
+            return {"success": False, "error": str(e)}
+
     async def send_template_message(
         self,
         to_number: str,

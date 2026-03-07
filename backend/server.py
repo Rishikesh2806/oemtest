@@ -8542,6 +8542,60 @@ async def send_whatsapp_message(
     
     return result
 
+class WhatsAppVoiceRequest(BaseModel):
+    to_number: str
+    message: str
+
+@api_router.post("/whatsapp/send-voice")
+async def send_whatsapp_voice_message(
+    data: WhatsAppVoiceRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Send a voice message via WhatsApp (Admin only) - generates TTS and sends audio"""
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not whatsapp_service.is_configured():
+        raise HTTPException(status_code=503, detail="WhatsApp service not configured")
+    
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(status_code=503, detail="TTS service not configured")
+    
+    try:
+        # Generate audio from text
+        tts = TextToSpeech(api_key=EMERGENT_LLM_KEY)
+        audio_bytes = await asyncio.to_thread(
+            tts.generate_speech,
+            data.message,
+            voice="nova"
+        )
+        
+        if not audio_bytes:
+            raise HTTPException(status_code=500, detail="Failed to generate audio")
+        
+        # Send audio via WhatsApp
+        result = await whatsapp_service.send_audio_message(
+            to_number=data.to_number,
+            audio_data=audio_bytes,
+            file_name="oemlinker_message.mp3"
+        )
+        
+        if not result.get("success"):
+            raise HTTPException(status_code=500, detail=result.get("error", "Failed to send voice message"))
+        
+        return {
+            "success": True,
+            "message_id": result.get("message_id"),
+            "media_id": result.get("media_id"),
+            "audio_size_bytes": len(audio_bytes)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Voice message error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @api_router.post("/whatsapp/notify-rfq")
 async def notify_vendors_new_rfq(
     rfq_id: str,
@@ -8683,9 +8737,17 @@ async def whatsapp_webhook(request: Request):
                     )
                     
                     if audio_bytes:
-                        # For now, we'll just send text - audio upload requires media endpoint
-                        # Future: Upload audio to Gupshup media API and send audio message
-                        logger.info(f"Voice response generated for {sender[:6]}***")
+                        # Send audio response via WhatsApp
+                        audio_result = await whatsapp_service.send_audio_message(
+                            to_number=sender,
+                            audio_data=audio_bytes,
+                            file_name="oemlinker_response.mp3"
+                        )
+                        
+                        if audio_result.get("success"):
+                            logger.info(f"Voice response sent to {sender[:6]}***")
+                        else:
+                            logger.warning(f"Voice response upload failed: {audio_result.get('error')}")
                 except Exception as e:
                     logger.error(f"TTS generation error: {str(e)}")
         

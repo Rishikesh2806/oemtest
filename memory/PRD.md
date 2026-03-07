@@ -320,6 +320,18 @@ WhatsApp Business API integration for vendor communication:
 3. Audio downloaded and transcribed via OpenAI Whisper
 4. AI processes transcribed query
 5. Text response sent back (+ confirmation of transcription)
+6. **Audio response sent via TTS** (OpenAI Nova voice)
+
+### Audio Response Flow:
+1. AI generates text response
+2. OpenAI TTS converts text to audio (Nova voice)
+3. Audio uploaded to Gupshup Media API
+4. Audio message sent to vendor via WhatsApp
+
+### Admin Features:
+- Send text messages
+- **Send voice messages** (TTS generated)
+- View webhook URL for configuration
 
 ### API Endpoints:
 - `GET /api/whatsapp/status` - Check integration status (public)

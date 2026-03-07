@@ -13,6 +13,7 @@ export default function WhatsAppAdmin() {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [sendingVoice, setSendingVoice] = useState(false);
   const [testNumber, setTestNumber] = useState('');
   const [testMessage, setTestMessage] = useState('Hello from OEMLinker! This is a test message.');
   const [sendResult, setSendResult] = useState(null);
@@ -71,6 +72,46 @@ export default function WhatsAppAdmin() {
       toast.error(error.message);
     } finally {
       setSending(false);
+    }
+  };
+
+  const sendVoiceMessage = async () => {
+    if (!testNumber || !testMessage) {
+      toast.error('Please enter both phone number and message');
+      return;
+    }
+
+    setSendingVoice(true);
+    setSendResult(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/api/whatsapp/send-voice`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          to_number: testNumber,
+          message: testMessage
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setSendResult({ success: true, messageId: data.message_id, isVoice: true, audioSize: data.audio_size_bytes });
+        toast.success(`Voice message sent! Size: ${Math.round(data.audio_size_bytes / 1024)}KB`);
+      } else {
+        setSendResult({ success: false, error: data.detail || data.error || 'Failed to send' });
+        toast.error(data.detail || data.error || 'Failed to send voice message');
+      }
+    } catch (error) {
+      setSendResult({ success: false, error: error.message });
+      toast.error(error.message);
+    } finally {
+      setSendingVoice(false);
     }
   };
 
@@ -172,24 +213,44 @@ export default function WhatsAppAdmin() {
             />
             <p className="text-xs text-slate-500 mt-1">Use *text* for bold, _text_ for italic</p>
           </div>
-          <Button 
-            onClick={sendTestMessage} 
-            disabled={sending || !status?.configured}
-            className="bg-green-600 hover:bg-green-700"
-            data-testid="send-test-btn"
-          >
-            {sending ? (
-              <>
-                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                Sending...
-              </>
-            ) : (
-              <>
-                <Send className="w-4 h-4 mr-2" />
-                Send Test Message
-              </>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button 
+              onClick={sendTestMessage} 
+              disabled={sending || sendingVoice || !status?.configured}
+              className="bg-green-600 hover:bg-green-700"
+              data-testid="send-test-btn"
+            >
+              {sending ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Send Text
+                </>
+              )}
+            </Button>
+            <Button 
+              onClick={sendVoiceMessage} 
+              disabled={sending || sendingVoice || !status?.configured}
+              variant="outline"
+              className="border-purple-200 text-purple-600 hover:bg-purple-50"
+              data-testid="send-voice-btn"
+            >
+              {sendingVoice ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  🎤 Send Voice
+                </>
+              )}
+            </Button>
+          </div>
 
           {sendResult && (
             <div className={`p-4 rounded-lg ${sendResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
@@ -197,7 +258,9 @@ export default function WhatsAppAdmin() {
                 {sendResult.success ? (
                   <>
                     <CheckCircle className="w-5 h-5 text-green-600" />
-                    <span className="font-medium text-green-700">Message Sent Successfully!</span>
+                    <span className="font-medium text-green-700">
+                      {sendResult.isVoice ? 'Voice Message Sent!' : 'Message Sent Successfully!'}
+                    </span>
                   </>
                 ) : (
                   <>
@@ -207,7 +270,10 @@ export default function WhatsAppAdmin() {
                 )}
               </div>
               {sendResult.success && (
-                <p className="text-sm text-green-600 mt-1">Message ID: {sendResult.messageId}</p>
+                <p className="text-sm text-green-600 mt-1">
+                  Message ID: {sendResult.messageId}
+                  {sendResult.audioSize && ` • Audio: ${Math.round(sendResult.audioSize / 1024)}KB`}
+                </p>
               )}
               {sendResult.error && (
                 <p className="text-sm text-red-600 mt-1">Error: {sendResult.error}</p>
