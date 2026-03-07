@@ -9009,6 +9009,165 @@ async def process_voice_message(audio_url: str, sender: str, vendor: Optional[di
         return None
 
 
+async def process_whatsapp_registration(sender: str, gst_number: str) -> str:
+    """Process vendor registration via WhatsApp using GST number"""
+    import secrets
+    import string
+    
+    try:
+        # Check if GST is already registered
+        existing_vendor = await db.vendors.find_one({"gstin": gst_number}, {"_id": 0})
+        if existing_vendor:
+            return f"""⚠️ *GST Already Registered*
+
+This GST number is already linked to a vendor account.
+
+If this is your account, please:
+1. Login at https://oemlinker.com/login
+2. Update your phone number in profile settings
+
+Or contact support@oemlinker.com for help."""
+
+        # Validate GST using external API
+        GSTIN_API_KEY = os.environ.get("GSTIN_API_KEY", "")
+        gst_data = None
+        
+        if GSTIN_API_KEY:
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        f"https://sheet.gstincheck.co.in/check/{GSTIN_API_KEY}/{gst_number}",
+                        timeout=15.0
+                    )
+                    if response.status_code == 200:
+                        result = response.json()
+                        if result.get("flag"):
+                            gst_data = result.get("data", {})
+            except Exception as e:
+                logger.warning(f"GST validation API error: {str(e)}")
+        
+        if not gst_data:
+            return f"""⚠️ *GST Validation Failed*
+
+Could not validate GST number: {gst_number}
+
+Please check if:
+1. GST number is correct
+2. GST is active and valid
+
+You can also register manually at https://oemlinker.com/register"""
+
+        # Extract company details from GST data
+        company_name = gst_data.get("tradeNam") or gst_data.get("lgnm", "Unknown Company")
+        state_code = gst_data.get("stcd", "")
+        address_parts = []
+        if gst_data.get("pradr", {}).get("adr"):
+            address_parts.append(gst_data["pradr"]["adr"])
+        city = gst_data.get("pradr", {}).get("loc", "")
+        state = gst_data.get("pradr", {}).get("stcd", "")
+        pincode = gst_data.get("pradr", {}).get("pncd", "")
+        
+        # Generate email from GST (temporary)
+        email_base = gst_number.lower().replace(" ", "")
+        temp_email = f"{email_base}@oemlinker.vendor"
+        
+        # Generate temporary password
+        temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
+        
+        # Create user account
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        password_hash = pwd_context.hash(temp_password)
+        
+        user_doc = {
+            "user_id": user_id,
+            "email": temp_email,
+            "password_hash": password_hash,
+            "name": company_name,
+            "role": UserRole.VENDOR,
+            "is_verified": True,  # Auto-verify for WhatsApp registration
+            "phone": sender,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "registered_via": "whatsapp"
+        }
+        
+        await db.users.insert_one(user_doc)
+        
+        # Create vendor profile
+        vendor_id = f"vendor_{uuid.uuid4().hex[:12]}"
+        vendor_doc = {
+            "vendor_id": vendor_id,
+            "user_id": user_id,
+            "company_name": company_name,
+            "gstin": gst_number,
+            "gst_verified": True,
+            "gst_data": gst_data,
+            "address": ", ".join(filter(None, address_parts)),
+            "city": city,
+            "state": state,
+            "pincode": pincode,
+            "country": "India",
+            "phone": sender,
+            "is_approved": False,  # Needs admin approval
+            "rating": 0,
+            "total_jobs": 0,
+            "machines": [],
+            "certifications": [],
+            "past_experiences": [],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "registered_via": "whatsapp"
+        }
+        
+        await db.vendors.insert_one(vendor_doc)
+        
+        # Send admin notification
+        asyncio.create_task(send_admin_notification("new_vendor_registration", {
+            "vendor_id": vendor_id,
+            "company_name": company_name,
+            "gstin": gst_number,
+            "phone": sender,
+            "registered_via": "WhatsApp"
+        }))
+        
+        logger.info(f"New vendor registered via WhatsApp: {company_name} (GST: {gst_number})")
+        
+        return f"""🎉 *Registration Successful!*
+
+Welcome to *OEMLinker*, {company_name}!
+
+✅ *Account Created*
+🏢 Company: {company_name}
+📋 GST: {gst_number}
+📍 Location: {city}, {state}
+📞 Phone: {sender}
+
+🔐 *Login Credentials:*
+Email: {temp_email}
+Password: {temp_password}
+
+⚠️ *Important:*
+1. Please update your email at https://oemlinker.com/vendor/profile
+2. Add your machines to start receiving RFQ matches
+3. Your account is pending admin approval
+
+💡 *Next Steps:*
+• Type *help* to see available commands
+• Type *rfqs* to view matching opportunities
+
+🔗 Complete your profile:
+https://oemlinker.com/vendor/profile"""
+
+    except Exception as e:
+        logger.error(f"WhatsApp registration error: {str(e)}")
+        return f"""❌ *Registration Failed*
+
+An error occurred during registration. Please try again or register manually at https://oemlinker.com/register
+
+Error: {str(e)[:100]}
+
+Contact support@oemlinker.com for assistance."""
+
+
+
 async def process_whatsapp_command(
     text: str, 
     sender: str, 
@@ -9047,6 +9206,12 @@ async def process_whatsapp_command(
     def extract_intent(input_text: str) -> str:
         """Extract intent from natural language sentences - supports Indian languages"""
         input_text = input_text.lower()
+        
+        # Patterns for registration
+        register_keywords = ["register", "signup", "sign up", "join", "enroll", "new vendor", 
+                            "रजिस्टर", "पंजीकरण", "जुड़ें", "নিবন্ধন"]
+        if any(word in input_text for word in register_keywords):
+            return "register"
         
         # Patterns for RFQs (English + Hindi keywords)
         rfq_keywords = ["rfq", "rfqs", "job", "jobs", "opportunit", "request", "enquir", "inquir", "work", "kaam", "kam", 
@@ -9163,15 +9328,47 @@ Example: "Show me urgent RFQs for steel machining" """
 
 Your phone number is not linked to a vendor account.
 
-To use WhatsApp features:
-1. Register as a vendor at oemlinker.com
-2. Add your phone number to your profile
+📝 *Register via WhatsApp:*
+Send your GST number to register instantly!
+Example: _register 27AABCU9603R1ZM_
 
-Need help? Contact support@oemlinker.com"""
+Or visit oemlinker.com to register manually.
+
+Need help? Type *help* or contact support@oemlinker.com"""
+
+    # Check for GST-based registration (for non-registered users)
+    import re
+    gst_pattern = r'\b[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}\b'
+    gst_match = re.search(gst_pattern, text.upper())
+    
+    register_variants = ["register", "signup", "sign up", "join", "enroll", "रजिस्टर", "पंजीकरण"]
+    is_registration_request = intent == "register" or matches_command(text_normalized, register_variants) or gst_match
+    
+    if is_registration_request and not vendor:
+        # Extract GST number
+        if gst_match:
+            gst_number = gst_match.group(0)
+            return await process_whatsapp_registration(sender, gst_number)
+        else:
+            return """📝 *Vendor Registration*
+
+To register, please send your *GST Number* in the following format:
+
+_register 27AABCU9603R1ZM_
+
+Or just send the GST number directly.
+
+Your account will be created automatically with your business details from GSTIN database."""
 
     # Must be a registered vendor for other commands
     if not vendor:
-        return "⚠️ Please register and link your phone number at oemlinker.com to use this service."
+        return """⚠️ Your phone is not linked to a vendor account.
+
+📝 *Quick Registration:*
+Send your GST number to register!
+Example: _27AABCU9603R1ZM_
+
+Or visit https://oemlinker.com to register."""
     
     # Base URL for links
     BASE_URL = "https://oemlinker.com"
