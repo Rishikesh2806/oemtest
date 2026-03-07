@@ -901,6 +901,61 @@ URGENCY_LABELS = {
     "low": "🔵 Low Priority"
 }
 
+# Machine Categories Definition (used for AI identification and forms)
+MACHINE_CATEGORIES = {
+    "CNC Turning/Lathe": {
+        "types": ["CNC Lathe", "CNC Turning", "Swiss Lathe", "CNC Turn-Mill"],
+    },
+    "VTL (Vertical Turret Lathe)": {
+        "types": ["VTL", "Vertical Turret Lathe", "CNC VTL", "Double Column VTL"],
+    },
+    "VMC (Vertical Machining Center)": {
+        "types": ["VMC", "CNC VMC", "High Speed VMC", "Heavy Duty VMC", "Double Column VMC"],
+    },
+    "HMC (Horizontal Machining Center)": {
+        "types": ["HMC", "CNC HMC", "Pallet HMC", "High Speed HMC"],
+    },
+    "5-Axis Machining": {
+        "types": ["5-Axis VMC", "5-Axis HMC", "5-Axis Mill-Turn", "5-Axis Gantry"],
+    },
+    "Milling": {
+        "types": ["CNC Milling", "Vertical Milling", "Horizontal Milling", "Bed Type Milling", "Gantry Milling"],
+    },
+    "Boring": {
+        "types": ["Horizontal Boring", "Jig Boring", "Fine Boring", "CNC Boring"],
+    },
+    "Grinding": {
+        "types": ["Surface Grinding", "Cylindrical Grinding", "Centerless Grinding", "Internal Grinding", "Tool & Cutter Grinding"],
+    },
+    "Wire EDM": {
+        "types": ["Wire EDM", "CNC Wire Cut", "Slow Wire EDM", "Fast Wire EDM"],
+    },
+    "Die Sinking EDM": {
+        "types": ["Die Sinking EDM", "CNC EDM", "Mirror EDM"],
+    },
+    "Drilling": {
+        "types": ["Radial Drilling", "CNC Drilling", "Deep Hole Drilling", "Multi-Spindle Drilling", "Gang Drilling"],
+    },
+    "Sheet Metal": {
+        "types": ["Laser Cutting", "Plasma Cutting", "Waterjet Cutting", "CNC Turret Punch", "Press Brake", "Shearing Machine", "Rolling Machine"],
+    },
+    "Welding": {
+        "types": ["MIG Welding", "TIG Welding", "Spot Welding", "Robotic Welding", "Laser Welding", "Electron Beam Welding"],
+    },
+    "Heat Treatment": {
+        "types": ["Furnace", "Induction Hardening", "Case Hardening", "Annealing", "Quenching", "Tempering"],
+    },
+    "Surface Treatment": {
+        "types": ["Shot Blasting", "Sand Blasting", "Electroplating", "Anodizing", "Powder Coating", "Painting"],
+    },
+    "Inspection/CMM": {
+        "types": ["CMM", "Vision System", "Profile Projector", "Roughness Tester", "Hardness Tester", "3D Scanner"],
+    },
+    "Additive Manufacturing": {
+        "types": ["FDM", "SLA", "SLS", "DMLS", "SLM", "Binder Jetting", "Metal 3D Printing"],
+    }
+}
+
 # Payment Terms Options
 class PaymentTerms:
     NET_30 = "net_30"
@@ -9027,18 +9082,21 @@ async def whatsapp_webhook(request: Request):
                         "⚠️ Sorry, I couldn't understand your voice message. Please try again or type your query."
                     )
                 return {"status": "ok"}
-        # Handle image messages (GST certificate upload for registration)
+        # Handle image messages
         elif msg_type == "image" and parsed.get("image_url"):
-            # Check if user is already registered
+            # Check if user is already registered - process as machine photo
             if vendor:
-                if whatsapp_service.is_configured():
-                    await whatsapp_service.send_text_message(
-                        sender,
-                        "📷 Image received! You're already registered.\n\nType *help* to see available commands."
-                    )
+                response_message = await process_machine_photo_upload(
+                    parsed.get("image_url"), 
+                    sender, 
+                    vendor,
+                    parsed.get("caption", "")
+                )
+                if response_message and whatsapp_service.is_configured():
+                    await whatsapp_service.send_text_message(sender, response_message)
                 return {"status": "ok"}
             
-            # Process image for GST certificate extraction
+            # Not registered - process image for GST certificate extraction
             response_message = await process_gst_certificate_image(parsed.get("image_url"), sender)
             if response_message and whatsapp_service.is_configured():
                 await whatsapp_service.send_text_message(sender, response_message)
@@ -9770,6 +9828,268 @@ Please try:
 Contact support@oemlinker.com for assistance."""
 
 
+async def process_machine_photo_upload(image_url: str, sender: str, vendor: dict, caption: str = "") -> str:
+    """
+    Process machine photo uploaded via WhatsApp by a registered vendor.
+    Uses AI Vision to identify the machine and automatically add it to vendor's profile.
+    
+    Args:
+        image_url: URL of the uploaded image from Gupshup
+        sender: WhatsApp sender phone number
+        vendor: Vendor document from database
+        caption: Optional caption sent with the image
+        
+    Returns:
+        Response message string
+    """
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+    import base64
+    
+    try:
+        # Send processing message
+        if whatsapp_service.is_configured():
+            await whatsapp_service.send_text_message(
+                sender,
+                "📷 *Machine Photo Received*\n\n⏳ Analyzing machine details..."
+            )
+        
+        # Download image from Gupshup URL
+        logger.info(f"Downloading machine photo from: {image_url[:50]}...")
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(image_url, timeout=30.0)
+            if response.status_code != 200:
+                logger.error(f"Failed to download machine image: HTTP {response.status_code}")
+                return """⚠️ *Image Download Failed*
+
+Could not download the image. Please try again.
+
+You can also add machines manually at https://oemlinker.com/machines"""
+            
+            image_data = response.content
+        
+        # Convert to base64 for AI analysis
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+        
+        # Check if we have the API key
+        api_key = os.environ.get("EMERGENT_LLM_KEY")
+        if not api_key:
+            logger.error("EMERGENT_LLM_KEY not configured for machine identification")
+            return """⚠️ *Service Unavailable*
+
+AI service is not configured. Please add machines manually at https://oemlinker.com/machines"""
+        
+        # Get machine categories for AI context
+        machine_categories_list = []
+        for cat, data in MACHINE_CATEGORIES.items():
+            types = data.get("types", [])
+            machine_categories_list.append(f"- {cat}: {', '.join(types[:5])}")
+        categories_context = "\n".join(machine_categories_list)
+        
+        # Use AI Vision to identify the machine
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"machine_id_{sender}_{uuid.uuid4().hex[:8]}",
+            system_message=f"""You are an expert at identifying industrial manufacturing machines and equipment.
+
+Your task is to analyze the uploaded machine photo and identify:
+1. Machine Name (brand and model if visible, e.g., "Mazak Quick Turn 250")
+2. Machine Type (specific type, e.g., "CNC Turning Center", "Vertical Machining Center")
+3. Machine Category (one of the categories below)
+
+Available Machine Categories and Types:
+{categories_context}
+
+RESPOND IN THIS EXACT JSON FORMAT ONLY:
+{{
+    "name": "Brand Model" or "Unknown Machine" if not identifiable,
+    "machine_type": "specific machine type",
+    "machine_category": "category from the list above",
+    "brand": "manufacturer brand" or "Unknown",
+    "model": "model number" or "Unknown",
+    "confidence": "high", "medium", or "low",
+    "description": "brief description of what you see"
+}}
+
+If the image is not a machine or equipment, respond with:
+{{
+    "error": "not_a_machine",
+    "description": "what the image shows instead"
+}}
+
+Important:
+- Be specific about machine type
+- Use the exact category names from the list
+- If you can't identify the brand/model, still identify the type and category
+- Confidence should reflect how certain you are about the identification"""
+        )
+        
+        # Create message with image and optional caption context
+        prompt_text = "Please identify this manufacturing machine/equipment."
+        if caption:
+            prompt_text += f"\n\nUser provided caption: {caption}"
+        
+        user_message = UserMessage(
+            text=prompt_text,
+            file_contents=[ImageContent(image_base64=image_base64)]
+        )
+        
+        # Get AI response
+        ai_response = await chat.send_message(user_message)
+        logger.info(f"AI machine identification result for {sender[:6]}***: {ai_response[:100]}...")
+        
+        # Parse AI response
+        try:
+            # Clean the response - remove markdown code blocks if present
+            clean_response = ai_response.strip()
+            if clean_response.startswith("```"):
+                clean_response = clean_response.split("```")[1]
+                if clean_response.startswith("json"):
+                    clean_response = clean_response[4:]
+            clean_response = clean_response.strip()
+            
+            import json
+            machine_info = json.loads(clean_response)
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse AI response as JSON: {str(e)}")
+            return f"""⚠️ *Identification Failed*
+
+Could not identify the machine from the image.
+
+Please try:
+• Take a clearer photo showing the machine fully
+• Include the nameplate/brand in the photo
+• Add a caption describing the machine
+
+Or add manually at https://oemlinker.com/machines"""
+        
+        # Check if it's an error response
+        if "error" in machine_info:
+            error_desc = machine_info.get("description", "Unknown")
+            return f"""⚠️ *Not a Machine*
+
+This doesn't appear to be a manufacturing machine.
+
+Detected: {error_desc}
+
+Please upload a photo of your:
+🏭 CNC machines
+🔧 Lathes, mills, grinders
+⚙️ Manufacturing equipment
+
+Or add manually at https://oemlinker.com/machines"""
+        
+        # Extract machine details
+        machine_name = machine_info.get("name", "Unknown Machine")
+        machine_type = machine_info.get("machine_type", "")
+        machine_category = machine_info.get("machine_category", "")
+        brand = machine_info.get("brand", "Unknown")
+        model = machine_info.get("model", "Unknown")
+        confidence = machine_info.get("confidence", "medium")
+        description = machine_info.get("description", "")
+        
+        # Validate machine type against known categories
+        valid_type = False
+        for cat, data in MACHINE_CATEGORIES.items():
+            if machine_type in data.get("types", []):
+                valid_type = True
+                if not machine_category:
+                    machine_category = cat
+                break
+        
+        if not valid_type and machine_type:
+            # Try to find closest category based on type name
+            machine_type_lower = machine_type.lower()
+            for cat, data in MACHINE_CATEGORIES.items():
+                for t in data.get("types", []):
+                    if t.lower() in machine_type_lower or machine_type_lower in t.lower():
+                        machine_category = cat
+                        machine_type = t
+                        valid_type = True
+                        break
+                if valid_type:
+                    break
+        
+        if not machine_category:
+            machine_category = "Milling/VMC"  # Default category
+        if not machine_type:
+            machine_type = "CNC Machine"  # Default type
+        
+        # Save the image to uploads
+        file_ext = "jpg"
+        filename = f"machine_wa_{vendor['vendor_id']}_{uuid.uuid4().hex[:8]}.{file_ext}"
+        uploads_dir = "/app/uploads/machines"
+        os.makedirs(uploads_dir, exist_ok=True)
+        file_path = os.path.join(uploads_dir, filename)
+        
+        with open(file_path, "wb") as f:
+            f.write(image_data)
+        
+        image_url_stored = f"/api/uploads/machines/{filename}"
+        
+        # Create machine entry
+        machine_id = f"machine_{uuid.uuid4().hex[:12]}"
+        machine_doc = {
+            "machine_id": machine_id,
+            "vendor_id": vendor["vendor_id"],
+            "name": machine_name if machine_name != "Unknown Machine" else f"{brand} {model}".strip(),
+            "machine_category": machine_category,
+            "machine_type": machine_type,
+            "brand": brand,
+            "model": model,
+            "images": [image_url_stored],
+            "tolerance": 0.01,
+            "materials_supported": [],
+            "monthly_capacity_hours": 160,
+            "is_active": True,
+            "availability_status": "available",
+            "ai_identified": True,
+            "ai_confidence": confidence,
+            "ai_description": description,
+            "source": "whatsapp",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await db.machines.insert_one(machine_doc)
+        logger.info(f"Machine created via WhatsApp: {machine_id} for vendor {vendor['vendor_id']}")
+        
+        # Get machine count
+        machine_count = await db.machines.count_documents({"vendor_id": vendor["vendor_id"]})
+        
+        # Prepare confidence indicator
+        confidence_emoji = {"high": "🟢", "medium": "🟡", "low": "🟠"}.get(confidence, "🟡")
+        
+        return f"""✅ *Machine Added Successfully!*
+
+{confidence_emoji} AI Identification ({confidence} confidence)
+
+🏭 *{machine_name}*
+📋 Type: {machine_type}
+📂 Category: {machine_category}
+�icing Brand: {brand}
+📝 Model: {model}
+
+📸 Photo saved to your profile
+
+You now have *{machine_count} machines* in your profile.
+
+━━━━━━━━━━━━━━━━━━━━━━
+📷 Send more machine photos to add them
+✏️ Edit details at https://oemlinker.com/machines
+
+Type *machines* to see all your machines"""
+        
+    except Exception as e:
+        logger.error(f"Machine photo processing error: {str(e)}")
+        return f"""❌ *Processing Failed*
+
+An error occurred while processing your machine photo.
+
+Please try again or add machines manually at https://oemlinker.com/machines
+
+Contact support@oemlinker.com for assistance."""
+
+
 async def process_whatsapp_registration(sender: str, gst_number: str) -> str:
     """Process vendor registration via WhatsApp using GST number"""
     import secrets
@@ -10076,9 +10396,11 @@ async def process_whatsapp_command(
 *details <rfq_id>* - Get details of a specific RFQ
 *my quotes* - View your submitted quotes
 *my orders* - View your active orders
+*machines* - View your machines
 *profile* - View your vendor profile
 *help* - Show this menu
 
+📷 *Add Machine:* Send a photo of your machine!
 🎤 *Voice Search:* Send a voice message to search!
 
 💡 You can also ask questions in natural language!
@@ -10305,6 +10627,39 @@ Or visit https://oemlinker.com to register."""
 
 🔗 *Edit Profile:* {BASE_URL}/vendor/profile
 🔗 *Manage Machines:* {BASE_URL}/vendor/machines"""
+        return response
+    
+    # Machines command - list vendor's machines
+    machines_variants = ["machines", "my machines", "machine", "equipment", "show machines", "list machines",
+                         "मशीन", "मेरी मशीन", "मशीनें", "उपकरण", "যন্ত্র", "இயந்திரங்கள்"]
+    if matches_command(text_normalized, machines_variants):
+        machines = await db.machines.find(
+            {"vendor_id": vendor.get("vendor_id"), "is_active": True},
+            {"_id": 0, "machine_id": 1, "name": 1, "machine_type": 1, "machine_category": 1, "brand": 1, "model": 1, "images": 1, "availability_status": 1}
+        ).sort("created_at", -1).limit(10).to_list(length=10)
+        
+        if not machines:
+            return f"""🔧 *No Machines Added Yet*
+
+Add your machines to get matched with relevant RFQs!
+
+📷 *Quick Add:* Send a photo of your machine
+✏️ *Manual Add:* {BASE_URL}/vendor/machines
+
+Your machines help us match you with the right opportunities."""
+        
+        machine_count = len(machines)
+        response = f"🔧 *Your Machines ({machine_count}):*\n\n"
+        
+        for m in machines:
+            status_emoji = {"available": "🟢", "engaged": "🔵", "maintenance": "🟡", "offline": "⚫"}.get(m.get("availability_status", "available"), "🟢")
+            has_image = "📷" if m.get("images") else ""
+            
+            response += f"{status_emoji} *{m.get('name', 'Unknown')}*\n"
+            response += f"   {m.get('machine_type', 'N/A')} | {m.get('brand', '')} {m.get('model', '')} {has_image}\n\n"
+        
+        response += f"📷 _Send machine photos to add more!_\n"
+        response += f"🔗 _Manage:_ {BASE_URL}/vendor/machines"
         return response
     
     # Natural language query using AI
