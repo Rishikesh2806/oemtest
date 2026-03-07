@@ -8935,7 +8935,7 @@ async def process_whatsapp_command(
         input_text = input_text.lower()
         
         # Patterns for RFQs (English + Hindi keywords)
-        rfq_keywords = ["rfq", "rfqs", "job", "jobs", "opportunit", "request", 
+        rfq_keywords = ["rfq", "rfqs", "job", "jobs", "opportunit", "request", "enquir", "inquir", "work", "kaam", "kam", 
                         "काम", "नौकरी", "अवसर", "आरएफक्यू", "कोटेशन", "রিক्वেস্ট"]
         if any(word in input_text for word in rfq_keywords):
             return "rfqs"
@@ -9065,6 +9065,8 @@ Need help? Contact support@oemlinker.com"""
     # List RFQs command - expanded with Indian languages
     rfq_variants = ["rfqs", "rfq", "jobs", "opportunities", "open rfqs", "show rfqs", "list rfqs", 
                     "our effects", "our fq", "r f q", "requests", "request for quote",
+                    "enquiry", "enquiries", "inquiry", "inquiries", "work", "works",
+                    "kaam", "kam", "kam dikha", "kaam dikhao", "kaam dikhaao",
                     *hindi_rfq, *tamil_rfq, *telugu_rfq, *marathi_rfq, *bengali_rfq, 
                     *gujarati_rfq, *kannada_rfq, *punjabi_rfq]
     if intent == "rfqs" or matches_command(text_normalized, rfq_variants):
