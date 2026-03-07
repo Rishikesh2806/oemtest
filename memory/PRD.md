@@ -413,6 +413,12 @@ Allows vendors to register on OEMLinker by uploading their GST certificate image
 
 ### Test Report: /app/test_reports/iteration_16.json (100% pass - 40 tests)
 
+### WhatsApp Session Cleanup on User Deletion (Added Mar 7, 2026)
+- When a user/vendor is deleted via admin panel, their WhatsApp session is automatically cleaned up
+- Helper function `cleanup_whatsapp_session(phone)` handles phone number normalization
+- Also cleans up user notifications on deletion
+- Logs session removal for audit trail
+
 ## Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders

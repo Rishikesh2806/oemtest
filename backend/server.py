@@ -6483,12 +6483,27 @@ async def admin_delete_user(user_id: str, user: dict = Depends(get_current_user)
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     
+    # Get vendor phone number before deletion for WhatsApp session cleanup
+    vendor = await db.vendors.find_one({"user_id": user_id}, {"_id": 0, "phone": 1})
+    vendor_phone = vendor.get("phone") if vendor else None
+    
+    # Also check if user has phone directly
+    user_phone = target_user.get("phone")
+    
     # Delete associated data
     await db.vendors.delete_many({"user_id": user_id})
     await db.machines.delete_many({"vendor_id": {"$regex": user_id}})
     await db.user_sessions.delete_many({"user_id": user_id})
+    await db.notifications.delete_many({"user_id": user_id})
     await db.users.delete_one({"user_id": user_id})
     
+    # Clean up WhatsApp session
+    if vendor_phone:
+        cleanup_whatsapp_session(vendor_phone)
+    elif user_phone:
+        cleanup_whatsapp_session(user_phone)
+    
+    logger.info(f"User deleted by admin: {target_user.get('email')} (ID: {user_id})")
     return {"message": "User deleted successfully"}
 
 # ============== ADMIN - RFQ MANAGEMENT ==============
@@ -8622,6 +8637,34 @@ from app.services.whatsapp_service import whatsapp_service, parse_webhook_messag
 
 # Store WhatsApp conversation sessions
 whatsapp_sessions = {}  # {phone_number: {"user_id": str, "conversation": [], "last_active": datetime}}
+
+def cleanup_whatsapp_session(phone: str) -> bool:
+    """
+    Remove WhatsApp session for a given phone number.
+    Used when user/vendor is deleted from the platform.
+    
+    Args:
+        phone: Phone number (can be with or without country code)
+        
+    Returns:
+        True if session was found and removed, False otherwise
+    """
+    if not phone:
+        return False
+    
+    # Normalize phone number
+    normalized = phone.replace("+", "").replace(" ", "").replace("-", "")
+    last_10 = normalized[-10:] if len(normalized) >= 10 else normalized
+    
+    # Find and remove matching session
+    for session_key in list(whatsapp_sessions.keys()):
+        session_last_10 = session_key[-10:] if len(session_key) >= 10 else session_key
+        if session_key == normalized or session_last_10 == last_10:
+            del whatsapp_sessions[session_key]
+            logger.info(f"WhatsApp session removed for phone: {session_key[:6]}***")
+            return True
+    
+    return False
 
 class WhatsAppMessageRequest(BaseModel):
     to_number: str
