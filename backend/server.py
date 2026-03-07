@@ -665,7 +665,7 @@ class UserResponse(BaseModel):
     created_at: str
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str  # Can be email or phone number
     password: str
 
 class TokenResponse(BaseModel):
@@ -1521,49 +1521,65 @@ async def login(login_data: LoginRequest, request: Request):
     if forwarded_for:
         client_ip = forwarded_for.split(",")[0].strip()
     
-    # Sanitize email input
-    email = sanitize_input(login_data.email.lower().strip())
+    # Sanitize input - can be email or phone number
+    login_id = sanitize_input(login_data.email.lower().strip())
+    
+    # Normalize phone number if it looks like one (all digits, possibly with +)
+    normalized_phone = login_id.replace("+", "").replace(" ", "").replace("-", "")
+    is_phone_login = normalized_phone.isdigit() and len(normalized_phone) >= 10
     
     # Check if account is locked
-    if is_account_locked(email):
-        remaining = get_lockout_remaining(email)
-        logger.warning(f"Login attempt on locked account: {email} from IP: {client_ip}")
+    if is_account_locked(login_id):
+        remaining = get_lockout_remaining(login_id)
+        logger.warning(f"Login attempt on locked account: {login_id} from IP: {client_ip}")
         raise HTTPException(
             status_code=423, 
             detail=f"Account temporarily locked due to too many failed attempts. Try again in {remaining // 60} minutes."
         )
     
-    # Find user
-    user = await db.users.find_one({"email": email}, {"_id": 0})
+    # Find user - try email first, then phone number
+    user = await db.users.find_one({"email": login_id}, {"_id": 0})
+    
+    # If not found by email and looks like phone, try phone number variations
+    if not user and is_phone_login:
+        # Try finding by email field (phone stored as email for WhatsApp users)
+        user = await db.users.find_one({"email": normalized_phone}, {"_id": 0})
+        
+        # Also try with country code variations
+        if not user and not normalized_phone.startswith("91"):
+            user = await db.users.find_one({"email": f"91{normalized_phone}"}, {"_id": 0})
+        if not user and normalized_phone.startswith("91") and len(normalized_phone) > 10:
+            user = await db.users.find_one({"email": normalized_phone[2:]}, {"_id": 0})
     
     if not user:
-        # Record failed attempt (use email even if not found to prevent enumeration)
-        record_login_attempt(email, False)
-        logger.warning(f"Failed login attempt for non-existent email: {email} from IP: {client_ip}")
+        # Record failed attempt (use login_id even if not found to prevent enumeration)
+        record_login_attempt(login_id, False)
+        logger.warning(f"Failed login attempt for non-existent user: {login_id} from IP: {client_ip}")
         # Use same error message to prevent user enumeration
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(status_code=401, detail="Invalid email/phone or password")
     
     # Verify password
     if not verify_password(login_data.password, user.get("password_hash", "")):
-        record_login_attempt(email, False)
+        record_login_attempt(login_id, False)
         
         # Update failed attempts in DB
         await db.users.update_one(
-            {"email": email},
+            {"user_id": user["user_id"]},
             {"$inc": {"failed_login_attempts": 1}}
         )
         
-        logger.warning(f"Failed login attempt for: {email} from IP: {client_ip}")
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        logger.warning(f"Failed login attempt for: {login_id} from IP: {client_ip}")
+        raise HTTPException(status_code=401, detail="Invalid email/phone or password")
     
     # Check if 2FA is enabled
     security_settings = user.get("security_settings", {})
     two_factor_enabled = security_settings.get("two_factor_enabled", False)
+    user_email = user.get("email", "")
     
-    if two_factor_enabled:
-        # Generate and send OTP
+    if two_factor_enabled and "@" in user_email:
+        # Generate and send OTP (only for email users)
         otp = generate_otp()
-        store_otp(email, otp)
+        store_otp(user_email, otp)
         
         # Send OTP email
         otp_html = f'''
@@ -1580,22 +1596,22 @@ async def login(login_data: LoginRequest, request: Request):
             <p style="color: #999; font-size: 12px;">OEMLinker - AI-Powered Manufacturing Marketplace</p>
         </div>
         '''
-        asyncio.create_task(send_email_async(email, "🔐 Your OEMLinker Login Code", otp_html))
+        asyncio.create_task(send_email_async(user_email, "🔐 Your OEMLinker Login Code", otp_html))
         
-        logger.info(f"2FA OTP sent to: {email} from IP: {client_ip}")
+        logger.info(f"2FA OTP sent to: {user_email} from IP: {client_ip}")
         
         return {
             "requires_2fa": True,
             "message": "Verification code sent to your email",
-            "email_hint": f"{email[:3]}***{email[email.index('@'):]}"
+            "email_hint": f"{user_email[:3]}***{user_email[user_email.index('@'):]}"
         }
     
     # No 2FA - proceed with normal login
-    record_login_attempt(email, True)
+    record_login_attempt(login_id, True)
     
     # Update user login info
     await db.users.update_one(
-        {"email": email},
+        {"user_id": user["user_id"]},
         {
             "$set": {
                 "last_login": datetime.now(timezone.utc).isoformat(),
@@ -1606,7 +1622,7 @@ async def login(login_data: LoginRequest, request: Request):
         }
     )
     
-    logger.info(f"Successful login: {email} from IP: {client_ip}")
+    logger.info(f"Successful login: {login_id} from IP: {client_ip}")
     
     token = create_jwt_token(user["user_id"], user["email"], user["role"])
     
@@ -1620,7 +1636,7 @@ async def login(login_data: LoginRequest, request: Request):
             picture=user.get("picture"),
             company_name=user.get("company_name"),
             email_verified=user.get("email_verified", False),
-            created_at=user["created_at"]
+            created_at=user.get("created_at", datetime.now(timezone.utc).isoformat())
         )
     )
 
@@ -10093,7 +10109,7 @@ Contact support@oemlinker.com for assistance."""
 async def process_whatsapp_registration(sender: str, gst_number: str) -> str:
     """Process vendor registration via WhatsApp using GST number"""
     import secrets
-    import string
+    import random
     
     try:
         # Check if GST is already registered
@@ -10107,6 +10123,16 @@ If this is your account, please:
 1. Login at https://oemlinker.com/login
 2. Update your phone number in profile settings
 
+Or contact support@oemlinker.com for help."""
+
+        # Check if phone number is already registered
+        existing_user = await db.users.find_one({"phone": sender}, {"_id": 0})
+        if existing_user:
+            return f"""⚠️ *Phone Already Registered*
+
+This phone number is already linked to an account.
+
+Please login at https://oemlinker.com/login
 Or contact support@oemlinker.com for help."""
 
         # Validate GST using external API
@@ -10148,25 +10174,25 @@ You can also register manually at https://oemlinker.com/register"""
         state = gst_data.get("pradr", {}).get("stcd", "")
         pincode = gst_data.get("pradr", {}).get("pncd", "")
         
-        # Generate email from GST (temporary)
-        email_base = gst_number.lower().replace(" ", "")
-        temp_email = f"{email_base}@oemlinker.vendor"
+        # Use phone number as login ID (normalized - remove + and spaces)
+        phone_login = sender.replace("+", "").replace(" ", "").replace("-", "")
         
-        # Generate temporary password
-        temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
+        # Generate 6-digit numeric password
+        numeric_password = ''.join([str(random.randint(0, 9)) for _ in range(6)])
         
         # Create user account
         user_id = f"user_{uuid.uuid4().hex[:12]}"
-        password_hash = pwd_context.hash(temp_password)
+        password_hash = pwd_context.hash(numeric_password)
         
         user_doc = {
             "user_id": user_id,
-            "email": temp_email,
+            "email": phone_login,  # Phone number as login ID
             "password_hash": password_hash,
             "name": company_name,
             "role": UserRole.VENDOR,
             "is_verified": True,  # Auto-verify for WhatsApp registration
             "phone": sender,
+            "phone_login": True,  # Flag to indicate phone-based login
             "created_at": datetime.now(timezone.utc).isoformat(),
             "registered_via": "whatsapp"
         }
@@ -10209,7 +10235,7 @@ You can also register manually at https://oemlinker.com/register"""
             "registered_via": "WhatsApp"
         }))
         
-        logger.info(f"New vendor registered via WhatsApp: {company_name} (GST: {gst_number})")
+        logger.info(f"New vendor registered via WhatsApp: {company_name} (GST: {gst_number}, Phone: {phone_login})")
         
         return f"""🎉 *Registration Successful!*
 
@@ -10219,23 +10245,19 @@ Welcome to *OEMLinker*, {company_name}!
 🏢 Company: {company_name}
 📋 GST: {gst_number}
 📍 Location: {city}, {state}
-📞 Phone: {sender}
 
 🔐 *Login Credentials:*
-Email: {temp_email}
-Password: {temp_password}
+📱 Login ID: *{phone_login}*
+🔑 Password: *{numeric_password}*
 
-⚠️ *Important:*
-1. Please update your email at https://oemlinker.com/vendor/profile
-2. Add your machines to start receiving RFQ matches
-3. Your account is pending admin approval
+⚠️ Please save your password securely!
 
 💡 *Next Steps:*
-• Type *help* to see available commands
-• Type *rfqs* to view matching opportunities
+• Login at https://oemlinker.com/login
+• Add your machines to receive RFQ matches
+• Type *help* to see WhatsApp commands
 
-🔗 Complete your profile:
-https://oemlinker.com/vendor/profile"""
+📷 *Quick Tip:* Send machine photos to add them instantly!"""
 
     except Exception as e:
         logger.error(f"WhatsApp registration error: {str(e)}")
