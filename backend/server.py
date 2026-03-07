@@ -8995,6 +8995,9 @@ Need help? Contact support@oemlinker.com"""
     if not vendor:
         return "⚠️ Please register and link your phone number at oemlinker.com to use this service."
     
+    # Base URL for links
+    BASE_URL = "https://oemlinker.com"
+    
     # List RFQs command - expanded variations for voice
     rfq_variants = ["rfqs", "rfq", "jobs", "opportunities", "open rfqs", "show rfqs", "list rfqs", 
                     "our effects", "our fq", "r f q", "requests", "request for quote"]
@@ -9009,10 +9012,11 @@ Need help? Contact support@oemlinker.com"""
         ).sort("created_at", -1).limit(5).to_list(length=5)
         
         if not rfqs:
-            return "📭 No matching RFQs found at the moment. We'll notify you when new opportunities arise!"
+            return f"📭 No matching RFQs found at the moment.\n\n🔗 View all RFQs: {BASE_URL}/vendor/dashboard"
         
         response = "📋 *Your Matched RFQs:*\n\n"
         for rfq in rfqs:
+            rfq_id = rfq.get('rfq_id', '')
             urgency_emoji = {"urgent": "🔴", "high": "🟠", "normal": "🟢", "low": "🔵"}.get(rfq.get("urgency", "normal"), "🟢")
             # Find match score for this vendor
             match_score = 0
@@ -9022,11 +9026,11 @@ Need help? Contact support@oemlinker.com"""
                     break
             
             response += f"{urgency_emoji} *{rfq.get('title', 'Untitled')[:30]}*\n"
-            response += f"   ID: `{rfq.get('rfq_id', '')[:8]}`\n"
-            response += f"   Material: {rfq.get('material_type', 'N/A')}\n"
-            response += f"   Qty: {rfq.get('quantity', 'N/A')} | Match: {match_score}%\n\n"
+            response += f"   Material: {rfq.get('material_type', 'N/A')} | Qty: {rfq.get('quantity', 'N/A')}\n"
+            response += f"   Match: {match_score}%\n"
+            response += f"   🔗 {BASE_URL}/vendor/rfq/{rfq_id}\n\n"
         
-        response += "_Reply with *details <id>* for more info_"
+        response += f"📱 _View all on dashboard:_ {BASE_URL}/vendor/dashboard"
         return response
     
     # RFQ Details command
@@ -9053,6 +9057,7 @@ Need help? Contact support@oemlinker.com"""
         if not rfq:
             return f"⚠️ RFQ with ID '{rfq_id_search}' not found. Use *rfqs* to see available opportunities."
         
+        rfq_id = rfq.get('rfq_id', '')
         urgency_label = URGENCY_LABELS.get(rfq.get("urgency", "normal"), "Normal")
         
         response = f"""📋 *RFQ Details*
@@ -9072,7 +9077,8 @@ Need help? Contact support@oemlinker.com"""
 📅 Deadline: {rfq.get('deadline', 'Not specified')}
 🏷️ Status: {rfq.get('status', 'N/A').replace('_', ' ').title()}
 
-💰 To submit a quote, please login to oemlinker.com"""
+🔗 *View & Submit Quote:*
+{BASE_URL}/vendor/rfq/{rfq_id}"""
         
         return response
     
@@ -9086,19 +9092,23 @@ Need help? Contact support@oemlinker.com"""
         ).sort("created_at", -1).limit(5).to_list(length=5)
         
         if not quotes:
-            return "📭 You haven't submitted any quotes yet. Use *rfqs* to find opportunities!"
+            return f"📭 You haven't submitted any quotes yet.\n\n🔗 Find RFQs: {BASE_URL}/vendor/dashboard"
         
         response = "💰 *Your Recent Quotes:*\n\n"
         for quote in quotes:
+            quote_id = quote.get('quote_id', '')
+            rfq_id = quote.get('rfq_id', '')
             status_emoji = {"pending": "⏳", "accepted": "✅", "rejected": "❌"}.get(quote.get("status", "pending"), "⏳")
-            rfq = await db.rfqs.find_one({"rfq_id": quote.get("rfq_id")}, {"_id": 0, "title": 1})
+            rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0, "title": 1})
             rfq_title = rfq.get("title", "Unknown") if rfq else "Unknown"
             
             response += f"{status_emoji} *{rfq_title[:25]}*\n"
             response += f"   Amount: ₹{quote.get('price', 0):,.2f}\n"
             response += f"   Lead Time: {quote.get('lead_time_days', 'N/A')} days\n"
-            response += f"   Status: {quote.get('status', 'pending').title()}\n\n"
+            response += f"   Status: {quote.get('status', 'pending').title()}\n"
+            response += f"   🔗 {BASE_URL}/vendor/rfq/{rfq_id}\n\n"
         
+        response += f"📱 _View all quotes:_ {BASE_URL}/vendor/quotes"
         return response
     
     # My Orders command - expanded variations for voice (common misheard: "my odors", "my oders")
@@ -9111,10 +9121,11 @@ Need help? Contact support@oemlinker.com"""
         ).sort("created_at", -1).limit(5).to_list(length=5)
         
         if not orders:
-            return "📭 No active orders. Keep submitting competitive quotes!"
+            return f"📭 No active orders.\n\n🔗 View dashboard: {BASE_URL}/vendor/dashboard"
         
         response = "📦 *Your Active Orders:*\n\n"
         for order in orders:
+            order_id = order.get('order_id', '')
             status_emoji = {
                 "pending_payment": "💳",
                 "paid": "✅",
@@ -9126,8 +9137,10 @@ Need help? Contact support@oemlinker.com"""
             
             response += f"{status_emoji} *PO #{order.get('po_number', 'N/A')}*\n"
             response += f"   Amount: ₹{order.get('total_amount', 0):,.2f}\n"
-            response += f"   Status: {order.get('status', 'N/A').replace('_', ' ').title()}\n\n"
+            response += f"   Status: {order.get('status', 'N/A').replace('_', ' ').title()}\n"
+            response += f"   🔗 {BASE_URL}/vendor/order/{order_id}\n\n"
         
+        response += f"📱 _View all orders:_ {BASE_URL}/vendor/orders"
         return response
     
     # Profile command - expanded variations for voice
@@ -9144,7 +9157,8 @@ Need help? Contact support@oemlinker.com"""
 📊 Total Jobs: {vendor.get('total_jobs', 0)}
 ✅ Approved: {'Yes' if vendor.get('is_approved') else 'Pending'}
 
-_Update your profile at oemlinker.com_"""
+🔗 *Edit Profile:* {BASE_URL}/vendor/profile
+🔗 *Manage Machines:* {BASE_URL}/vendor/machines"""
         return response
     
     # Natural language query using AI
