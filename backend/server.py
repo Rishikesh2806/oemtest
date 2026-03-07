@@ -8870,8 +8870,24 @@ async def process_whatsapp_command(
 ) -> str:
     """Process WhatsApp commands and return response"""
     
-    # Help command
-    if text in ["help", "hi", "hello", "menu", "start"]:
+    # Normalize text for fuzzy matching (voice transcription can be inaccurate)
+    text_normalized = text.lower().strip()
+    
+    # Helper function for fuzzy command matching
+    def matches_command(input_text: str, commands: list) -> bool:
+        input_text = input_text.lower().strip()
+        for cmd in commands:
+            if cmd in input_text or input_text in cmd:
+                return True
+            # Check for common voice transcription errors
+            # "my orders" -> "my odors", "my oders", "myorders"
+            if cmd.replace(" ", "") in input_text.replace(" ", ""):
+                return True
+        return False
+    
+    # Help command - expanded variations
+    help_variants = ["help", "hi", "hello", "menu", "start", "hey", "helo", "assist", "assistance"]
+    if matches_command(text_normalized, help_variants):
         if vendor:
             return f"""👋 Welcome to *OEMLinker*, {vendor.get('company_name', 'Vendor')}!
 
@@ -8904,8 +8920,10 @@ Need help? Contact support@oemlinker.com"""
     if not vendor:
         return "⚠️ Please register and link your phone number at oemlinker.com to use this service."
     
-    # List RFQs command
-    if text in ["rfqs", "rfq", "jobs", "opportunities", "open rfqs"]:
+    # List RFQs command - expanded variations for voice
+    rfq_variants = ["rfqs", "rfq", "jobs", "opportunities", "open rfqs", "show rfqs", "list rfqs", 
+                    "our effects", "our fq", "r f q", "requests", "request for quote"]
+    if matches_command(text_normalized, rfq_variants):
         # Get matched RFQs for this vendor
         rfqs = await db.rfqs.find(
             {
@@ -8983,8 +9001,10 @@ Need help? Contact support@oemlinker.com"""
         
         return response
     
-    # My Quotes command
-    if text in ["my quotes", "quotes", "my bids"]:
+    # My Quotes command - expanded variations for voice
+    quotes_variants = ["my quotes", "quotes", "my bids", "my quote", "my cords", "my courts", 
+                       "myquotes", "show quotes", "list quotes", "my quotations"]
+    if matches_command(text_normalized, quotes_variants):
         quotes = await db.quotes.find(
             {"vendor_id": vendor.get("vendor_id")},
             {"_id": 0}
@@ -9006,8 +9026,10 @@ Need help? Contact support@oemlinker.com"""
         
         return response
     
-    # My Orders command
-    if text in ["my orders", "orders", "active orders"]:
+    # My Orders command - expanded variations for voice (common misheard: "my odors", "my oders")
+    orders_variants = ["my orders", "orders", "active orders", "my order", "my odors", "my oders",
+                       "myorders", "show orders", "list orders", "my auto", "my autos"]
+    if matches_command(text_normalized, orders_variants):
         orders = await db.orders.find(
             {"vendor_id": vendor.get("vendor_id"), "status": {"$nin": ["cancelled", "completed"]}},
             {"_id": 0}
@@ -9033,8 +9055,10 @@ Need help? Contact support@oemlinker.com"""
         
         return response
     
-    # Profile command
-    if text in ["profile", "my profile", "account"]:
+    # Profile command - expanded variations for voice
+    profile_variants = ["profile", "my profile", "account", "my account", "my profil", "profil",
+                        "show profile", "my details", "vendor profile"]
+    if matches_command(text_normalized, profile_variants):
         response = f"""👤 *Your Vendor Profile*
 
 🏢 *{vendor.get('company_name', 'N/A')}*
@@ -9049,7 +9073,7 @@ _Update your profile at oemlinker.com_"""
         return response
     
     # Natural language query using AI
-    if EMERGENT_LLM_KEY and len(text) > 10:
+    if EMERGENT_LLM_KEY and len(text_normalized) > 5:
         try:
             # Use AI to understand and respond to the query
             llm = LlmChat(api_key=EMERGENT_LLM_KEY, model="gpt-4o-mini")
