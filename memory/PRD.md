@@ -375,6 +375,44 @@ Allows vendors to upload CSV files to import multiple machines at once:
 
 ### Test Report: /app/test_reports/iteration_15.json (100% pass)
 
+## Vendor Registration via WhatsApp GST Certificate Upload (Added Mar 7, 2026)
+Allows vendors to register on OEMLinker by uploading their GST certificate image via WhatsApp:
+
+### Features:
+- **Image Processing**: Upload GST certificate image via WhatsApp
+- **AI GSTIN Extraction**: OpenAI Vision extracts GSTIN from the certificate
+- **Auto-Validation**: Validates GSTIN format (15-char pattern with state code and Z at position 13)
+- **GST API Verification**: Validates GSTIN with external GST API and fetches company details
+- **Auto-Registration**: Creates user account and vendor profile with extracted data
+- **Confirmation Messages**: Step-by-step WhatsApp messages during registration
+- **Error Handling**: Clear error messages for invalid images, unclear photos, or failed downloads
+
+### Registration Flow:
+1. Unregistered vendor sends GST certificate image to WhatsApp
+2. Webhook receives image URL from Gupshup
+3. Image downloaded and analyzed via OpenAI Vision
+4. AI extracts GSTIN from the certificate
+5. GSTIN format validated (regex pattern)
+6. GST API called to verify and fetch company details
+7. User account and vendor profile created
+8. Login credentials sent back via WhatsApp
+
+### GSTIN Pattern:
+- Format: `^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}[Z]{1}[0-9A-Z]{1}$`
+- Example: `27AABCU9603R1ZM` (Maharashtra)
+- First 2 digits: State code (01-38)
+- Position 13: Always 'Z'
+
+### API Endpoints:
+- `POST /api/whatsapp/webhook` - Enhanced to handle image messages for GST extraction
+
+### Files:
+- `/app/backend/server.py` - `process_gst_certificate_image` function (lines 9033-9175)
+- `/app/backend/server.py` - `process_whatsapp_registration` function (lines 9184-9340)
+- `/app/backend/tests/test_gst_certificate_upload.py` - Comprehensive test suite
+
+### Test Report: /app/test_reports/iteration_16.json (100% pass - 40 tests)
+
 ## Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders
