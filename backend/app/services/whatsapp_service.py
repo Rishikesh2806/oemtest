@@ -57,11 +57,18 @@ class WhatsAppService:
             "apikey": self.api_key
         }
         
+        # Message must be JSON encoded for Gupshup WhatsApp API
+        import json
+        message_payload = json.dumps({
+            "type": "text",
+            "text": message
+        })
+        
         payload = {
             "channel": "whatsapp",
             "source": self.source_number,
             "destination": to_number,
-            "message": message,
+            "message": message_payload,
             "src.name": self.app_name
         }
         
