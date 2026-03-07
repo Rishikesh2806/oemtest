@@ -8929,30 +8929,35 @@ async def process_whatsapp_command(
                     return True
         return False
     
-    # Also check for action verbs + command patterns
+    # Also check for action verbs + command patterns (including Indian languages)
     def extract_intent(input_text: str) -> str:
-        """Extract intent from natural language sentences"""
+        """Extract intent from natural language sentences - supports Indian languages"""
         input_text = input_text.lower()
         
-        # Patterns for RFQs
-        if any(word in input_text for word in ["rfq", "rfqs", "job", "jobs", "opportunit", "request"]):
-            if "show" in input_text or "list" in input_text or "get" in input_text or "find" in input_text or "view" in input_text:
-                return "rfqs"
+        # Patterns for RFQs (English + Hindi keywords)
+        rfq_keywords = ["rfq", "rfqs", "job", "jobs", "opportunit", "request", 
+                        "काम", "नौकरी", "अवसर", "आरएफक्यू", "कोटेशन", "রিক्वেস্ট"]
+        if any(word in input_text for word in rfq_keywords):
+            return "rfqs"
         
-        # Patterns for orders
-        if "order" in input_text or "odor" in input_text:
+        # Patterns for orders (English + Hindi keywords)
+        order_keywords = ["order", "odor", "ऑर्डर", "आर्डर", "অর্ডার", "ಆರ್ಡರ್"]
+        if any(word in input_text for word in order_keywords):
             return "orders"
         
-        # Patterns for quotes
-        if "quote" in input_text or "quot" in input_text or "bid" in input_text:
+        # Patterns for quotes (English + Hindi keywords)
+        quote_keywords = ["quote", "quot", "bid", "कोट", "बोली", "কোট", "மேற்கோள்"]
+        if any(word in input_text for word in quote_keywords):
             return "quotes"
         
-        # Patterns for profile
-        if "profile" in input_text or "profil" in input_text or "account" in input_text:
+        # Patterns for profile (English + Hindi keywords)
+        profile_keywords = ["profile", "profil", "account", "प्रोफाइल", "खाता", "প্রোফাইল"]
+        if any(word in input_text for word in profile_keywords):
             return "profile"
         
-        # Patterns for help
-        if "help" in input_text or "command" in input_text or "what can" in input_text:
+        # Patterns for help (English + Hindi keywords)
+        help_keywords = ["help", "command", "what can", "मदद", "सहायता", "সাহায্য", "உதவி"]
+        if any(word in input_text for word in help_keywords):
             return "help"
         
         return ""
@@ -8960,8 +8965,10 @@ async def process_whatsapp_command(
     # First try to extract intent from natural language
     intent = extract_intent(text_normalized)
     
-    # Help command - expanded variations
-    help_variants = ["help", "hi", "hello", "menu", "start", "hey", "helo", "assist", "assistance"]
+    # Help command - expanded with Indian languages
+    help_variants = ["help", "hi", "hello", "menu", "start", "hey", "helo", "assist", "assistance",
+                     *hindi_help, *tamil_help, *telugu_help, *marathi_help,
+                     *bengali_help, *gujarati_help, *kannada_help, *punjabi_help]
     if intent == "help" or matches_command(text_normalized, help_variants):
         if vendor:
             return f"""👋 Welcome to *OEMLinker*, {vendor.get('company_name', 'Vendor')}!
@@ -8998,9 +9005,68 @@ Need help? Contact support@oemlinker.com"""
     # Base URL for links
     BASE_URL = "https://oemlinker.com"
     
-    # List RFQs command - expanded variations for voice
+    # ===== INDIAN LANGUAGE SUPPORT =====
+    # Hindi variants
+    hindi_rfq = ["आरएफक्यू", "काम", "नौकरी", "अवसर", "काम दिखाओ", "आर्डर दिखाओ", "कोटेशन", "रिक्वेस्ट"]
+    hindi_orders = ["मेरे ऑर्डर", "ऑर्डर", "आर्डर", "मेरा आर्डर", "ऑर्डर दिखाओ", "आर्डर दिखाओ"]
+    hindi_quotes = ["मेरे कोट्स", "कोट्स", "मेरा कोट", "बोली", "मेरी बोली", "कोटेशन"]
+    hindi_profile = ["प्रोफाइल", "मेरी प्रोफाइल", "अकाउंट", "खाता", "मेरा खाता"]
+    hindi_help = ["मदद", "सहायता", "हेल्प", "मेन्यू", "शुरू"]
+    
+    # Tamil variants
+    tamil_rfq = ["வேலை", "வாய்ப்பு", "கோரிக்கை"]
+    tamil_orders = ["என் ஆர்டர்", "ஆர்டர்கள்", "ஆர்டர்"]
+    tamil_quotes = ["என் மேற்கோள்", "மேற்கோள்கள்"]
+    tamil_profile = ["சுயவிவரம்", "என் சுயவிவரம்"]
+    tamil_help = ["உதவி", "மெனு"]
+    
+    # Telugu variants  
+    telugu_rfq = ["పని", "అవకాశం", "అభ్యర్థన"]
+    telugu_orders = ["నా ఆర్డర్లు", "ఆర్డర్లు"]
+    telugu_quotes = ["నా కోట్స్", "కోట్స్"]
+    telugu_profile = ["ప్రొఫైల్", "నా ప్రొఫైల్"]
+    telugu_help = ["సహాయం", "మెను"]
+    
+    # Marathi variants
+    marathi_rfq = ["काम", "संधी", "विनंती"]
+    marathi_orders = ["माझे ऑर्डर", "ऑर्डर"]
+    marathi_quotes = ["माझे कोट्स", "कोट्स"]
+    marathi_profile = ["प्रोफाइल", "माझी प्रोफाइल"]
+    marathi_help = ["मदत", "मेनू"]
+    
+    # Bengali variants
+    bengali_rfq = ["কাজ", "সুযোগ", "অনুরোধ"]
+    bengali_orders = ["আমার অর্ডার", "অর্ডার"]
+    bengali_quotes = ["আমার কোট", "কোট"]
+    bengali_profile = ["প্রোফাইল", "আমার প্রোফাইল"]
+    bengali_help = ["সাহায্য", "মেনু"]
+    
+    # Gujarati variants
+    gujarati_rfq = ["કામ", "તક", "વિનંતી"]
+    gujarati_orders = ["મારા ઓર્ડર", "ઓર્ડર"]
+    gujarati_quotes = ["મારા કોટ્સ", "કોટ્સ"]
+    gujarati_profile = ["પ્રોફાઇલ", "મારી પ્રોફાઇલ"]
+    gujarati_help = ["મદદ", "મેનુ"]
+    
+    # Kannada variants
+    kannada_rfq = ["ಕೆಲಸ", "ಅವಕಾಶ"]
+    kannada_orders = ["ನನ್ನ ಆರ್ಡರ್", "ಆರ್ಡರ್"]
+    kannada_quotes = ["ನನ್ನ ಕೋಟ್ಸ್", "ಕೋಟ್ಸ್"]
+    kannada_profile = ["ಪ್ರೊಫೈಲ್"]
+    kannada_help = ["ಸಹಾಯ", "ಮೆನು"]
+    
+    # Punjabi variants
+    punjabi_rfq = ["ਕੰਮ", "ਮੌਕਾ"]
+    punjabi_orders = ["ਮੇਰੇ ਆਰਡਰ", "ਆਰਡਰ"]
+    punjabi_quotes = ["ਮੇਰੇ ਕੋਟਸ", "ਕੋਟਸ"]
+    punjabi_profile = ["ਪ੍ਰੋਫਾਈਲ"]
+    punjabi_help = ["ਮਦਦ", "ਮੀਨੂ"]
+    
+    # List RFQs command - expanded with Indian languages
     rfq_variants = ["rfqs", "rfq", "jobs", "opportunities", "open rfqs", "show rfqs", "list rfqs", 
-                    "our effects", "our fq", "r f q", "requests", "request for quote"]
+                    "our effects", "our fq", "r f q", "requests", "request for quote",
+                    *hindi_rfq, *tamil_rfq, *telugu_rfq, *marathi_rfq, *bengali_rfq, 
+                    *gujarati_rfq, *kannada_rfq, *punjabi_rfq]
     if intent == "rfqs" or matches_command(text_normalized, rfq_variants):
         # Get matched RFQs for this vendor
         rfqs = await db.rfqs.find(
@@ -9082,9 +9148,11 @@ Need help? Contact support@oemlinker.com"""
         
         return response
     
-    # My Quotes command - expanded variations for voice
+    # My Quotes command - expanded with Indian languages
     quotes_variants = ["my quotes", "quotes", "my bids", "my quote", "my cords", "my courts", 
-                       "myquotes", "show quotes", "list quotes", "my quotations"]
+                       "myquotes", "show quotes", "list quotes", "my quotations",
+                       *hindi_quotes, *tamil_quotes, *telugu_quotes, *marathi_quotes, 
+                       *bengali_quotes, *gujarati_quotes, *kannada_quotes, *punjabi_quotes]
     if intent == "quotes" or matches_command(text_normalized, quotes_variants):
         quotes = await db.quotes.find(
             {"vendor_id": vendor.get("vendor_id")},
@@ -9111,9 +9179,11 @@ Need help? Contact support@oemlinker.com"""
         response += f"📱 _View all quotes:_ {BASE_URL}/vendor/quotes"
         return response
     
-    # My Orders command - expanded variations for voice (common misheard: "my odors", "my oders")
+    # My Orders command - expanded with Indian languages
     orders_variants = ["my orders", "orders", "active orders", "my order", "my odors", "my oders",
-                       "myorders", "show orders", "list orders", "my auto", "my autos"]
+                       "myorders", "show orders", "list orders", "my auto", "my autos",
+                       *hindi_orders, *tamil_orders, *telugu_orders, *marathi_orders,
+                       *bengali_orders, *gujarati_orders, *kannada_orders, *punjabi_orders]
     if intent == "orders" or matches_command(text_normalized, orders_variants):
         orders = await db.orders.find(
             {"vendor_id": vendor.get("vendor_id"), "status": {"$nin": ["cancelled", "completed"]}},
@@ -9143,9 +9213,11 @@ Need help? Contact support@oemlinker.com"""
         response += f"📱 _View all orders:_ {BASE_URL}/vendor/orders"
         return response
     
-    # Profile command - expanded variations for voice
+    # Profile command - expanded with Indian languages
     profile_variants = ["profile", "my profile", "account", "my account", "my profil", "profil",
-                        "show profile", "my details", "vendor profile"]
+                        "show profile", "my details", "vendor profile",
+                        *hindi_profile, *tamil_profile, *telugu_profile, *marathi_profile,
+                        *bengali_profile, *gujarati_profile, *kannada_profile, *punjabi_profile]
     if intent == "profile" or matches_command(text_normalized, profile_variants):
         response = f"""👤 *Your Vendor Profile*
 
