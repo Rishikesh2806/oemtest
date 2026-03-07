@@ -8781,7 +8781,7 @@ async def whatsapp_webhook(request: Request):
 
 async def process_voice_message(audio_url: str, sender: str, vendor: Optional[dict], user: Optional[dict]) -> Optional[str]:
     """
-    Process voice message: download audio, transcribe using Whisper, return text
+    Process voice message: download audio, convert to supported format, transcribe using Whisper, return text
     """
     if not EMERGENT_LLM_KEY:
         logger.warning("Emergent LLM key not configured for voice processing")
@@ -8789,6 +8789,9 @@ async def process_voice_message(audio_url: str, sender: str, vendor: Optional[di
     
     try:
         from app.services.whatsapp_service import download_audio_from_url
+        from pydub import AudioSegment
+        import tempfile
+        import os
         
         # Download audio file
         logger.info(f"Downloading voice message from {audio_url[:50]}...")
@@ -8798,12 +8801,43 @@ async def process_voice_message(audio_url: str, sender: str, vendor: Optional[di
             logger.error("Failed to download audio from Gupshup")
             return None
         
+        logger.info(f"Downloaded audio: {len(audio_bytes)} bytes")
+        
+        # Convert OGG/OPUS to MP3 using pydub (Whisper supports mp3, mp4, wav, webm)
+        try:
+            # Write original audio to temp file
+            with tempfile.NamedTemporaryFile(suffix='.ogg', delete=False) as temp_ogg:
+                temp_ogg.write(audio_bytes)
+                temp_ogg_path = temp_ogg.name
+            
+            # Convert to MP3
+            audio = AudioSegment.from_file(temp_ogg_path, format="ogg")
+            
+            # Export to MP3
+            temp_mp3_path = temp_ogg_path.replace('.ogg', '.mp3')
+            audio.export(temp_mp3_path, format="mp3")
+            
+            # Read converted MP3
+            with open(temp_mp3_path, 'rb') as f:
+                mp3_bytes = f.read()
+            
+            # Clean up temp files
+            os.unlink(temp_ogg_path)
+            os.unlink(temp_mp3_path)
+            
+            logger.info(f"Converted audio to MP3: {len(mp3_bytes)} bytes")
+            
+        except Exception as conv_error:
+            logger.error(f"Audio conversion error: {str(conv_error)}")
+            # Try using original bytes as fallback
+            mp3_bytes = audio_bytes
+        
         # Transcribe using Whisper
-        logger.info(f"Transcribing voice message ({len(audio_bytes)} bytes)...")
+        logger.info(f"Transcribing voice message...")
         
         stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
-        audio_file = BytesIO(audio_bytes)
-        audio_file.name = "voice_message.ogg"  # WhatsApp voice messages are typically OGG
+        audio_file = BytesIO(mp3_bytes)
+        audio_file.name = "voice_message.mp3"
         
         transcription_result = await stt.transcribe(file=audio_file)
         transcription = transcription_result.text if hasattr(transcription_result, 'text') else str(transcription_result)
