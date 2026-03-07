@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Request, Response
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -725,6 +725,8 @@ class Machine(BaseModel):
     machine_type: str
     brand: str
     model: str
+    # Machine images
+    images: List[str] = []  # List of image URLs
     # Standard dimensions
     max_x: Optional[float] = None
     max_y: Optional[float] = None
@@ -790,6 +792,8 @@ class MachineCreate(BaseModel):
     machine_type: str
     brand: str
     model: str
+    # Machine images
+    images: List[str] = []  # List of image URLs
     # Standard dimensions
     max_x: Optional[float] = None
     max_y: Optional[float] = None
@@ -2849,6 +2853,124 @@ async def delete_machine(machine_id: str, user: dict = Depends(get_current_user)
         raise HTTPException(status_code=404, detail="Machine not found")
     
     return {"message": "Machine deleted"}
+
+# Machine Image Upload
+@api_router.post("/machines/{machine_id}/images")
+async def upload_machine_image(
+    machine_id: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user)
+):
+    """Upload an image for a machine"""
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    machine = await db.machines.find_one(
+        {"machine_id": machine_id, "vendor_id": vendor["vendor_id"]},
+        {"_id": 0}
+    )
+    if not machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, and WebP images are allowed")
+    
+    # Read file content
+    content = await file.read()
+    
+    # Check file size (max 5MB)
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image size must be less than 5MB")
+    
+    # Generate unique filename
+    file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    filename = f"machine_{machine_id}_{uuid.uuid4().hex[:8]}.{file_ext}"
+    
+    # Store in uploads directory
+    uploads_dir = "/app/uploads/machines"
+    os.makedirs(uploads_dir, exist_ok=True)
+    file_path = os.path.join(uploads_dir, filename)
+    
+    with open(file_path, "wb") as f:
+        f.write(content)
+    
+    # Generate URL - use the API endpoint to serve the image
+    image_url = f"/api/uploads/machines/{filename}"
+    
+    # Update machine with new image
+    current_images = machine.get("images", [])
+    current_images.append(image_url)
+    
+    await db.machines.update_one(
+        {"machine_id": machine_id},
+        {"$set": {"images": current_images}}
+    )
+    
+    logger.info(f"Machine image uploaded: {machine_id} - {filename}")
+    
+    return {"image_url": image_url, "images": current_images}
+
+@api_router.delete("/machines/{machine_id}/images")
+async def delete_machine_image(
+    machine_id: str,
+    image_url: str,
+    user: dict = Depends(get_current_user)
+):
+    """Delete an image from a machine"""
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    machine = await db.machines.find_one(
+        {"machine_id": machine_id, "vendor_id": vendor["vendor_id"]},
+        {"_id": 0}
+    )
+    if not machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    
+    current_images = machine.get("images", [])
+    if image_url not in current_images:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Remove from list
+    current_images.remove(image_url)
+    
+    await db.machines.update_one(
+        {"machine_id": machine_id},
+        {"$set": {"images": current_images}}
+    )
+    
+    # Optionally delete file from disk
+    if image_url.startswith("/api/uploads/machines/"):
+        filename = image_url.split("/")[-1]
+        file_path = f"/app/uploads/machines/{filename}"
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    
+    return {"message": "Image deleted", "images": current_images}
+
+# Serve uploaded machine images
+@api_router.get("/uploads/machines/{filename}")
+async def serve_machine_image(filename: str):
+    """Serve uploaded machine images"""
+    file_path = f"/app/uploads/machines/{filename}"
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Determine content type
+    ext = filename.split(".")[-1].lower()
+    content_types = {
+        "jpg": "image/jpeg",
+        "jpeg": "image/jpeg",
+        "png": "image/png",
+        "webp": "image/webp"
+    }
+    content_type = content_types.get(ext, "image/jpeg")
+    
+    return FileResponse(file_path, media_type=content_type)
 
 # Machine Availability Update
 class MachineAvailabilityUpdate(BaseModel):

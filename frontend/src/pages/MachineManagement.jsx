@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { 
   Plus, Wrench, Loader2, Edit2, Trash2, 
   Cog, Maximize2, Settings, CheckCircle2, Clock, AlertTriangle, Power,
-  Upload, Download, FileSpreadsheet, X, Check
+  Upload, Download, FileSpreadsheet, X, Check, Image, Camera
 } from "lucide-react";
 
 const MATERIALS = [
@@ -38,7 +38,8 @@ const emptyMachine = {
   tonnage: 0,
   max_taper_angle: 0,
   materials_supported: [],
-  monthly_capacity_hours: 160
+  monthly_capacity_hours: 160,
+  images: []
 };
 
 const MachineManagement = () => {
@@ -71,6 +72,12 @@ const MachineManagement = () => {
   const [bulkImportLoading, setBulkImportLoading] = useState(false);
   const [bulkImportResult, setBulkImportResult] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+
+  // Image upload state
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+  const [selectedMachineForImage, setSelectedMachineForImage] = useState(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState(null);
 
   useEffect(() => {
     fetchMachines();
@@ -410,6 +417,96 @@ const MachineManagement = () => {
     setBulkImportFile(null);
     setBulkImportResult(null);
   };
+
+  // Image management functions
+  const openImageDialog = (machine) => {
+    setSelectedMachineForImage(machine);
+    setImagePreview(null);
+    setImageDialogOpen(true);
+  };
+
+  const handleImageSelect = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error("Please select an image file");
+      return;
+    }
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be less than 5MB");
+      return;
+    }
+
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = (e) => setImagePreview(e.target.result);
+    reader.readAsDataURL(file);
+
+    // Upload image
+    await uploadMachineImage(file);
+  };
+
+  const uploadMachineImage = async (file) => {
+    if (!selectedMachineForImage) return;
+
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await api.post(
+        `/machines/${selectedMachineForImage.machine_id}/images`,
+        formData,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      );
+
+      toast.success("Image uploaded successfully");
+      
+      // Update local state
+      setSelectedMachineForImage(prev => ({
+        ...prev,
+        images: response.data.images
+      }));
+      
+      // Refresh machines list
+      fetchMachines();
+      setImagePreview(null);
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to upload image");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const deleteMachineImage = async (imageUrl) => {
+    if (!selectedMachineForImage) return;
+    if (!confirm("Delete this image?")) return;
+
+    try {
+      const response = await api.delete(
+        `/machines/${selectedMachineForImage.machine_id}/images`,
+        { params: { image_url: imageUrl } }
+      );
+
+      toast.success("Image deleted");
+      
+      // Update local state
+      setSelectedMachineForImage(prev => ({
+        ...prev,
+        images: response.data.images
+      }));
+      
+      fetchMachines();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to delete image");
+    }
+  };
+
+  const getMachineImages = (machine) => machine.images || [];
 
   const getMachineName = (machine) => machine.name || `${machine.brand} ${machine.model}`.trim() || "Unnamed Machine";
   const getMachineTolerance = (machine) => machine.tolerance || machine.tolerance_capability || 0;
@@ -817,7 +914,39 @@ const MachineManagement = () => {
               const availBadge = getAvailabilityBadge(machine);
               const AvailIcon = availBadge.icon;
               return (
-              <Card key={machine.machine_id} className="border-slate-200 hover:border-orange-200 transition-colors">
+              <Card key={machine.machine_id} className="border-slate-200 hover:border-orange-200 transition-colors overflow-hidden">
+                {/* Machine Image Display */}
+                {getMachineImages(machine).length > 0 ? (
+                  <div className="relative h-32 bg-slate-100">
+                    <img 
+                      src={getMachineImages(machine)[0]} 
+                      alt={getMachineName(machine)}
+                      className="w-full h-full object-cover"
+                    />
+                    {getMachineImages(machine).length > 1 && (
+                      <span className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
+                        +{getMachineImages(machine).length - 1} more
+                      </span>
+                    )}
+                    <button
+                      onClick={() => openImageDialog(machine)}
+                      className="absolute top-2 right-2 bg-white/90 hover:bg-white p-1.5 rounded-full shadow-sm"
+                      title="Manage Images"
+                    >
+                      <Camera className="w-4 h-4 text-slate-600" />
+                    </button>
+                  </div>
+                ) : (
+                  <div 
+                    className="h-24 bg-slate-50 flex items-center justify-center cursor-pointer hover:bg-slate-100 transition-colors border-b"
+                    onClick={() => openImageDialog(machine)}
+                  >
+                    <div className="text-center">
+                      <Camera className="w-6 h-6 text-slate-300 mx-auto mb-1" />
+                      <span className="text-xs text-slate-400">Add Photo</span>
+                    </div>
+                  </div>
+                )}
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
@@ -1047,6 +1176,100 @@ const MachineManagement = () => {
                     disabled={updatingAvailability}
                   >
                     {updatingAvailability ? <Loader2 className="w-4 h-4 animate-spin" /> : "Update"}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Image Management Dialog */}
+        <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Image className="w-5 h-5 text-orange-600" />
+                Machine Images
+              </DialogTitle>
+            </DialogHeader>
+            {selectedMachineForImage && (
+              <div className="space-y-4 py-4">
+                <div className="text-sm text-slate-600 mb-4">
+                  <strong>{getMachineName(selectedMachineForImage)}</strong>
+                  <br />
+                  {selectedMachineForImage.brand} {selectedMachineForImage.model}
+                </div>
+
+                {/* Current Images */}
+                {selectedMachineForImage.images?.length > 0 && (
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      Current Images ({selectedMachineForImage.images.length})
+                    </Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {selectedMachineForImage.images.map((img, idx) => (
+                        <div key={idx} className="relative group aspect-square rounded-lg overflow-hidden border">
+                          <img 
+                            src={img} 
+                            alt={`Machine ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            onClick={() => deleteMachineImage(img)}
+                            className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Delete image"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Upload New Image */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Add New Image
+                  </Label>
+                  <div className="border-2 border-dashed border-slate-200 rounded-lg p-6 text-center hover:border-orange-300 transition-colors">
+                    {imagePreview ? (
+                      <div className="space-y-3">
+                        <img 
+                          src={imagePreview} 
+                          alt="Preview" 
+                          className="max-h-32 mx-auto rounded-lg"
+                        />
+                        {uploadingImage && (
+                          <div className="flex items-center justify-center gap-2 text-sm text-orange-600">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Uploading...
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageSelect}
+                          className="hidden"
+                          disabled={uploadingImage}
+                        />
+                        <Camera className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                        <p className="text-slate-600 text-sm">Click to upload image</p>
+                        <p className="text-xs text-slate-400 mt-1">JPG, PNG, WebP (max 5MB)</p>
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setImageDialogOpen(false)}
+                  >
+                    Done
                   </Button>
                 </div>
               </div>
