@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 # Gupshup Configuration
 GUPSHUP_API_URL = "https://api.gupshup.io/wa/api/v1/msg"
-GUPSHUP_MEDIA_URL = "https://api.gupshup.io/wa/api/v1/media"
+GUPSHUP_MEDIA_URL = "https://mediaapi.smsgupshup.com/GatewayAPI/rest"
 GUPSHUP_APP_NAME = os.environ.get("GUPSHUP_APP_NAME", "OEMLinker")
 GUPSHUP_API_KEY = os.environ.get("GUPSHUP_API_KEY", "")
 GUPSHUP_SOURCE_NUMBER = os.environ.get("GUPSHUP_SOURCE_NUMBER", "")  # WhatsApp Business Number
@@ -178,11 +178,11 @@ class WhatsAppService:
         file_name: str = "voice_response.mp3"
     ) -> Dict[str, Any]:
         """
-        Send an audio/voice message via WhatsApp
+        Send an audio/voice message via WhatsApp using base64 encoding
         
         Args:
             to_number: Recipient phone number
-            audio_data: Audio file bytes (MP3 or OGG)
+            audio_data: Audio file bytes (MP3)
             file_name: Name of the audio file
             
         Returns:
@@ -191,19 +191,11 @@ class WhatsAppService:
         if not self.is_configured():
             return {"success": False, "error": "WhatsApp not configured"}
         
-        # First upload the audio file
-        upload_result = await self.upload_media(
-            file_data=audio_data,
-            file_name=file_name,
-            content_type="audio/mpeg"
-        )
+        import base64
         
-        if not upload_result.get("success"):
-            return upload_result
+        # Encode audio as base64
+        audio_base64 = base64.b64encode(audio_data).decode('utf-8')
         
-        media_id = upload_result.get("media_id")
-        
-        # Now send the audio message
         to_number = to_number.replace("+", "").replace(" ", "").replace("-", "")
         
         headers = {
@@ -212,10 +204,12 @@ class WhatsAppService:
         }
         
         import json
+        # Send audio with base64 data
         message_payload = json.dumps({
             "type": "audio",
             "audio": {
-                "id": media_id
+                "data": audio_base64,
+                "filename": file_name
             }
         })
         
@@ -233,7 +227,7 @@ class WhatsAppService:
                     self.api_url,
                     headers=headers,
                     data=payload,
-                    timeout=30.0
+                    timeout=60.0  # Longer timeout for audio
                 )
                 
                 result = response.json() if response.text else {}
@@ -243,7 +237,6 @@ class WhatsAppService:
                     return {
                         "success": True,
                         "message_id": result.get("messageId"),
-                        "media_id": media_id,
                         "response": result
                     }
                 else:

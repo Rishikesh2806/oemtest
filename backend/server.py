@@ -8563,10 +8563,9 @@ async def send_whatsapp_voice_message(
     
     try:
         # Generate audio from text
-        tts = TextToSpeech(api_key=EMERGENT_LLM_KEY)
-        audio_bytes = await asyncio.to_thread(
-            tts.generate_speech,
-            data.message,
+        tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
+        audio_bytes = await tts.generate_speech(
+            text=data.message,
             voice="nova"
         )
         
@@ -8586,7 +8585,6 @@ async def send_whatsapp_voice_message(
         return {
             "success": True,
             "message_id": result.get("message_id"),
-            "media_id": result.get("media_id"),
             "audio_size_bytes": len(audio_bytes)
         }
         
@@ -8729,10 +8727,9 @@ async def whatsapp_webhook(request: Request):
                     # Remove markdown formatting for TTS
                     clean_response = short_response.replace("*", "").replace("_", "").replace("`", "")
                     
-                    tts = TextToSpeech(api_key=EMERGENT_LLM_KEY)
-                    audio_bytes = await asyncio.to_thread(
-                        tts.generate_speech,
-                        clean_response,
+                    tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
+                    audio_bytes = await tts.generate_speech(
+                        text=clean_response,
                         voice="nova"
                     )
                     
@@ -8804,14 +8801,12 @@ async def process_voice_message(audio_url: str, sender: str, vendor: Optional[di
         # Transcribe using Whisper
         logger.info(f"Transcribing voice message ({len(audio_bytes)} bytes)...")
         
-        stt = SpeechToText(api_key=EMERGENT_LLM_KEY)
+        stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
         audio_file = BytesIO(audio_bytes)
         audio_file.name = "voice_message.ogg"  # WhatsApp voice messages are typically OGG
         
-        transcription = await asyncio.to_thread(
-            stt.transcribe,
-            audio_file
-        )
+        transcription_result = await stt.transcribe(file=audio_file)
+        transcription = transcription_result.text if hasattr(transcription_result, 'text') else str(transcription_result)
         
         if transcription and transcription.strip():
             logger.info(f"Voice transcription successful: '{transcription[:50]}...'")
