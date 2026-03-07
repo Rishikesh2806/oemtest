@@ -8638,6 +8638,10 @@ from app.services.whatsapp_service import whatsapp_service, parse_webhook_messag
 # Store WhatsApp conversation sessions
 whatsapp_sessions = {}  # {phone_number: {"user_id": str, "conversation": [], "last_active": datetime}}
 
+# Store pending registrations awaiting confirmation
+pending_registrations = {}  # {phone_number: {"gstin": str, "gst_data": dict, "expires_at": datetime}}
+PENDING_REGISTRATION_TTL_MINUTES = 10  # Pending registration expires after 10 minutes
+
 def cleanup_whatsapp_session(phone: str) -> bool:
     """
     Remove WhatsApp session for a given phone number.
@@ -8926,6 +8930,55 @@ async def whatsapp_webhook(request: Request):
         
         logger.info(f"WhatsApp processing command: '{text}' from {sender[:6]}***")
         
+        # Check for pending registration confirmation
+        if sender in pending_registrations:
+            pending = pending_registrations[sender]
+            
+            # Check if expired
+            if datetime.now(timezone.utc) > pending["expires_at"]:
+                del pending_registrations[sender]
+                logger.info(f"Pending registration expired for {sender[:6]}***")
+            else:
+                # Handle YES/NO confirmation
+                text_clean = text.strip().lower()
+                if text_clean in ["yes", "y", "confirm", "ok", "haan", "ha", "हां", "हाँ"]:
+                    # User confirmed - proceed with registration
+                    del pending_registrations[sender]
+                    response_message = await process_whatsapp_registration(sender, pending["gstin"])
+                    if response_message and whatsapp_service.is_configured():
+                        await whatsapp_service.send_text_message(sender, response_message)
+                    return {"status": "ok"}
+                elif text_clean in ["no", "n", "cancel", "nahi", "nhi", "नहीं"]:
+                    # User cancelled
+                    del pending_registrations[sender]
+                    response_message = """❌ *Registration Cancelled*
+
+Your registration has been cancelled.
+
+To register again:
+• Upload your GST certificate image, OR
+• Type *register YOUR_GST_NUMBER*
+
+Or register manually at https://oemlinker.com/register"""
+                    if whatsapp_service.is_configured():
+                        await whatsapp_service.send_text_message(sender, response_message)
+                    return {"status": "ok"}
+                else:
+                    # Remind user to confirm
+                    response_message = f"""⏳ *Confirmation Pending*
+
+You have a pending registration for:
+🏢 *{pending['company_name']}*
+
+Please reply:
+• *YES* to confirm and register
+• *NO* to cancel
+
+This expires in {PENDING_REGISTRATION_TTL_MINUTES} minutes."""
+                    if whatsapp_service.is_configured():
+                        await whatsapp_service.send_text_message(sender, response_message)
+                    return {"status": "ok"}
+        
         # Process commands
         response_message = await process_whatsapp_command(text, sender, vendor, user)
         
@@ -9084,6 +9137,7 @@ async def process_gst_certificate_image(image_url: str, sender: str) -> str:
     """
     Process GST certificate image uploaded via WhatsApp.
     Uses AI Vision to extract GSTIN from the certificate image.
+    Shows company details and asks for confirmation before registration.
     
     Args:
         image_url: URL of the uploaded image from Gupshup
@@ -9201,20 +9255,88 @@ Example: *register 27AABCU9603R1ZM*
 
 Or register manually at https://oemlinker.com/register"""
         
-        # Send confirmation message before registration
-        if whatsapp_service.is_configured():
-            await whatsapp_service.send_text_message(
-                sender,
-                f"""📋 *GST Number Extracted*
+        # Check if GST is already registered
+        existing_vendor = await db.vendors.find_one({"gstin": extracted_text}, {"_id": 0})
+        if existing_vendor:
+            return f"""⚠️ *GST Already Registered*
 
-GSTIN: *{extracted_text}*
+This GST number (*{extracted_text}*) is already linked to a vendor account.
 
-⏳ Verifying and registering your account..."""
-            )
+If this is your account, please:
+1. Login at https://oemlinker.com/login
+2. Update your phone number in profile settings
+
+Or contact support@oemlinker.com for help."""
+
+        # Validate GST using external API and get company details
+        GSTIN_API_KEY = os.environ.get("GSTIN_API_KEY", "")
+        gst_data = None
         
-        # Process registration with the extracted GSTIN
-        registration_result = await process_whatsapp_registration(sender, extracted_text)
-        return registration_result
+        if GSTIN_API_KEY:
+            try:
+                async with httpx.AsyncClient() as client:
+                    gst_response = await client.get(
+                        f"https://sheet.gstincheck.co.in/check/{GSTIN_API_KEY}/{extracted_text}",
+                        timeout=15.0
+                    )
+                    if gst_response.status_code == 200:
+                        result = gst_response.json()
+                        if result.get("flag"):
+                            gst_data = result.get("data", {})
+            except Exception as e:
+                logger.warning(f"GST validation API error: {str(e)}")
+        
+        if not gst_data:
+            return f"""⚠️ *GST Validation Failed*
+
+Could not validate GST number: *{extracted_text}*
+
+Please check if:
+1. GST number is correct
+2. GST is active and valid
+
+You can also register manually at https://oemlinker.com/register"""
+
+        # Extract company details from GST data
+        company_name = gst_data.get("tradeNam") or gst_data.get("lgnm", "Unknown Company")
+        legal_name = gst_data.get("lgnm", "")
+        trade_name = gst_data.get("tradeNam", "")
+        gst_status = gst_data.get("sts", "Unknown")
+        address = gst_data.get("pradr", {}).get("adr", "")
+        city = gst_data.get("pradr", {}).get("loc", "")
+        state = gst_data.get("pradr", {}).get("stcd", "")
+        pincode = gst_data.get("pradr", {}).get("pncd", "")
+        
+        # Store pending registration
+        pending_registrations[sender] = {
+            "gstin": extracted_text,
+            "gst_data": gst_data,
+            "company_name": company_name,
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=PENDING_REGISTRATION_TTL_MINUTES)
+        }
+        
+        logger.info(f"Pending registration stored for {sender[:6]}***: {company_name}")
+        
+        # Send company details and ask for confirmation
+        return f"""📋 *GST Details Found*
+
+Please confirm your company details:
+
+🏢 *Company Name:* {company_name}
+📋 *GSTIN:* {extracted_text}
+📊 *GST Status:* {gst_status}
+📍 *Address:* {address[:50]}{'...' if len(address) > 50 else ''}
+🏙️ *City:* {city}
+🗺️ *State:* {state}
+📮 *Pincode:* {pincode}
+
+━━━━━━━━━━━━━━━━━━━━━━
+*Is this information correct?*
+
+Reply *YES* to confirm and register
+Reply *NO* to cancel
+
+⏳ This confirmation expires in {PENDING_REGISTRATION_TTL_MINUTES} minutes."""
         
     except Exception as e:
         logger.error(f"GST certificate processing error: {str(e)}")
