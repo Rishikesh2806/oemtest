@@ -80,6 +80,7 @@ const DashboardLayout = ({ children }) => {
   const adminNavItems = [
     { path: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { path: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+    { path: "/admin/whatsapp", label: "WhatsApp", icon: MessageSquare },
     { path: "/disputes", label: "Disputes", icon: AlertTriangle },
   ];
 

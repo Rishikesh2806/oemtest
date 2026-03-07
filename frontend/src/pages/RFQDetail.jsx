@@ -77,6 +77,7 @@ const RFQDetail = () => {
   const [loading, setLoading] = useState(true);
   const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
   const [submittingQuote, setSubmittingQuote] = useState(false);
+  const [notifyingVendors, setNotifyingVendors] = useState(false);
 
   const [quoteForm, setQuoteForm] = useState({
     price: "",
@@ -108,6 +109,25 @@ const RFQDetail = () => {
       toast.error("Failed to load RFQ details");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const notifyVendorsViaWhatsApp = async () => {
+    setNotifyingVendors(true);
+    try {
+      const response = await api.post(`/whatsapp/notify-rfq?rfq_id=${rfqId}`);
+      if (response.data.notified_count > 0) {
+        toast.success(`WhatsApp notifications sent to ${response.data.notified_count} vendors`);
+      } else if (response.data.error) {
+        toast.error(response.data.error);
+      } else {
+        toast.info("No vendors could be notified. They may not have phone numbers registered.");
+      }
+    } catch (error) {
+      const errorMsg = error.response?.data?.detail || error.response?.data?.error || "Failed to send WhatsApp notifications";
+      toast.error(errorMsg);
+    } finally {
+      setNotifyingVendors(false);
     }
   };
 
@@ -769,13 +789,30 @@ const RFQDetail = () => {
         {/* Matched Vendors (Buyer View) */}
         {isBuyer && rfq.matched_vendors?.length > 0 && (
           <Card className="border-slate-200">
-            <CardHeader>
-              <CardTitle className="font-heading text-lg flex items-center gap-2">
-                <Target className="w-5 h-5 text-orange-600" /> Matched Vendors Based on Drawing Analysis
-              </CardTitle>
-              <p className="text-sm text-slate-500 mt-1">
-                Vendors ranked by machine capability, material compatibility, and tolerance requirements
-              </p>
+            <CardHeader className="flex flex-row items-start justify-between">
+              <div>
+                <CardTitle className="font-heading text-lg flex items-center gap-2">
+                  <Target className="w-5 h-5 text-orange-600" /> Matched Vendors Based on Drawing Analysis
+                </CardTitle>
+                <p className="text-sm text-slate-500 mt-1">
+                  Vendors ranked by machine capability, material compatibility, and tolerance requirements
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={notifyVendorsViaWhatsApp}
+                disabled={notifyingVendors}
+                className="text-green-600 border-green-200 hover:bg-green-50"
+                data-testid="notify-whatsapp-btn"
+              >
+                {notifyingVendors ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                )}
+                Notify via WhatsApp
+              </Button>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
