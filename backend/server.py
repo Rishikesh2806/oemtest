@@ -8661,6 +8661,31 @@ Type *"help"* for more commands."""
         "errors": errors if errors else None
     }
 
+# Store processed message IDs to prevent duplicates (with TTL)
+processed_message_ids = {}  # {message_id: timestamp}
+MESSAGE_ID_TTL_SECONDS = 300  # 5 minutes
+
+def is_duplicate_message(message_id: str) -> bool:
+    """Check if message was already processed (with cleanup of old entries)"""
+    if not message_id:
+        return False
+    
+    current_time = datetime.now(timezone.utc).timestamp()
+    
+    # Cleanup old entries
+    expired_ids = [mid for mid, ts in processed_message_ids.items() 
+                   if current_time - ts > MESSAGE_ID_TTL_SECONDS]
+    for mid in expired_ids:
+        del processed_message_ids[mid]
+    
+    # Check if already processed
+    if message_id in processed_message_ids:
+        return True
+    
+    # Mark as processed
+    processed_message_ids[message_id] = current_time
+    return False
+
 @api_router.post("/whatsapp/webhook")
 async def whatsapp_webhook(request: Request):
     """
@@ -8678,6 +8703,14 @@ async def whatsapp_webhook(request: Request):
         
         if parsed.get("type") == "status":
             # Handle delivery status updates
+            logger.info(f"Message status update: {parsed.get('status')} for {parsed.get('message_id')}")
+            return {"status": "ok"}
+        
+        # Check for duplicate message
+        message_id = parsed.get("message_id")
+        if is_duplicate_message(message_id):
+            logger.info(f"Duplicate message ignored: {message_id}")
+            return {"status": "duplicate_ignored"}
             logger.info(f"Message status update: {parsed.get('status')} for {parsed.get('message_id')}")
             return {"status": "ok"}
         
