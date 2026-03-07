@@ -2929,6 +2929,220 @@ async def get_machines_availability_summary(user: dict = Depends(get_current_use
         "machines": machines
     }
 
+# ============== BULK MACHINE IMPORT ==============
+
+import csv
+from io import StringIO
+
+class BulkImportResult(BaseModel):
+    total_rows: int
+    successful: int
+    failed: int
+    machines_created: List[dict]
+    errors: List[dict]
+
+@api_router.get("/machines/bulk-import/template")
+async def get_bulk_import_template():
+    """Get CSV template for bulk machine import"""
+    template_content = """name,machine_category,machine_type,brand,model,max_x,max_y,max_z,max_diameter,max_length,max_swing,tolerance,materials_supported,monthly_capacity_hours
+CNC Lathe 1,CNC Turning/Lathe,CNC Lathe,Mazak,Quick Turn 200,,,200,300,500,250,0.01,"Aluminum,Steel,Stainless Steel",160
+VMC Machine 1,VMC (Vertical Machining Center),VMC,Haas,VF-2,762,406,508,,,,0.02,"Steel,Aluminum",200
+5-Axis Mill,5-Axis Machining,5-Axis VMC,DMG Mori,DMU 50,500,450,400,300,,,0.005,"Titanium,Inconel,Steel",120"""
+    
+    return {
+        "template": template_content,
+        "instructions": {
+            "name": "Machine name/identifier (optional, will auto-generate if empty)",
+            "machine_category": "Category from: CNC Turning/Lathe, VMC (Vertical Machining Center), HMC (Horizontal Machining Center), 5-Axis Machining, VTL (Vertical Turret Lathe), Boring Machine, Grinding, EDM, Laser Cutting, Sheet Metal/Press, Welding, etc.",
+            "machine_type": "Specific type within category (e.g., CNC Lathe, VMC, Wire EDM)",
+            "brand": "Machine manufacturer (required)",
+            "model": "Machine model number (required)",
+            "max_x": "X-axis travel in mm (for milling/machining centers)",
+            "max_y": "Y-axis travel in mm (for milling/machining centers)",
+            "max_z": "Z-axis travel in mm",
+            "max_diameter": "Maximum diameter in mm (for turning/boring)",
+            "max_length": "Maximum length in mm",
+            "max_swing": "Swing over bed in mm (for lathes)",
+            "tolerance": "Achievable tolerance in mm (default: 0.01)",
+            "materials_supported": "Comma-separated list of materials (e.g., Aluminum,Steel,Titanium)",
+            "monthly_capacity_hours": "Available hours per month (default: 160)"
+        },
+        "valid_categories": [
+            "CNC Turning/Lathe", "VMC (Vertical Machining Center)", "HMC (Horizontal Machining Center)",
+            "5-Axis Machining", "VTL (Vertical Turret Lathe)", "Conventional Lathe", "Conventional Milling",
+            "Boring Machine", "Shaping Machine", "Gear Manufacturing", "Grinding", "EDM",
+            "Drilling Machine", "Laser Cutting", "Plasma/Waterjet Cutting", "Sheet Metal/Press",
+            "Welding", "Heat Treatment", "Surface Treatment", "Inspection/CMM", "Additive Manufacturing"
+        ],
+        "valid_materials": [
+            "Aluminum", "Steel", "Stainless Steel", "Carbon Steel", "Brass", "Copper",
+            "Titanium", "Inconel", "Plastic", "Cast Iron", "Bronze", "Other"
+        ]
+    }
+
+@api_router.post("/machines/bulk-import")
+async def bulk_import_machines(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user)
+):
+    """
+    Bulk import machines from CSV file.
+    Valid rows are imported, invalid rows are skipped with error details.
+    """
+    if user["role"] != UserRole.VENDOR:
+        raise HTTPException(status_code=403, detail="Only vendors can import machines")
+    
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor profile required")
+    
+    # Validate file type
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Only CSV files are supported")
+    
+    # Read file content
+    try:
+        content = await file.read()
+        content_str = content.decode('utf-8')
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {str(e)}")
+    
+    # Parse CSV
+    reader = csv.DictReader(StringIO(content_str))
+    
+    results = {
+        "total_rows": 0,
+        "successful": 0,
+        "failed": 0,
+        "machines_created": [],
+        "errors": []
+    }
+    
+    # Valid materials list
+    valid_materials = ["Aluminum", "Steel", "Stainless Steel", "Carbon Steel", "Brass", 
+                       "Copper", "Titanium", "Inconel", "Plastic", "Cast Iron", "Bronze", "Other"]
+    
+    for row_num, row in enumerate(reader, start=2):  # Start at 2 (row 1 is header)
+        results["total_rows"] += 1
+        
+        # Validate required fields
+        errors = []
+        
+        machine_type = row.get('machine_type', '').strip()
+        brand = row.get('brand', '').strip()
+        model = row.get('model', '').strip()
+        
+        if not machine_type:
+            errors.append("machine_type is required")
+        if not brand:
+            errors.append("brand is required")
+        if not model:
+            errors.append("model is required")
+        
+        # Parse numeric fields
+        numeric_fields = {
+            'max_x': 0, 'max_y': 0, 'max_z': 0,
+            'max_diameter': 0, 'max_length': 0, 'max_swing': 0,
+            'tolerance': 0.01, 'monthly_capacity_hours': 160,
+            'bore_diameter': 0, 'outer_diameter': 0, 'max_thickness': 0,
+            'tonnage': 0, 'max_taper_angle': 0, 'laser_power': 0,
+            'amperage': 0, 'max_temp': 0, 'accuracy': 0,
+            'layer_thickness': 0, 'max_module': 0, 'min_teeth': 0,
+            'a_axis_range': 0, 'c_axis_range': 0, 'table_diameter': 0,
+            'table_size_x': 0, 'table_size_y': 0, 'pallet_size': 0,
+            'max_weight': 0, 'spindle_bore': 0, 'spindle_travel': 0,
+            'arm_length': 0, 'max_depth': 0, 'max_stroke': 0, 'stroke': 0
+        }
+        
+        parsed_values = {}
+        for field, default in numeric_fields.items():
+            value = row.get(field, '').strip()
+            if value:
+                try:
+                    if field in ['min_teeth']:
+                        parsed_values[field] = int(float(value))
+                    else:
+                        parsed_values[field] = float(value)
+                except ValueError:
+                    errors.append(f"Invalid number for {field}: {value}")
+            else:
+                parsed_values[field] = default
+        
+        # Parse materials
+        materials_str = row.get('materials_supported', '').strip()
+        materials = []
+        if materials_str:
+            materials = [m.strip() for m in materials_str.split(',') if m.strip()]
+            # Validate materials
+            for mat in materials:
+                if mat not in valid_materials:
+                    # Try case-insensitive match
+                    matched = False
+                    for valid_mat in valid_materials:
+                        if mat.lower() == valid_mat.lower():
+                            materials[materials.index(mat)] = valid_mat
+                            matched = True
+                            break
+                    if not matched:
+                        errors.append(f"Unknown material: {mat}")
+        
+        # If there are validation errors, skip this row
+        if errors:
+            results["failed"] += 1
+            results["errors"].append({
+                "row": row_num,
+                "data": {k: v for k, v in row.items() if v},
+                "errors": errors
+            })
+            continue
+        
+        # Create machine document
+        machine_id = f"machine_{uuid.uuid4().hex[:12]}"
+        name = row.get('name', '').strip() or f"{machine_type} - {brand} {model}"
+        machine_category = row.get('machine_category', '').strip()
+        
+        machine_doc = {
+            "machine_id": machine_id,
+            "vendor_id": vendor["vendor_id"],
+            "name": name,
+            "machine_category": machine_category,
+            "machine_type": machine_type,
+            "brand": brand,
+            "model": model,
+            "materials_supported": materials,
+            "is_active": True,
+            "availability_status": "available",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Add numeric fields
+        for field, value in parsed_values.items():
+            if value != 0 or field in ['tolerance', 'monthly_capacity_hours']:
+                machine_doc[field] = value
+        
+        # Insert into database
+        try:
+            await db.machines.insert_one(machine_doc)
+            results["successful"] += 1
+            results["machines_created"].append({
+                "machine_id": machine_id,
+                "name": name,
+                "machine_type": machine_type,
+                "brand": brand,
+                "model": model
+            })
+        except Exception as e:
+            results["failed"] += 1
+            results["errors"].append({
+                "row": row_num,
+                "data": {k: v for k, v in row.items() if v},
+                "errors": [f"Database error: {str(e)}"]
+            })
+    
+    logger.info(f"Bulk import completed for vendor {vendor['vendor_id']}: {results['successful']} machines created")
+    
+    return results
+
 # ============== RFQ ROUTES ==============
 
 @api_router.post("/rfqs", response_model=RFQ)

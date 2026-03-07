@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { toast } from "sonner";
 import { 
   Plus, Wrench, Loader2, Edit2, Trash2, 
-  Cog, Maximize2, Settings, CheckCircle2, Clock, AlertTriangle, Power
+  Cog, Maximize2, Settings, CheckCircle2, Clock, AlertTriangle, Power,
+  Upload, Download, FileSpreadsheet, X, Check
 } from "lucide-react";
 
 const MATERIALS = [
@@ -63,6 +64,13 @@ const MachineManagement = () => {
   const [availabilitySummary, setAvailabilitySummary] = useState({
     available: 0, engaged: 0, maintenance: 0, offline: 0, total: 0
   });
+
+  // Bulk import state
+  const [bulkImportDialogOpen, setBulkImportDialogOpen] = useState(false);
+  const [bulkImportFile, setBulkImportFile] = useState(null);
+  const [bulkImportLoading, setBulkImportLoading] = useState(false);
+  const [bulkImportResult, setBulkImportResult] = useState(null);
+  const [dragOver, setDragOver] = useState(false);
 
   useEffect(() => {
     fetchMachines();
@@ -298,6 +306,111 @@ const MachineManagement = () => {
     }
   };
 
+  // Bulk import functions
+  const downloadTemplate = async () => {
+    try {
+      const response = await api.get("/machines/bulk-import/template");
+      const template = response.data.template;
+      
+      // Create blob and download
+      const blob = new Blob([template], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'machine_import_template.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success("Template downloaded");
+    } catch (error) {
+      toast.error("Failed to download template");
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.name.endsWith('.csv')) {
+        toast.error("Please select a CSV file");
+        return;
+      }
+      setBulkImportFile(file);
+      setBulkImportResult(null);
+    }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      if (!file.name.endsWith('.csv')) {
+        toast.error("Please select a CSV file");
+        return;
+      }
+      setBulkImportFile(file);
+      setBulkImportResult(null);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    setDragOver(false);
+  };
+
+  const uploadBulkImport = async () => {
+    if (!bulkImportFile) {
+      toast.error("Please select a file first");
+      return;
+    }
+
+    setBulkImportLoading(true);
+    setBulkImportResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', bulkImportFile);
+
+      const response = await api.post("/machines/bulk-import", formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      setBulkImportResult(response.data);
+      
+      if (response.data.successful > 0) {
+        toast.success(`Successfully imported ${response.data.successful} machines`);
+        fetchMachines();
+      }
+      
+      if (response.data.failed > 0) {
+        toast.warning(`${response.data.failed} rows had errors`);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to import machines");
+      setBulkImportResult({
+        total_rows: 0,
+        successful: 0,
+        failed: 1,
+        machines_created: [],
+        errors: [{ row: 0, errors: [error.response?.data?.detail || "Upload failed"] }]
+      });
+    } finally {
+      setBulkImportLoading(false);
+    }
+  };
+
+  const resetBulkImport = () => {
+    setBulkImportFile(null);
+    setBulkImportResult(null);
+  };
+
   const getMachineName = (machine) => machine.name || `${machine.brand} ${machine.model}`.trim() || "Unnamed Machine";
   const getMachineTolerance = (machine) => machine.tolerance || machine.tolerance_capability || 0;
   const getMachineMaterials = (machine) => machine.materials_supported || machine.materials || [];
@@ -321,17 +434,197 @@ const MachineManagement = () => {
             <h1 className="font-heading text-2xl font-bold text-slate-900">Machine Management</h1>
             <p className="text-slate-500">Add and manage your manufacturing capabilities</p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button 
-                onClick={openAddDialog}
-                className="bg-orange-600 hover:bg-orange-700"
-                data-testid="add-machine-btn"
-              >
-                <Plus className="w-4 h-4 mr-2" /> Add Machine
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <div className="flex gap-2">
+            {/* Bulk Import Button */}
+            <Dialog open={bulkImportDialogOpen} onOpenChange={(open) => {
+              setBulkImportDialogOpen(open);
+              if (!open) resetBulkImport();
+            }}>
+              <DialogTrigger asChild>
+                <Button 
+                  variant="outline"
+                  className="border-orange-200 text-orange-600 hover:bg-orange-50"
+                  data-testid="bulk-import-btn"
+                >
+                  <Upload className="w-4 h-4 mr-2" /> Bulk Import
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-xl">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <FileSpreadsheet className="w-5 h-5 text-orange-600" />
+                    Bulk Import Machines
+                  </DialogTitle>
+                </DialogHeader>
+                
+                <div className="space-y-4 mt-4">
+                  {/* Download Template */}
+                  <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium text-slate-800">Step 1: Download Template</p>
+                        <p className="text-sm text-slate-500">Get the CSV template with sample data</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={downloadTemplate}
+                        data-testid="download-template-btn"
+                      >
+                        <Download className="w-4 h-4 mr-2" /> Download
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Upload Area */}
+                  <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <p className="font-medium text-slate-800 mb-2">Step 2: Upload Your CSV</p>
+                    
+                    {!bulkImportResult ? (
+                      <div
+                        className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                          dragOver ? 'border-orange-500 bg-orange-50' : 'border-slate-300 hover:border-orange-400'
+                        }`}
+                        onDrop={handleDrop}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        data-testid="drop-zone"
+                      >
+                        {bulkImportFile ? (
+                          <div className="flex items-center justify-center gap-3">
+                            <FileSpreadsheet className="w-8 h-8 text-green-600" />
+                            <div className="text-left">
+                              <p className="font-medium text-slate-800">{bulkImportFile.name}</p>
+                              <p className="text-sm text-slate-500">{(bulkImportFile.size / 1024).toFixed(1)} KB</p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setBulkImportFile(null)}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <>
+                            <Upload className="w-10 h-10 mx-auto text-slate-400 mb-2" />
+                            <p className="text-slate-600">Drag and drop your CSV file here</p>
+                            <p className="text-sm text-slate-400 mb-3">or</p>
+                            <label>
+                              <input
+                                type="file"
+                                accept=".csv"
+                                onChange={handleFileSelect}
+                                className="hidden"
+                                data-testid="file-input"
+                              />
+                              <span className="inline-flex items-center px-4 py-2 bg-white border border-slate-300 rounded-md text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer">
+                                Browse Files
+                              </span>
+                            </label>
+                          </>
+                        )}
+                      </div>
+                    ) : (
+                      /* Import Results */
+                      <div className="space-y-3">
+                        {/* Summary */}
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="p-3 bg-white rounded border text-center">
+                            <p className="text-2xl font-bold text-slate-800">{bulkImportResult.total_rows}</p>
+                            <p className="text-xs text-slate-500">Total Rows</p>
+                          </div>
+                          <div className="p-3 bg-green-50 rounded border border-green-200 text-center">
+                            <p className="text-2xl font-bold text-green-600">{bulkImportResult.successful}</p>
+                            <p className="text-xs text-green-600">Imported</p>
+                          </div>
+                          <div className="p-3 bg-red-50 rounded border border-red-200 text-center">
+                            <p className="text-2xl font-bold text-red-600">{bulkImportResult.failed}</p>
+                            <p className="text-xs text-red-600">Failed</p>
+                          </div>
+                        </div>
+
+                        {/* Errors */}
+                        {bulkImportResult.errors?.length > 0 && (
+                          <div className="max-h-40 overflow-y-auto bg-red-50 rounded-lg p-3 border border-red-200">
+                            <p className="font-medium text-red-700 text-sm mb-2">Errors:</p>
+                            {bulkImportResult.errors.map((err, i) => (
+                              <div key={i} className="text-xs text-red-600 mb-1">
+                                <span className="font-medium">Row {err.row}:</span> {err.errors?.join(", ")}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Success List */}
+                        {bulkImportResult.machines_created?.length > 0 && (
+                          <div className="max-h-40 overflow-y-auto bg-green-50 rounded-lg p-3 border border-green-200">
+                            <p className="font-medium text-green-700 text-sm mb-2">Machines Created:</p>
+                            {bulkImportResult.machines_created.map((m, i) => (
+                              <div key={i} className="text-xs text-green-600 mb-1 flex items-center gap-1">
+                                <Check className="w-3 h-3" />
+                                {m.name} ({m.machine_type})
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={resetBulkImport}
+                          className="w-full"
+                        >
+                          Import More
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Upload Button */}
+                  {bulkImportFile && !bulkImportResult && (
+                    <Button
+                      className="w-full bg-orange-600 hover:bg-orange-700"
+                      onClick={uploadBulkImport}
+                      disabled={bulkImportLoading}
+                      data-testid="upload-btn"
+                    >
+                      {bulkImportLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Importing...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4 mr-2" />
+                          Import Machines
+                        </>
+                      )}
+                    </Button>
+                  )}
+
+                  {/* Instructions */}
+                  <div className="text-xs text-slate-500 space-y-1">
+                    <p><strong>CSV Format:</strong> name, machine_category, machine_type, brand, model, dimensions...</p>
+                    <p><strong>Required:</strong> machine_type, brand, model</p>
+                    <p><strong>Note:</strong> Valid rows are imported, invalid ones are skipped with error details</p>
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Add Machine Button */}
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <DialogTrigger asChild>
+                <Button 
+                  onClick={openAddDialog}
+                  className="bg-orange-600 hover:bg-orange-700"
+                  data-testid="add-machine-btn"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> Add Machine
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
                   {editingMachine ? "Edit Machine" : "Add New Machine"}
@@ -514,6 +807,7 @@ const MachineManagement = () => {
               </div>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         {/* Machines Grid */}
