@@ -8921,6 +8921,35 @@ async def whatsapp_webhook(request: Request):
             if response_message and whatsapp_service.is_configured():
                 await whatsapp_service.send_text_message(sender, response_message)
             return {"status": "ok"}
+        # Handle document messages (PDF GST certificate upload)
+        elif msg_type == "document" and parsed.get("document_url"):
+            filename = parsed.get("filename", "").lower()
+            
+            # Check if it's a PDF (likely GST certificate)
+            if filename.endswith(".pdf") or "pdf" in filename:
+                # Check if user is already registered
+                if vendor:
+                    if whatsapp_service.is_configured():
+                        await whatsapp_service.send_text_message(
+                            sender,
+                            "📄 PDF received! You're already registered.\n\nType *help* to see available commands."
+                        )
+                    return {"status": "ok"}
+                
+                # Process PDF for GST certificate extraction
+                logger.info(f"Processing PDF document for GST: {filename}")
+                response_message = await process_gst_certificate_document(parsed.get("document_url"), sender, filename)
+                if response_message and whatsapp_service.is_configured():
+                    await whatsapp_service.send_text_message(sender, response_message)
+                return {"status": "ok"}
+            else:
+                # Non-PDF document
+                if whatsapp_service.is_configured():
+                    await whatsapp_service.send_text_message(
+                        sender,
+                        f"📄 Document received: {filename}\n\nFor GST registration, please upload your GST certificate as:\n• PDF file, OR\n• Image (JPG/PNG)\n\nType *help* for available commands."
+                    )
+                return {"status": "ok"}
         else:
             text = parsed.get("text", "").strip().lower()
         
@@ -9202,7 +9231,7 @@ IMPORTANT:
         )
         
         # Get AI response
-        ai_response = await chat.send_async(user_message)
+        ai_response = await chat.send_message(user_message)
         extracted_text = ai_response.strip().upper()
         
         logger.info(f"AI extraction result for {sender[:6]}***: {extracted_text[:20]}...")
@@ -9351,6 +9380,272 @@ You can also type your GST number directly:
 
 Contact support@oemlinker.com for assistance."""
 
+
+async def process_gst_certificate_document(document_url: str, sender: str, filename: str) -> str:
+    """
+    Process GST certificate PDF uploaded via WhatsApp.
+    Downloads PDF, converts to image, and uses AI Vision to extract GSTIN.
+    Shows company details and asks for confirmation before registration.
+    
+    Args:
+        document_url: URL of the uploaded PDF from Gupshup
+        sender: WhatsApp sender phone number
+        filename: Name of the uploaded file
+        
+    Returns:
+        Response message string
+    """
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+    import base64
+    
+    try:
+        # Send processing message
+        if whatsapp_service.is_configured():
+            await whatsapp_service.send_text_message(
+                sender,
+                f"📄 Processing PDF: *{filename}*\n\n⏳ Extracting GST details..."
+            )
+        
+        # Download PDF from Gupshup URL
+        logger.info(f"Downloading GST certificate PDF from: {document_url[:50]}...")
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.get(document_url, timeout=60.0)
+            if response.status_code != 200:
+                logger.error(f"Failed to download PDF: HTTP {response.status_code}")
+                return """⚠️ *PDF Download Failed*
+
+Could not download the PDF. Please try again.
+
+You can also:
+• Upload an image of your GST certificate
+• Register manually at https://oemlinker.com/register"""
+            
+            pdf_data = response.content
+        
+        # Convert PDF to image for AI analysis
+        logger.info("Converting PDF to image for analysis...")
+        try:
+            import fitz  # PyMuPDF
+            from PIL import Image
+            from io import BytesIO
+            
+            # Open PDF from bytes
+            pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
+            
+            if pdf_document.page_count == 0:
+                return """⚠️ *Empty PDF*
+
+The uploaded PDF appears to be empty.
+
+Please upload a valid GST certificate."""
+            
+            # Render first page to image (high resolution)
+            page = pdf_document[0]
+            mat = fitz.Matrix(2.0, 2.0)  # 2x zoom for better quality
+            pix = page.get_pixmap(matrix=mat)
+            
+            # Convert to PIL Image then to base64
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            img_buffer = BytesIO()
+            img.save(img_buffer, format="PNG", optimize=True)
+            image_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
+            
+            pdf_document.close()
+            
+        except ImportError as e:
+            logger.error(f"PDF conversion library not available: {str(e)}")
+            return """⚠️ *PDF Processing Unavailable*
+
+PDF processing is temporarily unavailable.
+
+Please upload an *image* (JPG/PNG) of your GST certificate instead.
+
+Or register manually at https://oemlinker.com/register"""
+        except Exception as e:
+            logger.error(f"PDF conversion error: {str(e)}")
+            return """⚠️ *PDF Conversion Failed*
+
+Could not process the PDF file.
+
+Please try:
+• Upload an image (JPG/PNG) of your GST certificate
+• Make sure the PDF is not password protected
+• Register manually at https://oemlinker.com/register"""
+        
+        # Check if we have the API key
+        api_key = os.environ.get("EMERGENT_LLM_KEY")
+        if not api_key:
+            logger.error("EMERGENT_LLM_KEY not configured for GST extraction")
+            return """⚠️ *Service Unavailable*
+
+AI service is not configured. Please register manually at https://oemlinker.com/register"""
+        
+        # Use AI Vision to extract GSTIN from the certificate
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"gst_pdf_extraction_{sender}_{uuid.uuid4().hex[:8]}",
+            system_message="""You are an expert at reading Indian GST (Goods and Services Tax) certificates.
+            
+Your task is to extract the GSTIN (GST Identification Number) from the uploaded GST certificate image.
+
+GSTIN Format: 15 characters - 2 digits (state code) + 10 characters (PAN) + 1 digit (entity code) + 1 character (Z) + 1 check digit
+Example: 27AABCU9603R1ZM, 27AAECF7811K1ZF
+
+IMPORTANT:
+- Only extract the GSTIN number, nothing else
+- If you can clearly read the GSTIN, respond with ONLY the 15-character GSTIN number
+- If the image is not a GST certificate or GSTIN is not visible, respond with "NOT_FOUND"
+- If the image is blurry or unclear, respond with "UNCLEAR"
+- Do NOT include any other text, explanations, or formatting - just the GSTIN or error code"""
+        )
+        
+        # Create message with image
+        user_message = UserMessage(
+            text="Please extract the GSTIN number from this GST certificate image (converted from PDF).",
+            file_contents=[ImageContent(image_base64=image_base64)]
+        )
+        
+        # Get AI response
+        ai_response = await chat.send_message(user_message)
+        extracted_text = ai_response.strip().upper()
+        
+        logger.info(f"AI PDF extraction result for {sender[:6]}***: {extracted_text[:20]}...")
+        
+        # Validate the extracted GSTIN
+        if extracted_text == "NOT_FOUND":
+            return """⚠️ *GST Certificate Not Detected*
+
+The uploaded PDF doesn't appear to be a valid GST certificate.
+
+Please upload:
+📄 GST Registration Certificate (Form GST REG-06)
+📄 Or an image where GSTIN is clearly visible
+
+Or register manually at https://oemlinker.com/register"""
+        
+        if extracted_text == "UNCLEAR":
+            return """⚠️ *PDF Not Clear*
+
+Could not read the GST number from the PDF clearly.
+
+Please try:
+📸 Upload a clearer PDF
+📸 Or upload an image (JPG/PNG) of the certificate
+
+Or register manually at https://oemlinker.com/register"""
+        
+        # Validate GSTIN format
+        gstin_pattern = r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}[Z]{1}[0-9A-Z]{1}$'
+        if not re.match(gstin_pattern, extracted_text):
+            gstin_match = re.search(r'[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[0-9A-Z]{1}Z[0-9A-Z]{1}', extracted_text)
+            if gstin_match:
+                extracted_text = gstin_match.group()
+            else:
+                logger.warning(f"Invalid GSTIN format from PDF: {extracted_text}")
+                return f"""⚠️ *Invalid GST Number*
+
+Could not extract a valid GSTIN from the PDF.
+
+Extracted: {extracted_text[:20]}...
+
+Please try uploading an image instead, or type:
+*register YOUR_GST_NUMBER*
+
+Or register manually at https://oemlinker.com/register"""
+        
+        # Check if GST is already registered
+        existing_vendor = await db.vendors.find_one({"gstin": extracted_text}, {"_id": 0})
+        if existing_vendor:
+            return f"""⚠️ *GST Already Registered*
+
+This GST number (*{extracted_text}*) is already linked to a vendor account.
+
+If this is your account, please:
+1. Login at https://oemlinker.com/login
+2. Update your phone number in profile settings
+
+Or contact support@oemlinker.com for help."""
+
+        # Validate GST using external API
+        GSTIN_API_KEY = os.environ.get("GSTIN_API_KEY", "")
+        gst_data = None
+        
+        if GSTIN_API_KEY:
+            try:
+                async with httpx.AsyncClient() as client:
+                    gst_response = await client.get(
+                        f"https://sheet.gstincheck.co.in/check/{GSTIN_API_KEY}/{extracted_text}",
+                        timeout=15.0
+                    )
+                    if gst_response.status_code == 200:
+                        result = gst_response.json()
+                        if result.get("flag"):
+                            gst_data = result.get("data", {})
+            except Exception as e:
+                logger.warning(f"GST validation API error: {str(e)}")
+        
+        if not gst_data:
+            return f"""⚠️ *GST Validation Failed*
+
+Could not validate GST number: *{extracted_text}*
+
+Please check if:
+1. GST number is correct
+2. GST is active and valid
+
+You can also register manually at https://oemlinker.com/register"""
+
+        # Extract company details
+        company_name = gst_data.get("tradeNam") or gst_data.get("lgnm", "Unknown Company")
+        gst_status = gst_data.get("sts", "Unknown")
+        address = gst_data.get("pradr", {}).get("adr", "")
+        city = gst_data.get("pradr", {}).get("loc", "")
+        state = gst_data.get("pradr", {}).get("stcd", "")
+        pincode = gst_data.get("pradr", {}).get("pncd", "")
+        
+        # Store pending registration
+        pending_registrations[sender] = {
+            "gstin": extracted_text,
+            "gst_data": gst_data,
+            "company_name": company_name,
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=PENDING_REGISTRATION_TTL_MINUTES)
+        }
+        
+        logger.info(f"Pending registration (from PDF) stored for {sender[:6]}***: {company_name}")
+        
+        return f"""📋 *GST Details Found (from PDF)*
+
+Please confirm your company details:
+
+🏢 *Company Name:* {company_name}
+📋 *GSTIN:* {extracted_text}
+📊 *GST Status:* {gst_status}
+📍 *Address:* {address[:50]}{'...' if len(address) > 50 else ''}
+🏙️ *City:* {city}
+🗺️ *State:* {state}
+📮 *Pincode:* {pincode}
+
+━━━━━━━━━━━━━━━━━━━━━━
+*Is this information correct?*
+
+Reply *YES* to confirm and register
+Reply *NO* to cancel
+
+⏳ This confirmation expires in {PENDING_REGISTRATION_TTL_MINUTES} minutes."""
+        
+    except Exception as e:
+        logger.error(f"GST PDF processing error: {str(e)}")
+        return f"""❌ *PDF Processing Failed*
+
+An error occurred while processing your GST certificate PDF.
+
+Please try:
+• Upload an image (JPG/PNG) instead
+• Register manually at https://oemlinker.com/register
+• Type *register YOUR_GST_NUMBER*
+
+Contact support@oemlinker.com for assistance."""
 
 
 async def process_whatsapp_registration(sender: str, gst_number: str) -> str:
