@@ -155,6 +155,27 @@ Migration: Phase 1-2 done (models, services, auth routes). Phase 3 next (vendor/
 - /app/test_reports/iteration_12.json - RFQ Urgency Feature (100% pass)
 - /app/test_reports/iteration_13.json - Availability Prioritization (100% pass)
 
+## Legal Pages (Added Mar 7, 2026)
+Professional legal documentation for platform compliance:
+- **Terms of Service** (/terms-of-service): 14 comprehensive sections covering:
+  - Definitions, Eligibility, Platform Services
+  - Buyer & Vendor Terms
+  - Payments, Fees, Escrow
+  - Dispute Resolution
+  - Intellectual Property
+  - Limitation of Liability
+  - Termination, Governing Law (India)
+- **Privacy Policy** (/privacy-policy): 14 comprehensive sections covering:
+  - Information Collection (provided, automatic, third-party)
+  - AI & Machine Learning data practices
+  - Data Sharing & Disclosure rules
+  - Security measures (SSL, encryption, 2FA)
+  - Data Retention periods
+  - User Rights (access, correction, deletion, portability)
+  - Cookies policy
+  - Grievance Officer details (Indian IT Act compliance)
+- **Footer Links**: Added to landing page with Terms, Privacy, Contact links
+
 ## Dispute Resolution System (Added Mar 6, 2026)
 Complete dispute management system for handling conflicts:
 - **Dispute Types**: Quality Issue, Delivery Delay, Wrong Specifications, Payment Issue, Communication, Damaged Goods, Incomplete Order, Other

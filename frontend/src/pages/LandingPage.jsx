@@ -252,11 +252,24 @@ const LandingPage = () => {
       {/* Footer */}
       <footer className="py-12 bg-slate-950 text-slate-400">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-2">
               <img src="/logo.png" alt="OEMLinker" className="w-[320px] h-[80px]" />
             </div>
-            <p className="text-sm">© 2025 OEMLinker. Precision Manufacturing on Demand.</p>
+            <div className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
+              <div className="flex items-center gap-6 text-sm">
+                <Link to="/terms-of-service" className="hover:text-orange-400 transition-colors">
+                  Terms of Service
+                </Link>
+                <Link to="/privacy-policy" className="hover:text-orange-400 transition-colors">
+                  Privacy Policy
+                </Link>
+                <a href="mailto:support@oemlinker.com" className="hover:text-orange-400 transition-colors">
+                  Contact
+                </a>
+              </div>
+              <p className="text-sm">© 2026 OEMLinker. All rights reserved.</p>
+            </div>
           </div>
         </div>
       </footer>

@@ -15,66 +15,61 @@ The platform must support a complete workflow: RFQ -> AI Analysis -> Vendor Matc
 **User's preferred language**: English
 
 **what currently exists?**
-OEMLinker is a comprehensive full-stack application featuring a React frontend, a monolithic FastAPI backend, and a MongoDB database.
+OEMLinker is a feature-rich full-stack application with a React frontend, a FastAPI backend, and a MongoDB database. The backend, originally a single  monolith, is currently being refactored into a modular structure.
 
 **Key Implemented Features:**
--   **Core Platform:** JWT authentication (login, register, 2FA, password reset), user roles, and dashboards.
--   **Email Verification:** New users receive a verification email upon registration, and a banner is displayed in the dashboard until their email is verified.
--   **RFQ Workflow:** Buyers can create RFQs, upload multiple drawings, cancel uploads, and now specify an **Urgency Status** (Normal, Urgent, Critical).
--   **Advanced Vendor Matching:** A sophisticated algorithm matches vendors based on machine capabilities, dimensions, location, and Past Experience.
--   **Vendor Profiles:** Vendors can manage company details, a portfolio of Past Experiences, and now set the **availability status** (Available, Engaged, Maintenance, Offline) for each of their machines.
--   **AI Voice Agent:** A web-based voice assistant on the vendor dashboard allows vendors to query for open RFQs using natural language in English and multiple Indian languages.
--   **Admin Notifications:** The admin () receives email notifications for key events like new user sign-ups, RFQ creation, vendor matching, new quotations, and purchase order creation.
--   **GSTIN Verification:** Vendor registration includes a verification step using a paid, third-party API to auto-fill company details from a GSTIN.
--   **UI/UX:** The application uses INR (₹) as its currency. The UI includes a new 320x80 logo and a mobile-responsive, accessible popup for the voice agent.
+-   **Core Platform:** JWT authentication, user roles, email verification, and dedicated dashboards.
+-   **RFQ & Matching:** Buyers can create RFQs with an Urgency status. A sophisticated matching algorithm prioritizes vendors based on machine availability and RFQ urgency.
+-   **Vendor & Machine Management:** Vendors can manage profiles, portfolios, and set the availability status for their machines.
+-   **Admin Features:** A comprehensive Analytics Dashboard tracks key business metrics. Admin receives email notifications for platform events. A full Dispute Resolution System is in place.
+-   **AI & Integrations:** An AI voice agent allows vendors to query RFQs. GSTIN validation is integrated for vendor onboarding.
+-   **Legal & UI:** The application includes Terms of Service and Privacy Policy pages, accessible from the footer.
 
 **Last working item**:
--   Last item agent was working: Adding an Urgency status field to RFQs. The backend models and API endpoint were updated. Work was in progress on the frontend to add a UI selector on the RFQ creation page.
--   Status: IN PROGRESS
--   Agent Testing Done: N
--   Which testing method agent to use? frontend testing agent
+-   Last item agent was working: Implementing the Legal Pages (Terms of Service & Privacy Policy). The agent created the frontend pages, added the routes, and linked them in the application footer.
+-   Status: FINISHED
+-   Agent Testing Done: Y
+-   Which testing method agent to use? NA
 -   User Testing Done: N
 
 **All Pending/In progress Issue list**:
 -   **Issue 1: Production Login Failure with Password (Priority: P0)**
-    -   **Description:** The user reported that password-based login fails on the production site, but Google login works. The agent identified the cause as the production deployment using an incorrect  (pointing to a preview environment). A fix was implemented to use a relative URL (), but the user must redeploy the application for the fix to take effect.
+    -   **Description:** Password-based login fails on the production site () because the deployment was using an incorrect backend URL. A fix was implemented to use a relative URL (), but it requires the user to redeploy the application.
     -   **Next debug checklist:**
         1.  Confirm with the user that they have deployed the latest code.
-        2.  Attempt to log in on the production site using password credentials ( / ).
-        3.  If it still fails, check the browser's network tab to confirm the API calls are being sent to the correct production domain () and not a preview domain.
-    -   **Status:** BLOCKED (Awaiting user deployment)
+        2.  Attempt to log in on the production site using password credentials.
+        3.  If it fails, verify the browser's network requests are targeting the correct production domain.
+    -   **Status:** BLOCKED
     -   **Is recurring issue?** Y
     -   **Should Test frontend/backend/both after fix?** frontend
-    -   **Blocked on other issue:** User action (Deployment)
+    -   **Blocked on other issue:** User action (Deployment).
 
 **In progress Task List**:
--   **Task 1: Complete RFQ Urgency Feature (Priority: P0)**
-    -   **Where to resume:** Continue editing  to add the UI selector for Urgency.
-    -   **What will be achieved with this?** This will allow buyers to mark RFQs as Normal, Urgent, or Critical, enabling better prioritization for vendors and the system.
+-   **Task 1: Complete Refactoring of  Monolith (Priority: P0)**
+    -   **Where to resume:** Phase 1 (creating structure and moving models) and the start of Phase 2 (moving auth/user routes) are complete. The next step is to continue Phase 2 by systematically moving the remaining endpoints (vendors, machines, RFQs, quotes, orders, etc.) from  into their respective files in the  directory.
+    -   **What will be achieved with this?** This will significantly improve the backend's maintainability, scalability, and readability, making future development faster and more reliable.
     -   **Status:** IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?** both
-    -   **Blocked on something:** None
+    -   **Should Test frontend/backend/both after fix?** backend
+    -   **Blocked on something:** None.
 
 **Upcoming and Future Tasks**
 **Upcoming Tasks:**
--   **Refactor  Monolith (P0):** The user has been briefed on the benefits of breaking the ~7,000-line  into a structured project (routes, models, services). This is a critical technical debt item to improve maintainability.
--   **WhatsApp Integration for Voice Agent (P1):** The user inquired about adding the voice agent functionality to WhatsApp. This requires a Twilio integration.
--   **Stripe Integration (P1):** Implement the planned escrow payment system using Stripe.
+-   **Stripe Integration (P1):** Implement the escrow payment system. This is a critical prerequisite for launching the business and processing real transactions.
+-   **WhatsApp Integration for Voice Agent (P1):** Allow vendors to interact with the AI voice assistant via WhatsApp, likely using the Twilio API.
 
 **Future Tasks:**
 -   Instant AI auto-quote for simple parts.
 -   API for ERP integration.
 -   Capacity forecasting for vendors.
+-   Full-scale stress testing before public launch.
 
 **Completed work in this session**
--   **Bug Fix:** Resolved an issue where saving a vendor's profile would erase their Past Experience entries.
--   **Feature:** Implemented a complete email verification flow for new users.
--   **Feature:** Added admin email notifications for all major platform events.
--   **Feature:** Built and integrated a multilingual (English & Indian languages) AI Voice Agent for vendors to find open RFQs.
--   **Feature:** Added machine availability status management for vendors.
--   **Feature:** Successfully integrated and tested the user's paid API key for GSTIN verification.
--   **UI/UX:** Resized the application logo, improved the voice agent popup with a close button and clickable links, and made it mobile-responsive.
--   **Admin:** Guided the user on deploying to production and creating the initial admin account.
+-   **Feature:** Completed the RFQ Urgency feature (UI and backend logic).
+-   **Feature:** Enhanced the vendor matching algorithm to factor in machine availability and RFQ urgency.
+-   **Refactoring:** Initiated the  monolith refactoring, creating a new modular structure in  and migrating models and auth/user routes.
+-   **Feature:** Built a comprehensive Admin Analytics Dashboard ().
+-   **Feature:** Implemented a complete Dispute Resolution System (backend API and frontend UI).
+-   **Feature:** Added Legal Pages (Terms of Service, Privacy Policy) with footer links.
 
 **Earlier issues found/mentioned but not fixed**
 -   The **Made with Emergent badge** cannot be removed via code in the preview environment as it's injected by a platform script. The user must deploy to a custom server or contact support for paid plans to remove it.
@@ -86,67 +81,65 @@ OEMLinker is a comprehensive full-stack application featuring a React frontend, 
 
 
 **Key Technical Concepts**
--   **Backend:** FastAPI
--   **Frontend:** React (Hooks, Context API)
--   **Database:** MongoDB
--   **AI Integration:**
-    -   OpenAI GPT-5.2 (Vision) for drawing analysis.
-    -   OpenAI Whisper (Speech-to-Text) and TTS for the voice agent, orchestrated via .
--   **Email Notifications:** Resend API.
--   **API Integration:**  for GSTIN validation.
+-   **Backend:** FastAPI (transitioning from a monolith to a modular structure with APIRouters).
+-   **Frontend:** React (Hooks, Context API), Recharts for data visualization.
+-   **Database:** MongoDB.
+-   **AI Integration:** OpenAI GPT (Vision), Whisper (STT), TTS.
+-   **Email:** Resend API.
 
 **key DB schema**
--   **users:** 
--   **vendor_profile.machines:** 
--   **rfqs:**  (Enum: Normal, Urgent, Critical)
+-   **rfqs:**  (Enum: Urgent, High Priority, Normal, Low Priority)
+-   **disputes:**  (NEW)
 
 **changes in tech stack**
 -   None.
 
 **All files of reference**
--   : Heavily modified for email verification, admin notifications, voice agent, machine availability, RFQ urgency, and GSTIN API integration.
--   : Currently being edited to add the Urgency dropdown.
--   : Overhauled to display and manage machine availability status.
--   : New file containing the full UI and logic for the voice assistant.
--   : New file for the email verification flow.
--   : Modified to show the verify email banner.
--   : Modified to launch the voice agent.
--   : Modified to use  as a fallback, fixing a critical production bug.
+-   : The monolithic file, which is actively being refactored. It contains the new analytics and dispute endpoints.
+-   : The new directory containing the modular backend structure. Key files include  and the various model files in .
+-   : The new admin analytics dashboard UI.
+-    & : The new UI for the dispute resolution system.
+-   : Modified to include the Raise Dispute functionality.
+-    & : Modified to handle RFQ urgency.
+-    & : New static legal pages.
+-    & : Modified for new routes and navigation links.
 
 **Areas that need refactoring**:
--    is critically oversized and complex. It must be broken down into separate files for routes, models, and services to ensure future scalability and maintainability.
+-   : The refactoring is **in progress** but is the highest priority technical debt. All endpoints outside of auth and user profiles still reside in this 7000+ line file and need to be migrated to the new modular structure in .
 
 **key api endpoints**
--   : Sends a new verification email.
--   : Verifies a user's email address.
--   : Transcribes user audio to text.
--   : Processes transcribed text to find RFQs.
--   : Updates a machine's status.
--   : Modified to accept an  field.
+-   : Retrieves all data for the admin analytics dashboard.
+-   : Creates a new dispute for an order.
+-   : Lists all disputes for the current user or all disputes for an admin.
+-   : Retrieves details for a single dispute.
+-   : Adds a message to a dispute thread.
+-   : Updates the status of a dispute (admin only).
+-   : Matching logic was significantly updated.
 
 **Critical Info for New Agent**
--   Your first priority is to complete the **RFQ Urgency feature**. Resume work in  to add the UI, then update  to display the new status.
--   The user is experiencing login issues on their production site. A fix has been committed (using relative URLs in ), but **the user must deploy the latest code** for it to work. Be prepared to guide them on this if the issue is raised again.
--   The GSTIN validation API is working correctly. Any future failures are likely due to invalid test GSTINs or an issue with the user's API key balance on .
--   The refactoring of the monolithic  is the most important upcoming task after the current feature is complete. Plan to propose this to the user next.
+-   Your primary task is to **continue the refactoring of **. This is a large but critical undertaking. The next logical step is to migrate the vendor, machine, and RFQ-related endpoints into their own router files under . Follow the established pattern from .
+-   The production login issue remains blocked on the user. Do not attempt to fix it again in the code; the solution is for the user to deploy the existing fix.
+-   After making progress on the refactoring, the next major feature to propose is the **Stripe integration**, as it's essential for the platform to function as a real business.
 
 **documents and test reports created in this job**
--   : Updated with all new features.
+-   /app/test_reports/iteration_1.json
+-   /app/test_reports/iteration_2.json
+-   /app/memory/PRD.md
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **user:** Add Urgency of RFQs status (Status: **In Progress**)
-2.  **user:** Add feature to machines to show if they are available or engaged (Status: **Completed**)
-3.  **user:** Make proper popup page of results of voice agent in mobile view to enable user to close (Status: **Completed**)
-4.  **user:** In voice agent results show only open RFQ which are not quoted or not expired (Status: **Completed**)
-5.  **user:** Check with this GSTIN 19AADCS8427M1ZQ (Status: **Completed**)
-6.  **user:** GSTIN failing (Status: **Resolved**)
-7.  **user:** Can this voice feature added into whatsapp (Status: **Acknowledged**, added to upcoming tasks)
-8.  **user:** Modify voice agent popup with cross sign to close popup and link with all results generated from voice agent (Status: **Completed**)
-9.  **user:** Implement this for GSTIN validation (with API key) (Status: **Completed**)
-10. **user:** can it be in all indian language including english (for voice agent) (Status: **Completed**)
+1.  **user:** Legal pages (Terms of Service, Privacy Policy) (Status: **Completed**)
+2.  **user:** Finish the process (regarding the Dispute System) (Status: **Completed**)
+3.  **user:** is the app ready for launch in market for onboarding real users and do business (Status: **Answered**)
+4.  **user:** Add Platform Analytics - Dashboard for you to track business (Status: **Completed**)
+5.  **user:** Dispute resolution system (Status: **Completed**)
+6.  **user:** Refactor server.py monolith (Status: **In Progress**)
+7.  **user:** yes (confirming to proceed with refactoring Phase 2) (Status: **Acknowledged**)
+8.  **user:** Match urgent and top priority job with available matching machines and give weightage in ranking (Status: **Completed**)
+9.  **user:** 1 (confirming plan to work on RFQ Urgency feature) (Status: **Acknowledged**)
+10. **user:** Please use ask_human tool and confirm your plan now. (Status: **Acknowledged**)
 
 **Project Health Check:**
--   **Broken:** None in the preview environment. The production login is broken pending user deployment of the fix.
+-   **Broken:** The password login on the user's production deployment is broken, pending their action to deploy the provided fix.
 -   **Mocked:** Stripe payment integration, WhatsApp integration.
 
 **3rd Party Integrations**
@@ -157,9 +150,11 @@ OEMLinker is a comprehensive full-stack application featuring a React frontend, 
 -   **Stripe:** Planned for payments.
 
 **Testing status**
--   Testing agent used after significant changes: NO
+-   Testing agent used after significant changes: YES
 -   Troubleshoot agent used after agent stuck in loop: NO
--   Test files created: []
+-   Test files created:
+    - /app/test_reports/iteration_1.json
+    - /app/test_reports/iteration_2.json
 -   Known regressions: None.
 
 **Credentials to test flow:**
@@ -174,4 +169,4 @@ OEMLinker is a comprehensive full-stack application featuring a React frontend, 
     -   Password: 
 
 **What agent forgot to execute**
--   The agent was in the middle of implementing the RFQ Urgency feature when the session ended. No other requested tasks were forgotten.</analysis>
+-   The agent completed the work for the Legal Pages task but the session ended just before it could call the  tool to formally conclude it and update the PRD.md for that specific item.</analysis>

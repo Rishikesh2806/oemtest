@@ -2636,7 +2636,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-6.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://vendor-match-staging.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -4762,7 +4762,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-6.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://vendor-match-staging.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -4886,7 +4886,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-6.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://vendor-match-staging.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -5121,7 +5121,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://rfq-marketplace-6.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://vendor-match-staging.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -5379,7 +5379,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-6.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://vendor-match-staging.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -5490,7 +5490,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-6.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://vendor-match-staging.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(
@@ -8283,6 +8283,428 @@ async def text_to_speech(request: Request, user: dict = Depends(get_current_user
     except Exception as e:
         logger.error(f"TTS error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Speech generation failed: {str(e)}")
+
+# ============== WHATSAPP INTEGRATION (GUPSHUP) ==============
+# Import WhatsApp service
+from app.services.whatsapp_service import whatsapp_service, parse_webhook_message
+
+# Store WhatsApp conversation sessions
+whatsapp_sessions = {}  # {phone_number: {"user_id": str, "conversation": [], "last_active": datetime}}
+
+class WhatsAppMessageRequest(BaseModel):
+    to_number: str
+    message: str
+
+class WhatsAppBroadcastRequest(BaseModel):
+    message: str
+    vendor_ids: Optional[List[str]] = None  # If None, send to all vendors
+
+@api_router.get("/whatsapp/status")
+async def whatsapp_status():
+    """Check WhatsApp integration status"""
+    is_configured = whatsapp_service.is_configured()
+    return {
+        "configured": is_configured,
+        "app_name": os.environ.get("GUPSHUP_APP_NAME", "OEMLinker"),
+        "source_number": os.environ.get("GUPSHUP_SOURCE_NUMBER", "Not configured")[:6] + "****" if os.environ.get("GUPSHUP_SOURCE_NUMBER") else "Not configured"
+    }
+
+@api_router.post("/whatsapp/send")
+async def send_whatsapp_message(
+    data: WhatsAppMessageRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Send a WhatsApp message (Admin only)"""
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not whatsapp_service.is_configured():
+        raise HTTPException(status_code=503, detail="WhatsApp service not configured. Please set GUPSHUP_SOURCE_NUMBER in environment.")
+    
+    result = await whatsapp_service.send_text_message(data.to_number, data.message)
+    
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed to send message"))
+    
+    return result
+
+@api_router.post("/whatsapp/notify-rfq")
+async def notify_vendors_new_rfq(
+    rfq_id: str,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Send WhatsApp notifications to matched vendors about a new RFQ
+    Called after RFQ matching is complete
+    """
+    if user.get("role") not in ["admin", "buyer"]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    if not whatsapp_service.is_configured():
+        return {"success": False, "error": "WhatsApp not configured", "notified_count": 0}
+    
+    # Get RFQ details
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Get matched vendors with their phone numbers
+    notified_count = 0
+    errors = []
+    
+    for match in rfq.get("matched_vendors", []):
+        vendor_id = match.get("vendor_id")
+        if not vendor_id:
+            continue
+        
+        vendor = await db.vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+        if not vendor or not vendor.get("phone"):
+            continue
+        
+        phone = vendor.get("phone", "").strip()
+        if not phone:
+            continue
+        
+        # Prepare message
+        urgency_label = URGENCY_LABELS.get(rfq.get("urgency", "normal"), "Normal")
+        message = f"""🔔 *New RFQ Match on OEMLinker!*
+
+📋 *{rfq.get('title', 'New RFQ')}*
+{urgency_label}
+
+📦 Material: {rfq.get('material_type', 'N/A')}
+📏 Quantity: {rfq.get('quantity', 'N/A')} units
+🎯 Match Score: {match.get('match_score', 0)}%
+
+💡 Reply with *"details {rfq_id[:8]}"* to learn more or login to OEMLinker to submit your quote.
+
+Type *"help"* for more commands."""
+
+        result = await whatsapp_service.send_text_message(phone, message)
+        
+        if result.get("success"):
+            notified_count += 1
+            logger.info(f"WhatsApp notification sent to vendor {vendor_id}")
+        else:
+            errors.append({"vendor_id": vendor_id, "error": result.get("error")})
+    
+    return {
+        "success": True,
+        "notified_count": notified_count,
+        "total_matched": len(rfq.get("matched_vendors", [])),
+        "errors": errors if errors else None
+    }
+
+@api_router.post("/whatsapp/webhook")
+async def whatsapp_webhook(request: Request):
+    """
+    Webhook endpoint for receiving WhatsApp messages from Gupshup
+    Configure this URL in your Gupshup dashboard
+    """
+    try:
+        payload = await request.json()
+        logger.info(f"WhatsApp webhook received: {payload.get('type', 'unknown')}")
+        
+        parsed = parse_webhook_message(payload)
+        
+        if not parsed:
+            return {"status": "ignored"}
+        
+        if parsed.get("type") == "status":
+            # Handle delivery status updates
+            logger.info(f"Message status update: {parsed.get('status')} for {parsed.get('message_id')}")
+            return {"status": "ok"}
+        
+        # Handle incoming message
+        sender = parsed.get("sender", "")
+        text = parsed.get("text", "").strip().lower()
+        
+        if not sender or not text:
+            return {"status": "ok"}
+        
+        # Find vendor by phone number
+        vendor = await db.vendors.find_one(
+            {"phone": {"$regex": sender[-10:]}},  # Match last 10 digits
+            {"_id": 0}
+        )
+        
+        user = None
+        if vendor:
+            user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0})
+        
+        # Process commands
+        response_message = await process_whatsapp_command(text, sender, vendor, user)
+        
+        # Send response
+        if response_message and whatsapp_service.is_configured():
+            await whatsapp_service.send_text_message(sender, response_message)
+        
+        # Store conversation for context
+        if sender not in whatsapp_sessions:
+            whatsapp_sessions[sender] = {
+                "user_id": user.get("user_id") if user else None,
+                "vendor_id": vendor.get("vendor_id") if vendor else None,
+                "conversation": [],
+                "last_active": datetime.now(timezone.utc)
+            }
+        
+        whatsapp_sessions[sender]["conversation"].append({
+            "role": "user",
+            "content": text,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        })
+        whatsapp_sessions[sender]["last_active"] = datetime.now(timezone.utc)
+        
+        if response_message:
+            whatsapp_sessions[sender]["conversation"].append({
+                "role": "assistant",
+                "content": response_message,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            })
+        
+        return {"status": "ok"}
+        
+    except Exception as e:
+        logger.error(f"WhatsApp webhook error: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+
+async def process_whatsapp_command(
+    text: str, 
+    sender: str, 
+    vendor: Optional[dict], 
+    user: Optional[dict]
+) -> str:
+    """Process WhatsApp commands and return response"""
+    
+    # Help command
+    if text in ["help", "hi", "hello", "menu", "start"]:
+        if vendor:
+            return f"""👋 Welcome to *OEMLinker*, {vendor.get('company_name', 'Vendor')}!
+
+📋 *Available Commands:*
+
+*rfqs* - View open RFQs matching your capabilities
+*details <rfq_id>* - Get details of a specific RFQ
+*my quotes* - View your submitted quotes
+*my orders* - View your active orders
+*profile* - View your vendor profile
+*help* - Show this menu
+
+💡 You can also ask questions in natural language!
+
+Example: "Show me urgent RFQs for steel machining" """
+        else:
+            return """👋 Welcome to *OEMLinker*!
+
+Your phone number is not linked to a vendor account.
+
+To use WhatsApp features:
+1. Register as a vendor at oemlinker.com
+2. Add your phone number to your profile
+
+Need help? Contact support@oemlinker.com"""
+
+    # Must be a registered vendor for other commands
+    if not vendor:
+        return "⚠️ Please register and link your phone number at oemlinker.com to use this service."
+    
+    # List RFQs command
+    if text in ["rfqs", "rfq", "jobs", "opportunities", "open rfqs"]:
+        # Get matched RFQs for this vendor
+        rfqs = await db.rfqs.find(
+            {
+                "status": {"$in": ["submitted", "matching", "quoted"]},
+                "matched_vendors.vendor_id": vendor.get("vendor_id")
+            },
+            {"_id": 0, "rfq_id": 1, "title": 1, "material_type": 1, "quantity": 1, "urgency": 1, "matched_vendors": 1}
+        ).sort("created_at", -1).limit(5).to_list(length=5)
+        
+        if not rfqs:
+            return "📭 No matching RFQs found at the moment. We'll notify you when new opportunities arise!"
+        
+        response = "📋 *Your Matched RFQs:*\n\n"
+        for rfq in rfqs:
+            urgency_emoji = {"urgent": "🔴", "high": "🟠", "normal": "🟢", "low": "🔵"}.get(rfq.get("urgency", "normal"), "🟢")
+            # Find match score for this vendor
+            match_score = 0
+            for m in rfq.get("matched_vendors", []):
+                if m.get("vendor_id") == vendor.get("vendor_id"):
+                    match_score = m.get("match_score", 0)
+                    break
+            
+            response += f"{urgency_emoji} *{rfq.get('title', 'Untitled')[:30]}*\n"
+            response += f"   ID: `{rfq.get('rfq_id', '')[:8]}`\n"
+            response += f"   Material: {rfq.get('material_type', 'N/A')}\n"
+            response += f"   Qty: {rfq.get('quantity', 'N/A')} | Match: {match_score}%\n\n"
+        
+        response += "_Reply with *details <id>* for more info_"
+        return response
+    
+    # RFQ Details command
+    if text.startswith("details ") or text.startswith("rfq "):
+        parts = text.split(" ", 1)
+        if len(parts) < 2:
+            return "⚠️ Please specify an RFQ ID. Example: *details abc123*"
+        
+        rfq_id_search = parts[1].strip()
+        
+        # Find RFQ by partial ID match
+        rfq = await db.rfqs.find_one(
+            {"rfq_id": {"$regex": f"^rfq_{rfq_id_search}", "$options": "i"}},
+            {"_id": 0}
+        )
+        
+        if not rfq:
+            # Try without prefix
+            rfq = await db.rfqs.find_one(
+                {"rfq_id": {"$regex": rfq_id_search, "$options": "i"}},
+                {"_id": 0}
+            )
+        
+        if not rfq:
+            return f"⚠️ RFQ with ID '{rfq_id_search}' not found. Use *rfqs* to see available opportunities."
+        
+        urgency_label = URGENCY_LABELS.get(rfq.get("urgency", "normal"), "Normal")
+        
+        response = f"""📋 *RFQ Details*
+
+*{rfq.get('title', 'Untitled')}*
+{urgency_label}
+
+📦 *Specifications:*
+• Material: {rfq.get('material_type', 'N/A')}
+• Quantity: {rfq.get('quantity', 'N/A')} units
+• Tolerance: ±{rfq.get('tolerance', 'N/A')}mm
+• Surface Finish: {rfq.get('surface_finish', 'N/A')}
+
+📝 *Description:*
+{rfq.get('description', 'No description')[:200]}
+
+📅 Deadline: {rfq.get('deadline', 'Not specified')}
+🏷️ Status: {rfq.get('status', 'N/A').replace('_', ' ').title()}
+
+💰 To submit a quote, please login to oemlinker.com"""
+        
+        return response
+    
+    # My Quotes command
+    if text in ["my quotes", "quotes", "my bids"]:
+        quotes = await db.quotes.find(
+            {"vendor_id": vendor.get("vendor_id")},
+            {"_id": 0}
+        ).sort("created_at", -1).limit(5).to_list(length=5)
+        
+        if not quotes:
+            return "📭 You haven't submitted any quotes yet. Use *rfqs* to find opportunities!"
+        
+        response = "💰 *Your Recent Quotes:*\n\n"
+        for quote in quotes:
+            status_emoji = {"pending": "⏳", "accepted": "✅", "rejected": "❌"}.get(quote.get("status", "pending"), "⏳")
+            rfq = await db.rfqs.find_one({"rfq_id": quote.get("rfq_id")}, {"_id": 0, "title": 1})
+            rfq_title = rfq.get("title", "Unknown") if rfq else "Unknown"
+            
+            response += f"{status_emoji} *{rfq_title[:25]}*\n"
+            response += f"   Amount: ₹{quote.get('price', 0):,.2f}\n"
+            response += f"   Lead Time: {quote.get('lead_time_days', 'N/A')} days\n"
+            response += f"   Status: {quote.get('status', 'pending').title()}\n\n"
+        
+        return response
+    
+    # My Orders command
+    if text in ["my orders", "orders", "active orders"]:
+        orders = await db.orders.find(
+            {"vendor_id": vendor.get("vendor_id"), "status": {"$nin": ["cancelled", "completed"]}},
+            {"_id": 0}
+        ).sort("created_at", -1).limit(5).to_list(length=5)
+        
+        if not orders:
+            return "📭 No active orders. Keep submitting competitive quotes!"
+        
+        response = "📦 *Your Active Orders:*\n\n"
+        for order in orders:
+            status_emoji = {
+                "pending_payment": "💳",
+                "paid": "✅",
+                "in_production": "🔨",
+                "quality_check": "🔍",
+                "dispatched": "🚚",
+                "delivered": "📬"
+            }.get(order.get("status", ""), "📋")
+            
+            response += f"{status_emoji} *PO #{order.get('po_number', 'N/A')}*\n"
+            response += f"   Amount: ₹{order.get('total_amount', 0):,.2f}\n"
+            response += f"   Status: {order.get('status', 'N/A').replace('_', ' ').title()}\n\n"
+        
+        return response
+    
+    # Profile command
+    if text in ["profile", "my profile", "account"]:
+        response = f"""👤 *Your Vendor Profile*
+
+🏢 *{vendor.get('company_name', 'N/A')}*
+
+📍 Location: {vendor.get('city', 'N/A')}, {vendor.get('country', 'N/A')}
+📞 Phone: {vendor.get('phone', 'N/A')}
+⭐ Rating: {vendor.get('rating', 0):.1f}/5
+📊 Total Jobs: {vendor.get('total_jobs', 0)}
+✅ Approved: {'Yes' if vendor.get('is_approved') else 'Pending'}
+
+_Update your profile at oemlinker.com_"""
+        return response
+    
+    # Natural language query using AI
+    if EMERGENT_LLM_KEY and len(text) > 10:
+        try:
+            # Use AI to understand and respond to the query
+            llm = LlmChat(api_key=EMERGENT_LLM_KEY, model="gpt-4o-mini")
+            
+            # Get vendor's matched RFQs for context
+            rfqs = await db.rfqs.find(
+                {
+                    "status": {"$in": ["submitted", "matching", "quoted"]},
+                    "matched_vendors.vendor_id": vendor.get("vendor_id")
+                },
+                {"_id": 0, "rfq_id": 1, "title": 1, "material_type": 1, "quantity": 1, "urgency": 1, "deadline": 1, "description": 1}
+            ).limit(10).to_list(length=10)
+            
+            rfq_context = "\n".join([
+                f"- {r.get('title')} (ID: {r.get('rfq_id')[:8]}, Material: {r.get('material_type')}, Qty: {r.get('quantity')}, Urgency: {r.get('urgency')})"
+                for r in rfqs
+            ]) if rfqs else "No matching RFQs currently available."
+            
+            system_prompt = f"""You are OEMLinker's WhatsApp assistant helping vendor {vendor.get('company_name')}.
+            
+Available RFQs for this vendor:
+{rfq_context}
+
+Commands the user can use:
+- rfqs: List matched RFQs
+- details <id>: Get RFQ details  
+- my quotes: View submitted quotes
+- my orders: View active orders
+- profile: View vendor profile
+- help: Show all commands
+
+Respond concisely in WhatsApp-friendly format. Use *bold* for emphasis.
+If the user asks about specific RFQs, provide relevant details from the context.
+Keep responses under 500 characters when possible."""
+
+            llm.add_message(UserMessage(content=f"User query: {text}"))
+            response = await asyncio.to_thread(
+                llm.chat,
+                system_prompt=system_prompt,
+                max_tokens=300
+            )
+            
+            return response.content if hasattr(response, 'content') else str(response)
+            
+        except Exception as e:
+            logger.error(f"AI response error: {str(e)}")
+            return "🤔 I couldn't understand that. Try using one of these commands:\n\n*rfqs* - View opportunities\n*help* - See all commands"
+    
+    # Default response
+    return "🤔 I didn't understand that command. Type *help* to see available options."
 
 # Include the router in the main app
 app.include_router(api_router)
