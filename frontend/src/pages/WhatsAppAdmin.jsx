@@ -58,7 +58,13 @@ export default function WhatsAppAdmin() {
         })
       });
 
-      const data = await response.json();
+      let data;
+      const text = await response.text();
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { error: text || 'Invalid response from server' };
+      }
 
       if (response.ok && data.success) {
         setSendResult({ success: true, messageId: data.message_id });
@@ -98,7 +104,13 @@ export default function WhatsAppAdmin() {
         })
       });
 
-      const data = await response.json();
+      let data;
+      const text = await response.text();
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = { error: text || 'Invalid response from server' };
+      }
 
       if (response.ok && data.success) {
         setSendResult({ success: true, messageId: data.message_id, isVoice: true, audioSize: data.audio_size_bytes });
