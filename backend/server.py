@@ -11560,22 +11560,36 @@ async def process_whatsapp_command(
     def matches_command(input_text: str, commands: list) -> bool:
         input_text = input_text.lower().strip()
         input_no_spaces = input_text.replace(" ", "")
+        input_words = set(input_text.split())
         
         for cmd in commands:
-            # Direct match
-            if cmd in input_text:
+            cmd_lower = cmd.lower()
+            
+            # Exact match (highest priority)
+            if input_text == cmd_lower:
                 return True
-            # Reverse check (short input matches longer command)
-            if input_text in cmd:
-                return True
+            
+            # For short commands (<=3 chars like "hi"), require exact word match
+            if len(cmd_lower) <= 3:
+                if cmd_lower in input_words:
+                    return True
+            else:
+                # Direct substring match for longer commands
+                if cmd_lower in input_text:
+                    return True
+                # Reverse check (short input matches longer command)
+                if input_text in cmd_lower:
+                    return True
+            
             # No-space match for voice errors like "myorders"
-            if cmd.replace(" ", "") in input_no_spaces:
+            if len(cmd_lower) > 3 and cmd_lower.replace(" ", "") in input_no_spaces:
                 return True
+            
             # Word-based match - check if command words appear in the sentence
-            cmd_words = cmd.split()
+            cmd_words = cmd_lower.split()
             if len(cmd_words) > 1:
                 # For multi-word commands, check if all words appear
-                if all(word in input_text for word in cmd_words):
+                if all(word in input_words for word in cmd_words):
                     return True
         return False
     
