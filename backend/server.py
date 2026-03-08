@@ -10443,15 +10443,10 @@ Example: "Show me urgent RFQs for steel machining" """
 
 Your phone number is not linked to a vendor account.
 
-📝 *Quick Registration via WhatsApp:*
+📝 *Register via WhatsApp:*
 
-📷 *Option 1:* Send a photo of your *GST Certificate*
-   _We'll automatically extract your details!_
-
-✍️ *Option 2:* Type your GST number
-   _Example: register 27AABCU9603R1ZM_
-
-🌐 *Option 3:* Visit oemlinker.com/register
+📷 Send a photo of your *GST Certificate*
+_We'll automatically extract your details and create your account!_
 
 ━━━━━━━━━━━━━━━━━━━━━━
 📷 _Just send your GST certificate image to get started!_"""
@@ -10472,11 +10467,8 @@ Your phone number is not linked to a vendor account.
         else:
             return """📝 *Vendor Registration*
 
-📷 *Easiest Way:* Send a photo of your *GST Certificate*
-   _AI will read and fill your details automatically!_
-
-✍️ *Or type your GST Number:*
-   _register 27AABCU9603R1ZM_
+📷 Send a photo of your *GST Certificate*
+_AI will read and fill your details automatically!_
 
 ━━━━━━━━━━━━━━━━━━━━━━
 Your account will be created with business details from GSTIN database."""
@@ -10485,12 +10477,8 @@ Your account will be created with business details from GSTIN database."""
     if not vendor:
         return """⚠️ Your phone is not linked to a vendor account.
 
-📷 *Quick Registration:*
-Send a photo of your *GST Certificate* to register instantly!
-
-✍️ Or type: _register 27AABCU9603R1ZM_
-
-🌐 Visit https://oemlinker.com to register manually."""
+📷 *Register Now:*
+Send a photo of your *GST Certificate* to register instantly!"""
     
     # Base URL for links
     BASE_URL = "https://oemlinker.com"
