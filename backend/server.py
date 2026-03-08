@@ -10443,13 +10443,18 @@ Example: "Show me urgent RFQs for steel machining" """
 
 Your phone number is not linked to a vendor account.
 
-📝 *Register via WhatsApp:*
-Send your GST number to register instantly!
-Example: _register 27AABCU9603R1ZM_
+📝 *Quick Registration via WhatsApp:*
 
-Or visit oemlinker.com to register manually.
+📷 *Option 1:* Send a photo of your *GST Certificate*
+   _We'll automatically extract your details!_
 
-Need help? Type *help* or contact support@oemlinker.com"""
+✍️ *Option 2:* Type your GST number
+   _Example: register 27AABCU9603R1ZM_
+
+🌐 *Option 3:* Visit oemlinker.com/register
+
+━━━━━━━━━━━━━━━━━━━━━━
+📷 _Just send your GST certificate image to get started!_"""
 
     # Check for GST-based registration (for non-registered users)
     import re
@@ -10467,23 +10472,25 @@ Need help? Type *help* or contact support@oemlinker.com"""
         else:
             return """📝 *Vendor Registration*
 
-To register, please send your *GST Number* in the following format:
+📷 *Easiest Way:* Send a photo of your *GST Certificate*
+   _AI will read and fill your details automatically!_
 
-_register 27AABCU9603R1ZM_
+✍️ *Or type your GST Number:*
+   _register 27AABCU9603R1ZM_
 
-Or just send the GST number directly.
-
-Your account will be created automatically with your business details from GSTIN database."""
+━━━━━━━━━━━━━━━━━━━━━━
+Your account will be created with business details from GSTIN database."""
 
     # Must be a registered vendor for other commands
     if not vendor:
         return """⚠️ Your phone is not linked to a vendor account.
 
-📝 *Quick Registration:*
-Send your GST number to register!
-Example: _27AABCU9603R1ZM_
+📷 *Quick Registration:*
+Send a photo of your *GST Certificate* to register instantly!
 
-Or visit https://oemlinker.com to register."""
+✍️ Or type: _register 27AABCU9603R1ZM_
+
+🌐 Visit https://oemlinker.com to register manually."""
     
     # Base URL for links
     BASE_URL = "https://oemlinker.com"
