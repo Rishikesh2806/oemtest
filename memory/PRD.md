@@ -419,6 +419,33 @@ Allows vendors to register on OEMLinker by uploading their GST certificate image
 - Also cleans up user notifications on deletion
 - Logs session removal for audit trail
 
+## Dynamic Machine Parameter Collection via WhatsApp (Added Dec 2025)
+WhatsApp machine dimension flow now dynamically asks for category-specific parameters, matching the web app behavior:
+
+### Features:
+- **Category-Specific Fields**: Each machine category has its own set of dimension fields (e.g., "thickness" for welding, "spindle diameter" for boring)
+- **21 Machine Categories**: Aligned with `/api/machine-categories` endpoint (VMC, HMC, VTL, Lathe, Boring, Grinding, EDM, Welding, etc.)
+- **Step Progress**: Shows "Step N/total" during dimension collection for better UX
+- **Fuzzy Category Matching**: AI-identified categories are mapped to the correct dimension fields using `get_dimension_config_for_category` helper
+- **All Dimension Fields Supported**: Including specialized fields like `laser_power`, `amperage`, `max_temp`, `accuracy`, `layer_thickness`, etc.
+
+### Dimension Fields by Category Examples:
+- **CNC Turning/Lathe**: max_length, max_diameter, max_swing
+- **VMC**: max_x, max_y, max_z, table_size_x, table_size_y
+- **Boring Machine**: bore_diameter, max_x, max_y, max_z
+- **Welding**: max_thickness, max_length, amperage
+- **Gear Manufacturing**: max_diameter, max_module, max_length, min_teeth
+- **Heat Treatment**: max_x, max_y, max_z, max_temp
+- **Inspection/CMM**: max_x, max_y, max_z, accuracy
+- **Laser Cutting**: max_x, max_y, max_thickness, laser_power
+
+### Key Files:
+- `/app/backend/server.py` - MACHINE_DIMENSION_FIELDS dictionary (line ~8849)
+- `/app/backend/server.py` - `get_dimension_config_for_category` helper (line ~9029)
+- `/app/backend/server.py` - pending_machines dimension flow (line ~9580)
+
+### Test Report: /app/test_reports/iteration_17.json (100% pass - 27 tests)
+
 ## Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders
