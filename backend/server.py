@@ -8840,6 +8840,95 @@ whatsapp_sessions = {}  # {phone_number: {"user_id": str, "conversation": [], "l
 pending_registrations = {}  # {phone_number: {"gstin": str, "gst_data": dict, "expires_at": datetime}}
 PENDING_REGISTRATION_TTL_MINUTES = 10  # Pending registration expires after 10 minutes
 
+# Store pending machine additions awaiting dimensions
+pending_machines = {}  # {phone_number: {"machine_info": dict, "step": str, "dimensions": dict, "image_url": str, "expires_at": datetime}}
+PENDING_MACHINE_TTL_MINUTES = 15  # Pending machine flow expires after 15 minutes
+
+# Dimension fields by machine category
+MACHINE_DIMENSION_FIELDS = {
+    "CNC Turning/Lathe": {
+        "fields": ["max_diameter", "max_length", "bore_diameter", "tolerance"],
+        "prompts": {
+            "max_diameter": "What is the *maximum turning diameter* (mm)?",
+            "max_length": "What is the *maximum turning length* (mm)?",
+            "bore_diameter": "What is the *spindle bore diameter* (mm)? (or type 'skip')",
+            "tolerance": "What is the *best achievable tolerance* (mm)? (e.g., 0.01)"
+        }
+    },
+    "VTL (Vertical Turret Lathe)": {
+        "fields": ["max_diameter", "max_height", "max_swing", "tolerance"],
+        "prompts": {
+            "max_diameter": "What is the *maximum turning diameter* (mm)?",
+            "max_height": "What is the *maximum turning height* (mm)?",
+            "max_swing": "What is the *maximum swing* (mm)?",
+            "tolerance": "What is the *best achievable tolerance* (mm)?"
+        }
+    },
+    "VMC (Vertical Machining Center)": {
+        "fields": ["max_x", "max_y", "max_z", "tolerance"],
+        "prompts": {
+            "max_x": "What is the *X-axis travel* (mm)?",
+            "max_y": "What is the *Y-axis travel* (mm)?",
+            "max_z": "What is the *Z-axis travel* (mm)?",
+            "tolerance": "What is the *best achievable tolerance* (mm)?"
+        }
+    },
+    "HMC (Horizontal Machining Center)": {
+        "fields": ["max_x", "max_y", "max_z", "tolerance"],
+        "prompts": {
+            "max_x": "What is the *X-axis travel* (mm)?",
+            "max_y": "What is the *Y-axis travel* (mm)?",
+            "max_z": "What is the *Z-axis travel* (mm)?",
+            "tolerance": "What is the *best achievable tolerance* (mm)?"
+        }
+    },
+    "5-Axis Machining": {
+        "fields": ["max_x", "max_y", "max_z", "max_diameter", "tolerance"],
+        "prompts": {
+            "max_x": "What is the *X-axis travel* (mm)?",
+            "max_y": "What is the *Y-axis travel* (mm)?",
+            "max_z": "What is the *Z-axis travel* (mm)?",
+            "max_diameter": "What is the *max workpiece diameter* (mm)?",
+            "tolerance": "What is the *best achievable tolerance* (mm)?"
+        }
+    },
+    "Milling": {
+        "fields": ["max_x", "max_y", "max_z", "tolerance"],
+        "prompts": {
+            "max_x": "What is the *table X travel* (mm)?",
+            "max_y": "What is the *table Y travel* (mm)?",
+            "max_z": "What is the *spindle Z travel* (mm)?",
+            "tolerance": "What is the *best achievable tolerance* (mm)?"
+        }
+    },
+    "Grinding": {
+        "fields": ["max_diameter", "max_length", "tolerance"],
+        "prompts": {
+            "max_diameter": "What is the *maximum grinding diameter* (mm)?",
+            "max_length": "What is the *maximum grinding length* (mm)?",
+            "tolerance": "What is the *best achievable tolerance* (mm)? (e.g., 0.001)"
+        }
+    },
+    "Sheet Metal": {
+        "fields": ["max_x", "max_y", "max_thickness", "tonnage"],
+        "prompts": {
+            "max_x": "What is the *maximum sheet length* (mm)?",
+            "max_y": "What is the *maximum sheet width* (mm)?",
+            "max_thickness": "What is the *maximum sheet thickness* (mm)?",
+            "tonnage": "What is the *machine tonnage*? (or type 'skip')"
+        }
+    },
+    "default": {
+        "fields": ["max_x", "max_y", "max_z", "tolerance"],
+        "prompts": {
+            "max_x": "What is the *max X dimension* (mm)?",
+            "max_y": "What is the *max Y dimension* (mm)?",
+            "max_z": "What is the *max Z dimension* (mm)? (or type 'skip')",
+            "tolerance": "What is the *best achievable tolerance* (mm)?"
+        }
+    }
+}
+
 def cleanup_whatsapp_session(phone: str) -> bool:
     """
     Remove WhatsApp session for a given phone number.
@@ -9107,12 +9196,21 @@ async def whatsapp_webhook(request: Request):
         elif msg_type == "image" and parsed.get("image_url"):
             # Check if user is already registered - process as machine photo
             if vendor:
-                response_message = await process_machine_photo_upload(
-                    parsed.get("image_url"), 
-                    sender, 
-                    vendor,
-                    parsed.get("caption", "")
-                )
+                # Check if there's a pending machine - this might be a nameplate image
+                if sender in pending_machines:
+                    response_message = await process_nameplate_image(
+                        parsed.get("image_url"),
+                        sender,
+                        vendor
+                    )
+                else:
+                    # New machine photo
+                    response_message = await process_machine_photo_upload(
+                        parsed.get("image_url"), 
+                        sender, 
+                        vendor,
+                        parsed.get("caption", "")
+                    )
                 if response_message and whatsapp_service.is_configured():
                     await whatsapp_service.send_text_message(sender, response_message)
                 return {"status": "ok"}
@@ -9208,6 +9306,93 @@ This expires in {PENDING_REGISTRATION_TTL_MINUTES} minutes."""
                     if whatsapp_service.is_configured():
                         await whatsapp_service.send_text_message(sender, response_message)
                     return {"status": "ok"}
+        
+        # Check for pending machine dimension input
+        if sender in pending_machines:
+            pending = pending_machines[sender]
+            
+            # Check if expired
+            if datetime.now(timezone.utc) > pending["expires_at"]:
+                del pending_machines[sender]
+                logger.info(f"Pending machine flow expired for {sender[:6]}***")
+            else:
+                text_clean = text.strip().lower()
+                
+                # Handle skip - save machine without dimensions
+                if text_clean in ["skip", "done", "save", "finish"]:
+                    response_message = await save_pending_machine(sender, vendor)
+                    del pending_machines[sender]
+                    if response_message and whatsapp_service.is_configured():
+                        await whatsapp_service.send_text_message(sender, response_message)
+                    return {"status": "ok"}
+                
+                # Handle cancel
+                if text_clean in ["cancel", "exit", "quit"]:
+                    del pending_machines[sender]
+                    response_message = """❌ *Machine Addition Cancelled*
+
+Send another machine photo to try again."""
+                    if whatsapp_service.is_configured():
+                        await whatsapp_service.send_text_message(sender, response_message)
+                    return {"status": "ok"}
+                
+                # Try to parse dimension value
+                try:
+                    # Extract number from text (handles "500mm", "500 mm", "500")
+                    import re
+                    number_match = re.search(r'[\d.]+', text_clean)
+                    if number_match:
+                        value = float(number_match.group())
+                        current_field = pending["step"]
+                        pending["dimensions"][current_field] = value
+                        
+                        # Move to next field
+                        machine_category = pending["machine_info"]["machine_category"]
+                        dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
+                        current_index = pending["field_index"]
+                        next_index = current_index + 1
+                        
+                        if next_index < len(dim_config["fields"]):
+                            # Ask for next dimension
+                            next_field = dim_config["fields"][next_index]
+                            next_prompt = dim_config["prompts"][next_field]
+                            pending["step"] = next_field
+                            pending["field_index"] = next_index
+                            
+                            response_message = f"""✅ *{current_field.replace('_', ' ').title()}:* {value} mm
+
+{next_prompt}
+
+📷 _Or send nameplate photo to auto-fill remaining_
+Type *skip* to save machine now."""
+                        else:
+                            # All dimensions collected - save machine
+                            response_message = await save_pending_machine(sender, vendor)
+                            del pending_machines[sender]
+                        
+                        if whatsapp_service.is_configured():
+                            await whatsapp_service.send_text_message(sender, response_message)
+                        return {"status": "ok"}
+                    else:
+                        # Not a valid number - prompt again
+                        current_field = pending["step"]
+                        machine_category = pending["machine_info"]["machine_category"]
+                        dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
+                        current_prompt = dim_config["prompts"][current_field]
+                        
+                        response_message = f"""⚠️ Please enter a valid number.
+
+{current_prompt}
+
+Example: _500_ or _500mm_
+
+Type *skip* to skip this field."""
+                        if whatsapp_service.is_configured():
+                            await whatsapp_service.send_text_message(sender, response_message)
+                        return {"status": "ok"}
+                        
+                except Exception as e:
+                    logger.error(f"Error processing dimension input: {str(e)}")
         
         # Process commands
         response_message = await process_whatsapp_command(text, sender, vendor, user)
@@ -10048,39 +10233,36 @@ Or add manually at https://oemlinker.com/machines"""
         
         image_url_stored = f"/api/uploads/machines/{filename}"
         
-        # Create machine entry
-        machine_id = f"machine_{uuid.uuid4().hex[:12]}"
-        machine_doc = {
-            "machine_id": machine_id,
+        # Get dimension fields for this machine category
+        dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
+        first_field = dim_config["fields"][0]
+        first_prompt = dim_config["prompts"][first_field]
+        
+        # Store pending machine for dimension collection
+        pending_machines[sender] = {
+            "machine_info": {
+                "name": machine_name if machine_name != "Unknown Machine" else f"{brand} {model}".strip(),
+                "machine_category": machine_category,
+                "machine_type": machine_type,
+                "brand": brand,
+                "model": model,
+                "confidence": confidence,
+                "description": description
+            },
+            "image_url": image_url_stored,
             "vendor_id": vendor["vendor_id"],
-            "name": machine_name if machine_name != "Unknown Machine" else f"{brand} {model}".strip(),
-            "machine_category": machine_category,
-            "machine_type": machine_type,
-            "brand": brand,
-            "model": model,
-            "images": [image_url_stored],
-            "tolerance": 0.01,
-            "materials_supported": [],
-            "monthly_capacity_hours": 160,
-            "is_active": True,
-            "availability_status": "available",
-            "ai_identified": True,
-            "ai_confidence": confidence,
-            "ai_description": description,
-            "source": "whatsapp",
-            "created_at": datetime.now(timezone.utc).isoformat()
+            "step": first_field,
+            "field_index": 0,
+            "dimensions": {},
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=PENDING_MACHINE_TTL_MINUTES)
         }
-        
-        await db.machines.insert_one(machine_doc)
-        logger.info(f"Machine created via WhatsApp: {machine_id} for vendor {vendor['vendor_id']}")
-        
-        # Get machine count
-        machine_count = await db.machines.count_documents({"vendor_id": vendor["vendor_id"]})
         
         # Prepare confidence indicator
         confidence_emoji = {"high": "🟢", "medium": "🟡", "low": "🟠"}.get(confidence, "🟡")
         
-        return f"""✅ *Machine Added Successfully!*
+        logger.info(f"Machine identified via WhatsApp, starting dimension flow: {machine_name} for vendor {vendor['vendor_id']}")
+        
+        return f"""✅ *Machine Identified!*
 
 {confidence_emoji} AI Identification ({confidence} confidence)
 
@@ -10089,6 +10271,101 @@ Or add manually at https://oemlinker.com/machines"""
 📂 Category: {machine_category}
 �icing Brand: {brand}
 📝 Model: {model}
+
+━━━━━━━━━━━━━━━━━━━━━━
+📏 *Now let's add dimensions:*
+
+{first_prompt}
+
+📷 _Or send a photo of the machine *nameplate/spec sheet* to auto-fill dimensions!_
+
+Type *skip* to skip dimensions and save machine as-is."""
+        
+    except Exception as e:
+        logger.error(f"Machine photo processing error: {str(e)}")
+        return f"""❌ *Processing Failed*
+
+An error occurred while processing your machine photo.
+
+Please try again or add machines manually at https://oemlinker.com/machines
+
+Contact support@oemlinker.com for assistance."""
+
+
+async def save_pending_machine(sender: str, vendor: dict) -> str:
+    """Save the pending machine with collected dimensions"""
+    try:
+        if sender not in pending_machines:
+            return "⚠️ No pending machine to save."
+        
+        pending = pending_machines[sender]
+        machine_info = pending["machine_info"]
+        dimensions = pending.get("dimensions", {})
+        
+        # Create machine entry
+        machine_id = f"machine_{uuid.uuid4().hex[:12]}"
+        machine_doc = {
+            "machine_id": machine_id,
+            "vendor_id": vendor["vendor_id"],
+            "name": machine_info["name"],
+            "machine_category": machine_info["machine_category"],
+            "machine_type": machine_info["machine_type"],
+            "brand": machine_info["brand"],
+            "model": machine_info["model"],
+            "images": [pending["image_url"]],
+            # Dimension fields
+            "max_x": dimensions.get("max_x", 0),
+            "max_y": dimensions.get("max_y", 0),
+            "max_z": dimensions.get("max_z", 0),
+            "max_diameter": dimensions.get("max_diameter", 0),
+            "max_length": dimensions.get("max_length", 0),
+            "max_height": dimensions.get("max_height", 0),
+            "max_swing": dimensions.get("max_swing", 0),
+            "bore_diameter": dimensions.get("bore_diameter", 0),
+            "max_thickness": dimensions.get("max_thickness", 0),
+            "tonnage": dimensions.get("tonnage", 0),
+            "tolerance": dimensions.get("tolerance", 0.01),
+            # Other fields
+            "materials_supported": [],
+            "monthly_capacity_hours": 160,
+            "is_active": True,
+            "availability_status": "available",
+            "ai_identified": True,
+            "ai_confidence": machine_info.get("confidence", "medium"),
+            "ai_description": machine_info.get("description", ""),
+            "source": "whatsapp",
+            "created_at": datetime.now(timezone.utc).isoformat()
+        }
+        
+        await db.machines.insert_one(machine_doc)
+        logger.info(f"Machine saved via WhatsApp: {machine_id} for vendor {vendor['vendor_id']}")
+        
+        # Get machine count
+        machine_count = await db.machines.count_documents({"vendor_id": vendor["vendor_id"]})
+        
+        # Build dimensions summary
+        dim_summary = []
+        if dimensions.get("max_x"):
+            dim_summary.append(f"X: {dimensions['max_x']}mm")
+        if dimensions.get("max_y"):
+            dim_summary.append(f"Y: {dimensions['max_y']}mm")
+        if dimensions.get("max_z"):
+            dim_summary.append(f"Z: {dimensions['max_z']}mm")
+        if dimensions.get("max_diameter"):
+            dim_summary.append(f"Dia: {dimensions['max_diameter']}mm")
+        if dimensions.get("max_length"):
+            dim_summary.append(f"Length: {dimensions['max_length']}mm")
+        if dimensions.get("tolerance"):
+            dim_summary.append(f"Tol: {dimensions['tolerance']}mm")
+        
+        dim_text = ", ".join(dim_summary) if dim_summary else "No dimensions added"
+        
+        return f"""✅ *Machine Saved Successfully!*
+
+🏭 *{machine_info['name']}*
+📋 Type: {machine_info['machine_type']}
+📂 Category: {machine_info['machine_category']}
+📏 Dimensions: {dim_text}
 
 📸 Photo saved to your profile
 
@@ -10101,14 +10378,125 @@ You now have *{machine_count} machines* in your profile.
 Type *machines* to see all your machines"""
         
     except Exception as e:
-        logger.error(f"Machine photo processing error: {str(e)}")
-        return f"""❌ *Processing Failed*
+        logger.error(f"Error saving pending machine: {str(e)}")
+        return "❌ Error saving machine. Please try again."
 
-An error occurred while processing your machine photo.
 
-Please try again or add machines manually at https://oemlinker.com/machines
+async def process_nameplate_image(image_url: str, sender: str, vendor: dict) -> str:
+    """
+    Process nameplate/spec sheet image to extract machine dimensions.
+    Uses AI Vision to read specifications from the image.
+    """
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+    import base64
+    
+    try:
+        if sender not in pending_machines:
+            return "⚠️ No pending machine. Send a machine photo first."
+        
+        pending = pending_machines[sender]
+        machine_category = pending["machine_info"]["machine_category"]
+        
+        # Download image
+        async with httpx.AsyncClient() as client:
+            response = await client.get(image_url, timeout=30.0)
+            if response.status_code != 200:
+                return "⚠️ Could not download image. Please try again."
+            image_data = response.content
+        
+        # Convert to base64
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+        
+        # Get relevant dimension fields for this machine type
+        dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
+        fields_to_extract = dim_config["fields"]
+        
+        api_key = os.environ.get("EMERGENT_LLM_KEY")
+        if not api_key:
+            return "⚠️ AI service not configured."
+        
+        # Use AI to extract specifications
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"nameplate_{sender}_{uuid.uuid4().hex[:8]}",
+            system_message=f"""You are an expert at reading machine nameplates and specification sheets.
 
-Contact support@oemlinker.com for assistance."""
+Extract the following specifications from the image (values in mm):
+{', '.join(fields_to_extract)}
+
+RESPOND IN THIS EXACT JSON FORMAT:
+{{
+    "max_x": number or null,
+    "max_y": number or null,
+    "max_z": number or null,
+    "max_diameter": number or null,
+    "max_length": number or null,
+    "max_height": number or null,
+    "max_swing": number or null,
+    "bore_diameter": number or null,
+    "max_thickness": number or null,
+    "tonnage": number or null,
+    "tolerance": number or null
+}}
+
+Notes:
+- Convert all values to mm (e.g., 50cm = 500mm)
+- Use null if value not found
+- Look for: travel, stroke, capacity, diameter, length, tolerance, accuracy
+- Common labels: X-axis, Y-axis, Z-axis, spindle, chuck, bed, table"""
+        )
+        
+        user_message = UserMessage(
+            text="Extract machine specifications from this nameplate/spec sheet.",
+            file_contents=[ImageContent(image_base64=image_base64)]
+        )
+        
+        ai_response = await chat.send_message(user_message)
+        
+        # Parse response
+        try:
+            clean_response = ai_response.strip()
+            if clean_response.startswith("```"):
+                clean_response = clean_response.split("```")[1]
+                if clean_response.startswith("json"):
+                    clean_response = clean_response[4:]
+            clean_response = clean_response.strip()
+            
+            import json
+            specs = json.loads(clean_response)
+        except:
+            return """⚠️ *Could not read specifications*
+
+Please enter dimensions manually or type *skip* to save without dimensions."""
+        
+        # Update pending machine with extracted dimensions
+        extracted = []
+        for field in fields_to_extract:
+            if specs.get(field) is not None:
+                pending["dimensions"][field] = specs[field]
+                extracted.append(f"{field.replace('_', ' ').title()}: {specs[field]}mm")
+        
+        if not extracted:
+            return """⚠️ *No specifications found in image*
+
+Please enter dimensions manually or type *skip* to save without dimensions."""
+        
+        # Save machine with extracted dimensions
+        response_message = await save_pending_machine(sender, vendor)
+        if sender in pending_machines:
+            del pending_machines[sender]
+        
+        return f"""📋 *Specifications Extracted!*
+
+{chr(10).join(['✅ ' + e for e in extracted])}
+
+{response_message}"""
+        
+    except Exception as e:
+        logger.error(f"Nameplate processing error: {str(e)}")
+        return """❌ *Processing Failed*
+
+Please enter dimensions manually or type *skip* to save without dimensions."""
 
 
 async def process_whatsapp_registration(sender: str, gst_number: str) -> str:
