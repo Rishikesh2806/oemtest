@@ -2720,7 +2720,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://smart-procurement-27.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://smart-vendor-link.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -5178,7 +5178,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://smart-procurement-27.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://smart-vendor-link.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -5319,7 +5319,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://smart-procurement-27.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://smart-vendor-link.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -5571,7 +5571,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://smart-procurement-27.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://smart-vendor-link.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -5853,7 +5853,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://smart-procurement-27.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://smart-vendor-link.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -5984,7 +5984,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://smart-procurement-27.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://smart-vendor-link.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(
@@ -8844,90 +8844,261 @@ PENDING_REGISTRATION_TTL_MINUTES = 10  # Pending registration expires after 10 m
 pending_machines = {}  # {phone_number: {"machine_info": dict, "step": str, "dimensions": dict, "image_url": str, "expires_at": datetime}}
 PENDING_MACHINE_TTL_MINUTES = 15  # Pending machine flow expires after 15 minutes
 
-# Dimension fields by machine category
+# Dimension fields by machine category - ALIGNED WITH /api/machine-categories endpoint
+# Each field now includes "key", "label", and "type" to match web app structure
 MACHINE_DIMENSION_FIELDS = {
     "CNC Turning/Lathe": {
-        "fields": ["max_diameter", "max_length", "bore_diameter", "tolerance"],
-        "prompts": {
-            "max_diameter": "What is the *maximum turning diameter* (mm)?",
-            "max_length": "What is the *maximum turning length* (mm)?",
-            "bore_diameter": "What is the *spindle bore diameter* (mm)? (or type 'skip')",
-            "tolerance": "What is the *best achievable tolerance* (mm)? (e.g., 0.01)"
-        }
+        "fields": [
+            {"key": "max_length", "label": "Max Turning Length (mm)", "prompt": "What is the *max turning length* (mm)?"},
+            {"key": "max_diameter", "label": "Max Turning Diameter (mm)", "prompt": "What is the *max turning diameter* (mm)?"},
+            {"key": "max_swing", "label": "Max Swing Over Bed (mm)", "prompt": "What is the *max swing over bed* (mm)? (or type 'skip')"}
+        ]
     },
     "VTL (Vertical Turret Lathe)": {
-        "fields": ["max_diameter", "max_height", "max_swing", "tolerance"],
-        "prompts": {
-            "max_diameter": "What is the *maximum turning diameter* (mm)?",
-            "max_height": "What is the *maximum turning height* (mm)?",
-            "max_swing": "What is the *maximum swing* (mm)?",
-            "tolerance": "What is the *best achievable tolerance* (mm)?"
-        }
+        "fields": [
+            {"key": "max_diameter", "label": "Max Turning Diameter (mm)", "prompt": "What is the *max turning diameter* (mm)?"},
+            {"key": "max_length", "label": "Max Turning Height (mm)", "prompt": "What is the *max turning height* (mm)?"},
+            {"key": "table_diameter", "label": "Table Diameter (mm)", "prompt": "What is the *table diameter* (mm)?"},
+            {"key": "max_weight", "label": "Max Workpiece Weight (kg)", "prompt": "What is the *max workpiece weight* (kg)? (or type 'skip')"}
+        ]
     },
     "VMC (Vertical Machining Center)": {
-        "fields": ["max_x", "max_y", "max_z", "tolerance"],
-        "prompts": {
-            "max_x": "What is the *X-axis travel* (mm)?",
-            "max_y": "What is the *Y-axis travel* (mm)?",
-            "max_z": "What is the *Z-axis travel* (mm)?",
-            "tolerance": "What is the *best achievable tolerance* (mm)?"
-        }
+        "fields": [
+            {"key": "max_x", "label": "X-Axis Travel (mm)", "prompt": "What is the *X-axis travel* (mm)?"},
+            {"key": "max_y", "label": "Y-Axis Travel (mm)", "prompt": "What is the *Y-axis travel* (mm)?"},
+            {"key": "max_z", "label": "Z-Axis Travel (mm)", "prompt": "What is the *Z-axis travel* (mm)?"},
+            {"key": "table_size_x", "label": "Table Size X (mm)", "prompt": "What is the *table size X* (mm)? (or type 'skip')"},
+            {"key": "table_size_y", "label": "Table Size Y (mm)", "prompt": "What is the *table size Y* (mm)? (or type 'skip')"}
+        ]
     },
     "HMC (Horizontal Machining Center)": {
-        "fields": ["max_x", "max_y", "max_z", "tolerance"],
-        "prompts": {
-            "max_x": "What is the *X-axis travel* (mm)?",
-            "max_y": "What is the *Y-axis travel* (mm)?",
-            "max_z": "What is the *Z-axis travel* (mm)?",
-            "tolerance": "What is the *best achievable tolerance* (mm)?"
-        }
+        "fields": [
+            {"key": "max_x", "label": "X-Axis Travel (mm)", "prompt": "What is the *X-axis travel* (mm)?"},
+            {"key": "max_y", "label": "Y-Axis Travel (mm)", "prompt": "What is the *Y-axis travel* (mm)?"},
+            {"key": "max_z", "label": "Z-Axis Travel (mm)", "prompt": "What is the *Z-axis travel* (mm)?"},
+            {"key": "pallet_size", "label": "Pallet Size (mm)", "prompt": "What is the *pallet size* (mm)? (or type 'skip')"}
+        ]
     },
     "5-Axis Machining": {
-        "fields": ["max_x", "max_y", "max_z", "max_diameter", "tolerance"],
-        "prompts": {
-            "max_x": "What is the *X-axis travel* (mm)?",
-            "max_y": "What is the *Y-axis travel* (mm)?",
-            "max_z": "What is the *Z-axis travel* (mm)?",
-            "max_diameter": "What is the *max workpiece diameter* (mm)?",
-            "tolerance": "What is the *best achievable tolerance* (mm)?"
-        }
+        "fields": [
+            {"key": "max_x", "label": "X-Axis Travel (mm)", "prompt": "What is the *X-axis travel* (mm)?"},
+            {"key": "max_y", "label": "Y-Axis Travel (mm)", "prompt": "What is the *Y-axis travel* (mm)?"},
+            {"key": "max_z", "label": "Z-Axis Travel (mm)", "prompt": "What is the *Z-axis travel* (mm)?"},
+            {"key": "max_diameter", "label": "Max Part Diameter (mm)", "prompt": "What is the *max part diameter* (mm)?"},
+            {"key": "a_axis_range", "label": "A-Axis Range (°)", "prompt": "What is the *A-axis range* (degrees)? (or type 'skip')"},
+            {"key": "c_axis_range", "label": "C-Axis Range (°)", "prompt": "What is the *C-axis range* (degrees)? (or type 'skip')"}
+        ]
     },
-    "Milling": {
-        "fields": ["max_x", "max_y", "max_z", "tolerance"],
-        "prompts": {
-            "max_x": "What is the *table X travel* (mm)?",
-            "max_y": "What is the *table Y travel* (mm)?",
-            "max_z": "What is the *spindle Z travel* (mm)?",
-            "tolerance": "What is the *best achievable tolerance* (mm)?"
-        }
+    "Conventional Lathe": {
+        "fields": [
+            {"key": "max_length", "label": "Center Distance (mm)", "prompt": "What is the *center distance* (mm)?"},
+            {"key": "max_diameter", "label": "Swing Over Bed (mm)", "prompt": "What is the *swing over bed* (mm)?"},
+            {"key": "spindle_bore", "label": "Spindle Bore (mm)", "prompt": "What is the *spindle bore* (mm)? (or type 'skip')"}
+        ]
+    },
+    "Conventional Milling": {
+        "fields": [
+            {"key": "max_x", "label": "Table Travel X (mm)", "prompt": "What is the *table travel X* (mm)?"},
+            {"key": "max_y", "label": "Table Travel Y (mm)", "prompt": "What is the *table travel Y* (mm)?"},
+            {"key": "max_z", "label": "Head Travel Z (mm)", "prompt": "What is the *head travel Z* (mm)?"},
+            {"key": "table_size_x", "label": "Table Size X (mm)", "prompt": "What is the *table size X* (mm)? (or type 'skip')"},
+            {"key": "table_size_y", "label": "Table Size Y (mm)", "prompt": "What is the *table size Y* (mm)? (or type 'skip')"}
+        ]
+    },
+    "Boring Machine": {
+        "fields": [
+            {"key": "bore_diameter", "label": "Max Spindle Diameter (mm)", "prompt": "What is the *max spindle diameter* (mm)?"},
+            {"key": "max_x", "label": "X-Axis Travel (mm)", "prompt": "What is the *X-axis travel* (mm)?"},
+            {"key": "max_y", "label": "Y-Axis Travel (mm)", "prompt": "What is the *Y-axis travel* (mm)?"},
+            {"key": "max_z", "label": "Z-Axis/Spindle Travel (mm)", "prompt": "What is the *Z-axis/spindle travel* (mm)? (or type 'skip')"}
+        ]
+    },
+    "Shaping Machine": {
+        "fields": [
+            {"key": "max_stroke", "label": "Max Stroke Length (mm)", "prompt": "What is the *max stroke length* (mm)?"},
+            {"key": "max_x", "label": "Table Travel X (mm)", "prompt": "What is the *table travel X* (mm)?"},
+            {"key": "max_y", "label": "Table Travel Y (mm)", "prompt": "What is the *table travel Y* (mm)?"},
+            {"key": "table_size_x", "label": "Table Size X (mm)", "prompt": "What is the *table size X* (mm)? (or type 'skip')"}
+        ]
+    },
+    "Gear Manufacturing": {
+        "fields": [
+            {"key": "max_diameter", "label": "Max Gear Diameter (mm)", "prompt": "What is the *max gear diameter* (mm)?"},
+            {"key": "max_module", "label": "Max Module (mm)", "prompt": "What is the *max module* (mm)?"},
+            {"key": "max_length", "label": "Max Face Width (mm)", "prompt": "What is the *max face width* (mm)?"},
+            {"key": "min_teeth", "label": "Min No. of Teeth", "prompt": "What is the *min number of teeth*? (or type 'skip')"}
+        ]
     },
     "Grinding": {
-        "fields": ["max_diameter", "max_length", "tolerance"],
-        "prompts": {
-            "max_diameter": "What is the *maximum grinding diameter* (mm)?",
-            "max_length": "What is the *maximum grinding length* (mm)?",
-            "tolerance": "What is the *best achievable tolerance* (mm)? (e.g., 0.001)"
-        }
+        "fields": [
+            {"key": "max_x", "label": "Table Travel/Length (mm)", "prompt": "What is the *table travel/length* (mm)?"},
+            {"key": "max_y", "label": "Table Width (mm)", "prompt": "What is the *table width* (mm)?"},
+            {"key": "max_diameter", "label": "Max Grinding Diameter (mm)", "prompt": "What is the *max grinding diameter* (mm)?"},
+            {"key": "max_length", "label": "Max Grinding Length (mm)", "prompt": "What is the *max grinding length* (mm)? (or type 'skip')"}
+        ]
     },
-    "Sheet Metal": {
-        "fields": ["max_x", "max_y", "max_thickness", "tonnage"],
-        "prompts": {
-            "max_x": "What is the *maximum sheet length* (mm)?",
-            "max_y": "What is the *maximum sheet width* (mm)?",
-            "max_thickness": "What is the *maximum sheet thickness* (mm)?",
-            "tonnage": "What is the *machine tonnage*? (or type 'skip')"
-        }
+    "EDM": {
+        "fields": [
+            {"key": "max_x", "label": "X-Axis Travel (mm)", "prompt": "What is the *X-axis travel* (mm)?"},
+            {"key": "max_y", "label": "Y-Axis Travel (mm)", "prompt": "What is the *Y-axis travel* (mm)?"},
+            {"key": "max_z", "label": "Z-Axis Travel (mm)", "prompt": "What is the *Z-axis travel* (mm)?"},
+            {"key": "max_taper_angle", "label": "Max Taper Angle (°)", "prompt": "What is the *max taper angle* (degrees)? (or type 'skip')"},
+            {"key": "max_thickness", "label": "Max Workpiece Thickness (mm)", "prompt": "What is the *max workpiece thickness* (mm)? (or type 'skip')"}
+        ]
     },
+    "Drilling Machine": {
+        "fields": [
+            {"key": "max_diameter", "label": "Max Drilling Diameter (mm)", "prompt": "What is the *max drilling diameter* (mm)?"},
+            {"key": "max_depth", "label": "Max Drilling Depth (mm)", "prompt": "What is the *max drilling depth* (mm)?"},
+            {"key": "spindle_travel", "label": "Spindle Travel (mm)", "prompt": "What is the *spindle travel* (mm)?"},
+            {"key": "arm_length", "label": "Radial Arm Length (mm)", "prompt": "What is the *radial arm length* (mm)? (or type 'skip')"}
+        ]
+    },
+    "Laser Cutting": {
+        "fields": [
+            {"key": "max_x", "label": "Cutting Area X (mm)", "prompt": "What is the *cutting area X* (mm)?"},
+            {"key": "max_y", "label": "Cutting Area Y (mm)", "prompt": "What is the *cutting area Y* (mm)?"},
+            {"key": "max_thickness", "label": "Max Cutting Thickness (mm)", "prompt": "What is the *max cutting thickness* (mm)?"},
+            {"key": "laser_power", "label": "Laser Power (kW)", "prompt": "What is the *laser power* (kW)? (or type 'skip')"}
+        ]
+    },
+    "Plasma/Waterjet Cutting": {
+        "fields": [
+            {"key": "max_x", "label": "Cutting Area X (mm)", "prompt": "What is the *cutting area X* (mm)?"},
+            {"key": "max_y", "label": "Cutting Area Y (mm)", "prompt": "What is the *cutting area Y* (mm)?"},
+            {"key": "max_thickness", "label": "Max Cutting Thickness (mm)", "prompt": "What is the *max cutting thickness* (mm)? (or type 'skip')"}
+        ]
+    },
+    "Sheet Metal/Press": {
+        "fields": [
+            {"key": "max_length", "label": "Bed Length (mm)", "prompt": "What is the *bed length* (mm)?"},
+            {"key": "max_thickness", "label": "Max Sheet Thickness (mm)", "prompt": "What is the *max sheet thickness* (mm)?"},
+            {"key": "tonnage", "label": "Tonnage/Press Force (ton)", "prompt": "What is the *tonnage/press force* (ton)?"},
+            {"key": "stroke", "label": "Stroke (mm)", "prompt": "What is the *stroke* (mm)? (or type 'skip')"}
+        ]
+    },
+    "Welding": {
+        "fields": [
+            {"key": "max_thickness", "label": "Max Weld Thickness (mm)", "prompt": "What is the *max weld thickness* (mm)?"},
+            {"key": "max_length", "label": "Max Weld Length (mm)", "prompt": "What is the *max weld length* (mm)?"},
+            {"key": "amperage", "label": "Max Amperage (A)", "prompt": "What is the *max amperage* (A)? (or type 'skip')"}
+        ]
+    },
+    "Heat Treatment": {
+        "fields": [
+            {"key": "max_x", "label": "Chamber Length (mm)", "prompt": "What is the *chamber length* (mm)?"},
+            {"key": "max_y", "label": "Chamber Width (mm)", "prompt": "What is the *chamber width* (mm)?"},
+            {"key": "max_z", "label": "Chamber Height (mm)", "prompt": "What is the *chamber height* (mm)?"},
+            {"key": "max_temp", "label": "Max Temperature (°C)", "prompt": "What is the *max temperature* (°C)? (or type 'skip')"}
+        ]
+    },
+    "Surface Treatment": {
+        "fields": [
+            {"key": "max_x", "label": "Max Part Length (mm)", "prompt": "What is the *max part length* (mm)?"},
+            {"key": "max_y", "label": "Max Part Width (mm)", "prompt": "What is the *max part width* (mm)?"},
+            {"key": "max_z", "label": "Max Part Height (mm)", "prompt": "What is the *max part height* (mm)?"},
+            {"key": "max_weight", "label": "Max Part Weight (kg)", "prompt": "What is the *max part weight* (kg)? (or type 'skip')"}
+        ]
+    },
+    "Inspection/CMM": {
+        "fields": [
+            {"key": "max_x", "label": "Measuring Range X (mm)", "prompt": "What is the *measuring range X* (mm)?"},
+            {"key": "max_y", "label": "Measuring Range Y (mm)", "prompt": "What is the *measuring range Y* (mm)?"},
+            {"key": "max_z", "label": "Measuring Range Z (mm)", "prompt": "What is the *measuring range Z* (mm)?"},
+            {"key": "accuracy", "label": "Accuracy (μm)", "prompt": "What is the *accuracy* (μm)? (or type 'skip')"}
+        ]
+    },
+    "Additive Manufacturing": {
+        "fields": [
+            {"key": "max_x", "label": "Build Volume X (mm)", "prompt": "What is the *build volume X* (mm)?"},
+            {"key": "max_y", "label": "Build Volume Y (mm)", "prompt": "What is the *build volume Y* (mm)?"},
+            {"key": "max_z", "label": "Build Volume Z (mm)", "prompt": "What is the *build volume Z* (mm)?"},
+            {"key": "layer_thickness", "label": "Min Layer Thickness (μm)", "prompt": "What is the *min layer thickness* (μm)? (or type 'skip')"}
+        ]
+    },
+    # Default fallback for categories not explicitly listed
     "default": {
-        "fields": ["max_x", "max_y", "max_z", "tolerance"],
-        "prompts": {
-            "max_x": "What is the *max X dimension* (mm)?",
-            "max_y": "What is the *max Y dimension* (mm)?",
-            "max_z": "What is the *max Z dimension* (mm)? (or type 'skip')",
-            "tolerance": "What is the *best achievable tolerance* (mm)?"
-        }
+        "fields": [
+            {"key": "max_x", "label": "Max X Dimension (mm)", "prompt": "What is the *max X dimension* (mm)?"},
+            {"key": "max_y", "label": "Max Y Dimension (mm)", "prompt": "What is the *max Y dimension* (mm)?"},
+            {"key": "max_z", "label": "Max Z Dimension (mm)", "prompt": "What is the *max Z dimension* (mm)? (or type 'skip')"}
+        ]
     }
 }
+
+def get_dimension_config_for_category(category: str) -> dict:
+    """Get dimension configuration for a machine category with fuzzy matching."""
+    # Exact match first
+    if category in MACHINE_DIMENSION_FIELDS:
+        return MACHINE_DIMENSION_FIELDS[category]
+    
+    # Try partial/fuzzy match
+    category_lower = category.lower()
+    for config_key in MACHINE_DIMENSION_FIELDS:
+        if config_key.lower() in category_lower or category_lower in config_key.lower():
+            return MACHINE_DIMENSION_FIELDS[config_key]
+    
+    # Special mappings for common AI-identified categories
+    category_mappings = {
+        "lathe": "CNC Turning/Lathe",
+        "turning": "CNC Turning/Lathe",
+        "cnc lathe": "CNC Turning/Lathe",
+        "vtl": "VTL (Vertical Turret Lathe)",
+        "vertical turret": "VTL (Vertical Turret Lathe)",
+        "vmc": "VMC (Vertical Machining Center)",
+        "vertical machining": "VMC (Vertical Machining Center)",
+        "hmc": "HMC (Horizontal Machining Center)",
+        "horizontal machining": "HMC (Horizontal Machining Center)",
+        "5 axis": "5-Axis Machining",
+        "5-axis": "5-Axis Machining",
+        "five axis": "5-Axis Machining",
+        "milling": "Conventional Milling",
+        "cnc milling": "Conventional Milling",
+        "boring": "Boring Machine",
+        "horizontal boring": "Boring Machine",
+        "shaper": "Shaping Machine",
+        "planer": "Shaping Machine",
+        "gear": "Gear Manufacturing",
+        "hobbing": "Gear Manufacturing",
+        "grinder": "Grinding",
+        "surface grinder": "Grinding",
+        "cylindrical grinder": "Grinding",
+        "edm": "EDM",
+        "wire edm": "EDM",
+        "sinker edm": "EDM",
+        "drill": "Drilling Machine",
+        "radial drill": "Drilling Machine",
+        "laser": "Laser Cutting",
+        "fiber laser": "Laser Cutting",
+        "plasma": "Plasma/Waterjet Cutting",
+        "waterjet": "Plasma/Waterjet Cutting",
+        "press": "Sheet Metal/Press",
+        "press brake": "Sheet Metal/Press",
+        "hydraulic press": "Sheet Metal/Press",
+        "sheet metal": "Sheet Metal/Press",
+        "welding": "Welding",
+        "mig": "Welding",
+        "tig": "Welding",
+        "heat treatment": "Heat Treatment",
+        "furnace": "Heat Treatment",
+        "hardening": "Heat Treatment",
+        "surface treatment": "Surface Treatment",
+        "coating": "Surface Treatment",
+        "plating": "Surface Treatment",
+        "cmm": "Inspection/CMM",
+        "inspection": "Inspection/CMM",
+        "3d printing": "Additive Manufacturing",
+        "additive": "Additive Manufacturing",
+        "fdm": "Additive Manufacturing",
+        "sla": "Additive Manufacturing",
+        "sls": "Additive Manufacturing",
+    }
+    
+    for keyword, mapped_category in category_mappings.items():
+        if keyword in category_lower:
+            return MACHINE_DIMENSION_FIELDS.get(mapped_category, MACHINE_DIMENSION_FIELDS["default"])
+    
+    return MACHINE_DIMENSION_FIELDS["default"]
 
 def cleanup_whatsapp_session(phone: str) -> bool:
     """
@@ -9406,35 +9577,50 @@ Send another machine photo to try again."""
                     await whatsapp_service.send_text_message(sender, response_message)
                 return {"status": "ok"}
             
-            # Get current dimension info
-            current_field = pending["step"]
+            # Get current dimension info using the new structure
             machine_category = pending["machine_info"]["machine_category"]
-            dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
-            current_prompt = dim_config["prompts"].get(current_field, "Enter the value (mm):")
             machine_name = pending["machine_info"].get("name", "Machine")
+            
+            # Use helper function for fuzzy category matching
+            dim_config = get_dimension_config_for_category(machine_category)
+            field_index = pending.get("field_index", 0)
+            fields_list = dim_config["fields"]
+            total_fields = len(fields_list)
+            
+            # Get current field info from the list
+            if field_index < len(fields_list):
+                current_field_info = fields_list[field_index]
+                current_field_key = current_field_info["key"]
+                current_field_label = current_field_info["label"]
+                current_prompt = current_field_info["prompt"]
+            else:
+                # Should not happen, but fallback
+                current_field_key = "max_x"
+                current_field_label = "Max X Dimension (mm)"
+                current_prompt = "What is the *max X dimension* (mm)?"
             
             # Try to parse dimension value
             try:
-                # Extract number from text (handles "500mm", "500 mm", "500")
-                import re
+                # Extract number from text (handles "500mm", "500 mm", "500", "0.01")
                 number_match = re.search(r'[\d.]+', text_clean)
                 if number_match:
                     value = float(number_match.group())
-                    pending["dimensions"][current_field] = value
+                    pending["dimensions"][current_field_key] = value
                     
                     # Move to next field
-                    current_index = pending["field_index"]
-                    next_index = current_index + 1
+                    next_index = field_index + 1
                     
-                    if next_index < len(dim_config["fields"]):
+                    if next_index < total_fields:
                         # Ask for next dimension
-                        next_field = dim_config["fields"][next_index]
-                        next_prompt = dim_config["prompts"][next_field]
-                        pending["step"] = next_field
+                        next_field_info = fields_list[next_index]
+                        next_field_key = next_field_info["key"]
+                        next_prompt = next_field_info["prompt"]
+                        pending["step"] = next_field_key
                         pending["field_index"] = next_index
                         
-                        response_message = f"""✅ *{current_field.replace('_', ' ').title()}:* {value} mm
+                        response_message = f"""✅ *{current_field_label}:* {value}
 
+*Step {next_index + 1}/{total_fields}:*
 {next_prompt}
 
 📷 _Or send nameplate photo to auto-fill remaining_
@@ -9450,8 +9636,9 @@ Type *skip* to save machine now."""
                 else:
                     # Not a valid number - stay in flow and prompt again
                     response_message = f"""📏 *Adding Dimensions for:* {machine_name}
+*Step {field_index + 1}/{total_fields}*
 
-⚠️ Please enter a valid number for *{current_field.replace('_', ' ').title()}*
+⚠️ Please enter a valid number for *{current_field_label}*
 
 {current_prompt}
 
@@ -9468,6 +9655,7 @@ Type *cancel* to abort"""
                 logger.error(f"Error processing dimension input: {str(e)}")
                 # Stay in flow even on error
                 response_message = f"""📏 *Adding Dimensions for:* {machine_name}
+*Step {field_index + 1}/{total_fields}*
 
 ⚠️ Something went wrong. Please try again.
 
@@ -10314,13 +10502,15 @@ Or add manually at https://oemlinker.com/vendor/machines"""
         
         image_url_stored = f"/api/uploads/machines/{filename}"
         
-        # Get dimension fields for this machine category
-        dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
-        first_field = dim_config["fields"][0]
-        first_prompt = dim_config["prompts"][first_field]
+        # Get dimension fields for this machine category using fuzzy matching
+        dim_config = get_dimension_config_for_category(machine_category)
+        fields_list = dim_config["fields"]
+        first_field_info = fields_list[0]
+        first_field_key = first_field_info["key"]
+        first_prompt = first_field_info["prompt"]
         
         # Store pending machine for dimension collection
-        logger.info(f"Setting pending_machines for sender: '{sender}'")
+        logger.info(f"Setting pending_machines for sender: '{sender}', category: '{machine_category}'")
         pending_machines[sender] = {
             "machine_info": {
                 "name": machine_name if machine_name != "Unknown Machine" else f"{brand} {model}".strip(),
@@ -10333,7 +10523,7 @@ Or add manually at https://oemlinker.com/vendor/machines"""
             },
             "image_url": image_url_stored,
             "vendor_id": vendor["vendor_id"],
-            "step": first_field,
+            "step": first_field_key,
             "field_index": 0,
             "dimensions": {},
             "expires_at": datetime.now(timezone.utc) + timedelta(minutes=PENDING_MACHINE_TTL_MINUTES)
@@ -10341,6 +10531,12 @@ Or add manually at https://oemlinker.com/vendor/machines"""
         
         # Prepare confidence indicator
         confidence_emoji = {"high": "🟢", "medium": "🟡", "low": "🟠"}.get(confidence, "🟡")
+        
+        # Build a preview of dimension fields that will be asked
+        total_fields = len(fields_list)
+        fields_preview = ", ".join([f["label"].replace(" (mm)", "").replace(" (kg)", "").replace(" (°)", "").replace(" (μm)", "").replace(" (kW)", "").replace(" (A)", "").replace(" (°C)", "").replace(" (ton)", "") for f in fields_list[:3]])
+        if total_fields > 3:
+            fields_preview += f" +{total_fields - 3} more"
         
         logger.info(f"Machine identified via WhatsApp, starting dimension flow: {machine_name} for vendor {vendor['vendor_id']}")
         
@@ -10351,12 +10547,14 @@ Or add manually at https://oemlinker.com/vendor/machines"""
 🏭 *{machine_name}*
 📋 Type: {machine_type}
 📂 Category: {machine_category}
-�icing Brand: {brand}
+🔧 Brand: {brand}
 📝 Model: {model}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 📏 *Now let's add dimensions:*
+_{fields_preview}_
 
+*Step 1/{total_fields}:*
 {first_prompt}
 
 📷 _Or send a photo of the machine *nameplate/spec sheet* to auto-fill dimensions!_
@@ -10384,7 +10582,7 @@ async def save_pending_machine(sender: str, vendor: dict) -> str:
         machine_info = pending["machine_info"]
         dimensions = pending.get("dimensions", {})
         
-        # Create machine entry
+        # Create machine entry with all possible dimension fields
         machine_id = f"machine_{uuid.uuid4().hex[:12]}"
         machine_doc = {
             "machine_id": machine_id,
@@ -10395,18 +10593,52 @@ async def save_pending_machine(sender: str, vendor: dict) -> str:
             "brand": machine_info["brand"],
             "model": machine_info["model"],
             "images": [pending["image_url"]],
-            # Dimension fields
-            "max_x": dimensions.get("max_x", 0),
-            "max_y": dimensions.get("max_y", 0),
-            "max_z": dimensions.get("max_z", 0),
-            "max_diameter": dimensions.get("max_diameter", 0),
-            "max_length": dimensions.get("max_length", 0),
-            "max_height": dimensions.get("max_height", 0),
-            "max_swing": dimensions.get("max_swing", 0),
-            "bore_diameter": dimensions.get("bore_diameter", 0),
-            "max_thickness": dimensions.get("max_thickness", 0),
-            "tonnage": dimensions.get("tonnage", 0),
+            # Standard dimension fields
+            "max_x": dimensions.get("max_x"),
+            "max_y": dimensions.get("max_y"),
+            "max_z": dimensions.get("max_z"),
+            "max_diameter": dimensions.get("max_diameter"),
+            "max_length": dimensions.get("max_length"),
+            "max_swing": dimensions.get("max_swing"),
+            # Boring/Drilling specific
+            "bore_diameter": dimensions.get("bore_diameter"),
+            "spindle_bore": dimensions.get("spindle_bore"),
+            "spindle_travel": dimensions.get("spindle_travel"),
+            "arm_length": dimensions.get("arm_length"),
+            "max_depth": dimensions.get("max_depth"),
+            # VTL/Table specific
+            "table_diameter": dimensions.get("table_diameter"),
+            "table_size_x": dimensions.get("table_size_x"),
+            "table_size_y": dimensions.get("table_size_y"),
+            "pallet_size": dimensions.get("pallet_size"),
+            "max_weight": dimensions.get("max_weight"),
+            # Shaping specific
+            "max_stroke": dimensions.get("max_stroke"),
+            "stroke": dimensions.get("stroke"),
+            # Gear specific
+            "max_module": dimensions.get("max_module"),
+            "min_teeth": dimensions.get("min_teeth"),
+            # 5-Axis specific
+            "a_axis_range": dimensions.get("a_axis_range"),
+            "c_axis_range": dimensions.get("c_axis_range"),
+            # Sheet Metal/Press specific
+            "tonnage": dimensions.get("tonnage"),
+            "max_thickness": dimensions.get("max_thickness"),
+            # Laser specific
+            "laser_power": dimensions.get("laser_power"),
+            # Welding specific
+            "amperage": dimensions.get("amperage"),
+            # Heat Treatment specific
+            "max_temp": dimensions.get("max_temp"),
+            # Inspection specific
+            "accuracy": dimensions.get("accuracy"),
+            # Additive specific
+            "layer_thickness": dimensions.get("layer_thickness"),
+            # EDM specific
+            "max_taper_angle": dimensions.get("max_taper_angle"),
+            # Tolerance (common across most machines)
             "tolerance": dimensions.get("tolerance", 0.01),
+            "tolerance_capability": dimensions.get("tolerance", 0.01),
             # Other fields
             "materials_supported": [],
             "monthly_capacity_hours": 160,
@@ -10419,26 +10651,24 @@ async def save_pending_machine(sender: str, vendor: dict) -> str:
             "created_at": datetime.now(timezone.utc).isoformat()
         }
         
+        # Remove None values to keep document clean
+        machine_doc = {k: v for k, v in machine_doc.items() if v is not None}
+        
         await db.machines.insert_one(machine_doc)
         logger.info(f"Machine saved via WhatsApp: {machine_id} for vendor {vendor['vendor_id']}")
         
         # Get machine count
         machine_count = await db.machines.count_documents({"vendor_id": vendor["vendor_id"]})
         
-        # Build dimensions summary
+        # Build dimensions summary using the category-specific fields
+        dim_config = get_dimension_config_for_category(machine_info["machine_category"])
         dim_summary = []
-        if dimensions.get("max_x"):
-            dim_summary.append(f"X: {dimensions['max_x']}mm")
-        if dimensions.get("max_y"):
-            dim_summary.append(f"Y: {dimensions['max_y']}mm")
-        if dimensions.get("max_z"):
-            dim_summary.append(f"Z: {dimensions['max_z']}mm")
-        if dimensions.get("max_diameter"):
-            dim_summary.append(f"Dia: {dimensions['max_diameter']}mm")
-        if dimensions.get("max_length"):
-            dim_summary.append(f"Length: {dimensions['max_length']}mm")
-        if dimensions.get("tolerance"):
-            dim_summary.append(f"Tol: {dimensions['tolerance']}mm")
+        for field in dim_config["fields"]:
+            field_key = field["key"]
+            if dimensions.get(field_key):
+                label = field["label"].replace(" (mm)", "").replace(" (kg)", "").replace(" (°)", "").replace(" (μm)", "").replace(" (kW)", "").replace(" (A)", "").replace(" (°C)", "").replace(" (ton)", "")
+                value = dimensions[field_key]
+                dim_summary.append(f"{label}: {value}")
         
         dim_text = ", ".join(dim_summary) if dim_summary else "No dimensions added"
         
@@ -10489,13 +10719,18 @@ async def process_nameplate_image(image_url: str, sender: str, vendor: dict) -> 
         # Convert to base64
         image_base64 = base64.b64encode(image_data).decode('utf-8')
         
-        # Get relevant dimension fields for this machine type
-        dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
-        fields_to_extract = dim_config["fields"]
+        # Get relevant dimension fields for this machine type using new structure
+        dim_config = get_dimension_config_for_category(machine_category)
+        fields_list = dim_config["fields"]
+        fields_to_extract = [f["key"] for f in fields_list]
+        fields_labels = {f["key"]: f["label"] for f in fields_list}
         
         api_key = os.environ.get("EMERGENT_LLM_KEY")
         if not api_key:
             return "⚠️ AI service not configured."
+        
+        # Build dynamic JSON schema based on category fields
+        json_fields = "\n    ".join([f'"{f["key"]}": number or null,' for f in fields_list])
         
         # Use AI to extract specifications
         chat = LlmChat(
@@ -10503,29 +10738,19 @@ async def process_nameplate_image(image_url: str, sender: str, vendor: dict) -> 
             session_id=f"nameplate_{sender}_{uuid.uuid4().hex[:8]}",
             system_message=f"""You are an expert at reading machine nameplates and specification sheets.
 
-Extract the following specifications from the image (values in mm):
-{', '.join(fields_to_extract)}
+Extract the following specifications from the image:
+{', '.join([f'{f["key"]} ({f["label"]})' for f in fields_list])}
 
 RESPOND IN THIS EXACT JSON FORMAT:
 {{
-    "max_x": number or null,
-    "max_y": number or null,
-    "max_z": number or null,
-    "max_diameter": number or null,
-    "max_length": number or null,
-    "max_height": number or null,
-    "max_swing": number or null,
-    "bore_diameter": number or null,
-    "max_thickness": number or null,
-    "tonnage": number or null,
-    "tolerance": number or null
+    {json_fields}
 }}
 
 Notes:
-- Convert all values to mm (e.g., 50cm = 500mm)
+- Convert all values to the appropriate unit (mm for dimensions, degrees for angles, etc.)
 - Use null if value not found
-- Look for: travel, stroke, capacity, diameter, length, tolerance, accuracy
-- Common labels: X-axis, Y-axis, Z-axis, spindle, chuck, bed, table"""
+- Look for: travel, stroke, capacity, diameter, length, tolerance, accuracy, power, amperage
+- Common labels: X-axis, Y-axis, Z-axis, spindle, chuck, bed, table, capacity"""
         )
         
         user_message = UserMessage(
@@ -10553,10 +10778,11 @@ Please enter dimensions manually or type *skip* to save without dimensions."""
         
         # Update pending machine with extracted dimensions
         extracted = []
-        for field in fields_to_extract:
-            if specs.get(field) is not None:
-                pending["dimensions"][field] = specs[field]
-                extracted.append(f"{field.replace('_', ' ').title()}: {specs[field]}mm")
+        for field_key in fields_to_extract:
+            if specs.get(field_key) is not None:
+                pending["dimensions"][field_key] = specs[field_key]
+                label = fields_labels.get(field_key, field_key.replace('_', ' ').title())
+                extracted.append(f"{label}: {specs[field_key]}")
         
         if not extracted:
             return """⚠️ *No specifications found in image*
