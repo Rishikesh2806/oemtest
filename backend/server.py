@@ -9415,10 +9415,25 @@ async def _process_whatsapp_message(sender: str, msg_type: str, parsed: dict):
         # Check if user is already registered - process as machine photo
         if vendor:
             # Check if there's a pending machine - this might be a nameplate image
+            # Use normalized phone number matching
+            sender_normalized = sender.replace("+", "").replace(" ", "").replace("-", "")
+            sender_last10 = sender_normalized[-10:] if len(sender_normalized) >= 10 else sender_normalized
+            
+            pending_sender_for_image = None
             if sender in pending_machines:
+                pending_sender_for_image = sender
+            else:
+                for key in pending_machines.keys():
+                    key_normalized = key.replace("+", "").replace(" ", "").replace("-", "")
+                    key_last10 = key_normalized[-10:] if len(key_normalized) >= 10 else key_normalized
+                    if key_last10 == sender_last10:
+                        pending_sender_for_image = key
+                        break
+            
+            if pending_sender_for_image:
                 response_message = await process_nameplate_image(
                     parsed.get("image_url"),
-                    sender,
+                    pending_sender_for_image,
                     vendor
                 )
             else:
