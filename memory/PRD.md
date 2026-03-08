@@ -431,22 +431,27 @@ WhatsApp machine dimension flow now dynamically asks for category-specific param
 - **Bilingual Prompts**: Shows prompts in English + vendor's regional language based on their state location
 
 ### Bilingual Language Support (Dec 2025):
-The dimension prompts now display in two languages:
+The WhatsApp flows now display messages in two languages:
 1. **English** (primary)
 2. **Regional Language** (based on vendor's state)
 
-Supported languages:
-- Hindi (Delhi, UP, MP, Bihar, Rajasthan, Haryana, Uttarakhand, Jharkhand, Chhattisgarh, HP)
-- Marathi (Maharashtra)
-- Gujarati (Gujarat)
-- Tamil (Tamil Nadu)
-- Telugu (Andhra Pradesh, Telangana)
-- Kannada (Karnataka)
-- Bengali (West Bengal)
-- Punjabi (Punjab)
-- Malayalam (Kerala)
-- Odia (Odisha)
-- Assamese (Assam)
+**Supported Languages:** Hindi, Marathi, Gujarati, Tamil, Telugu, Kannada, Bengali, Punjabi, Malayalam, Odia, Assamese
+
+**Bilingual Messages Applied To:**
+- Welcome messages
+- Help/Menu commands
+- Registration flow (GST found, confirmation, success)
+- Machine identification and dimension prompts
+- Machine saved confirmation
+- Profile command
+- Machines list command
+- Error messages
+
+**Key Functions:**
+- `get_vendor_language(vendor)` - Detects language from vendor's state
+- `get_bilingual_message(key, vendor)` - Returns regional translation
+- `get_bilingual_prompt(field_key, english_prompt, vendor)` - Formats dimension prompts
+- `WHATSAPP_MESSAGES_BILINGUAL` - Dictionary with all translations
 
 ### Key Files:
 - `/app/backend/server.py` - STATE_LANGUAGE_MAP (line ~8847)

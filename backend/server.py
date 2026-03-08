@@ -9013,6 +9013,312 @@ DIMENSION_PROMPTS_BILINGUAL = {
     }
 }
 
+# Bilingual messages for all WhatsApp flows - English + Regional Language
+WHATSAPP_MESSAGES_BILINGUAL = {
+    "hi": {
+        # Welcome & Registration
+        "welcome": "OEMLinker में आपका स्वागत है!",
+        "welcome_vendor": "स्वागत है",
+        "registration": "वेंडर रजिस्ट्रेशन",
+        "send_gst": "अपना GST सर्टिफिकेट भेजें (फोटो या PDF)",
+        "gst_found": "GST विवरण मिले",
+        "confirm_details": "क्या ये विवरण सही हैं?",
+        "type_yes": "'हाँ' टाइप करें पुष्टि के लिए",
+        "type_no": "'नहीं' टाइप करें रद्द करने के लिए",
+        "registration_success": "रजिस्ट्रेशन सफल!",
+        "registration_failed": "रजिस्ट्रेशन विफल",
+        "registration_cancelled": "रजिस्ट्रेशन रद्द",
+        
+        # Machine flow
+        "machine_identified": "मशीन पहचानी गई!",
+        "add_dimensions": "अब आयाम जोड़ें:",
+        "machine_saved": "मशीन सफलतापूर्वक सेव हुई!",
+        "machine_cancelled": "मशीन जोड़ना रद्द",
+        "send_machine_photo": "मशीन की फोटो भेजें",
+        "no_machines": "अभी तक कोई मशीन नहीं जोड़ी गई",
+        "your_machines": "आपकी मशीनें",
+        
+        # Commands
+        "help": "सहायता",
+        "available_commands": "उपलब्ध कमांड:",
+        "status": "स्थिति",
+        "profile": "प्रोफाइल",
+        "machines": "मशीनें",
+        "quotes": "कोटेशन",
+        
+        # Status messages  
+        "processing": "प्रोसेस हो रहा है...",
+        "please_wait": "कृपया प्रतीक्षा करें",
+        "error_occurred": "कोई त्रुटि हुई",
+        "try_again": "कृपया पुनः प्रयास करें",
+        "not_understood": "समझ नहीं आया",
+        
+        # Confirmations
+        "yes": "हाँ",
+        "no": "नहीं",
+        "confirm": "पुष्टि करें",
+        "cancel": "रद्द करें",
+        "skip": "छोड़ें",
+        "done": "पूर्ण",
+        
+        # Profile
+        "company_name": "कंपनी का नाम",
+        "phone": "फोन",
+        "state": "राज्य",
+        "city": "शहर",
+        "machines_count": "मशीनों की संख्या",
+        
+        # Quotes & RFQ
+        "new_rfq": "नया RFQ मिला!",
+        "quote_submitted": "कोटेशन जमा हुआ",
+        "pending_quotes": "लंबित कोटेशन",
+        "no_quotes": "कोई कोटेशन नहीं"
+    },
+    "mr": {
+        "welcome": "OEMLinker मध्ये आपले स्वागत आहे!",
+        "welcome_vendor": "स्वागत आहे",
+        "registration": "विक्रेता नोंदणी",
+        "send_gst": "तुमचे GST प्रमाणपत्र पाठवा (फोटो किंवा PDF)",
+        "gst_found": "GST तपशील सापडले",
+        "confirm_details": "हे तपशील बरोबर आहेत का?",
+        "type_yes": "पुष्टीसाठी 'होय' टाइप करा",
+        "type_no": "रद्द करण्यासाठी 'नाही' टाइप करा",
+        "registration_success": "नोंदणी यशस्वी!",
+        "registration_failed": "नोंदणी अयशस्वी",
+        "registration_cancelled": "नोंदणी रद्द",
+        "machine_identified": "मशीन ओळखली!",
+        "add_dimensions": "आता परिमाण जोडा:",
+        "machine_saved": "मशीन यशस्वीरित्या सेव्ह झाली!",
+        "machine_cancelled": "मशीन जोडणे रद्द",
+        "send_machine_photo": "मशीनचा फोटो पाठवा",
+        "no_machines": "अद्याप कोणतीही मशीन जोडली नाही",
+        "your_machines": "तुमच्या मशीन्स",
+        "help": "मदत",
+        "available_commands": "उपलब्ध आदेश:",
+        "status": "स्थिती",
+        "profile": "प्रोफाइल",
+        "machines": "मशीन्स",
+        "quotes": "कोटेशन",
+        "processing": "प्रक्रिया सुरू आहे...",
+        "please_wait": "कृपया प्रतीक्षा करा",
+        "error_occurred": "त्रुटी आली",
+        "try_again": "कृपया पुन्हा प्रयत्न करा",
+        "not_understood": "समजले नाही",
+        "yes": "होय",
+        "no": "नाही",
+        "confirm": "पुष्टी करा",
+        "cancel": "रद्द करा",
+        "skip": "वगळा",
+        "done": "पूर्ण",
+        "company_name": "कंपनीचे नाव",
+        "phone": "फोन",
+        "state": "राज्य",
+        "city": "शहर",
+        "machines_count": "मशीनची संख्या",
+        "new_rfq": "नवीन RFQ आला!",
+        "quote_submitted": "कोटेशन सबमिट झाले",
+        "pending_quotes": "प्रलंबित कोटेशन",
+        "no_quotes": "कोणतेही कोटेशन नाही"
+    },
+    "gu": {
+        "welcome": "OEMLinker માં આપનું સ્વાગત છે!",
+        "welcome_vendor": "સ્વાગત છે",
+        "registration": "વિક્રેતા નોંધણી",
+        "send_gst": "તમારું GST પ્રમાણપત્ર મોકલો (ફોટો અથવા PDF)",
+        "gst_found": "GST વિગતો મળી",
+        "confirm_details": "શું આ વિગતો સાચી છે?",
+        "type_yes": "પુષ્ટિ માટે 'હા' ટાઇપ કરો",
+        "type_no": "રદ કરવા માટે 'ના' ટાઇપ કરો",
+        "registration_success": "નોંધણી સફળ!",
+        "registration_failed": "નોંધણી નિષ્ફળ",
+        "registration_cancelled": "નોંધણી રદ",
+        "machine_identified": "મશીન ઓળખાઈ!",
+        "add_dimensions": "હવે પરિમાણો ઉમેરો:",
+        "machine_saved": "મશીન સફળતાપૂર્વક સેવ થઈ!",
+        "machine_cancelled": "મશીન ઉમેરવું રદ",
+        "send_machine_photo": "મશીનનો ફોટો મોકલો",
+        "no_machines": "હજુ સુધી કોઈ મશીન ઉમેરાઈ નથી",
+        "your_machines": "તમારી મશીનો",
+        "help": "મદદ",
+        "available_commands": "ઉપલબ્ધ આદેશો:",
+        "processing": "પ્રક્રિયા થઈ રહી છે...",
+        "error_occurred": "ભૂલ થઈ",
+        "try_again": "કૃપા કરીને ફરી પ્રયાસ કરો",
+        "not_understood": "સમજાયું નહીં",
+        "yes": "હા",
+        "no": "ના",
+        "skip": "છોડો",
+        "done": "પૂર્ણ"
+    },
+    "ta": {
+        "welcome": "OEMLinker-க்கு வரவேற்கிறோம்!",
+        "welcome_vendor": "வரவேற்கிறோம்",
+        "registration": "விற்பனையாளர் பதிவு",
+        "send_gst": "உங்கள் GST சான்றிதழை அனுப்பவும் (புகைப்படம் அல்லது PDF)",
+        "gst_found": "GST விவரங்கள் கிடைத்தன",
+        "confirm_details": "இந்த விவரங்கள் சரியா?",
+        "type_yes": "உறுதிப்படுத்த 'ஆம்' தட்டச்சு செய்யவும்",
+        "type_no": "ரத்து செய்ய 'இல்லை' தட்டச்சு செய்யவும்",
+        "registration_success": "பதிவு வெற்றிகரமாக!",
+        "registration_failed": "பதிவு தோல்வி",
+        "registration_cancelled": "பதிவு ரத்து",
+        "machine_identified": "இயந்திரம் அடையாளம் காணப்பட்டது!",
+        "add_dimensions": "இப்போது பரிமாணங்களை சேர்க்கவும்:",
+        "machine_saved": "இயந்திரம் வெற்றிகரமாக சேமிக்கப்பட்டது!",
+        "machine_cancelled": "இயந்திரம் சேர்ப்பது ரத்து",
+        "send_machine_photo": "இயந்திரத்தின் புகைப்படத்தை அனுப்பவும்",
+        "no_machines": "இதுவரை எந்த இயந்திரமும் சேர்க்கப்படவில்லை",
+        "your_machines": "உங்கள் இயந்திரங்கள்",
+        "help": "உதவி",
+        "processing": "செயலாக்கம் நடைபெறுகிறது...",
+        "error_occurred": "பிழை ஏற்பட்டது",
+        "try_again": "மீண்டும் முயற்சிக்கவும்",
+        "not_understood": "புரியவில்லை",
+        "yes": "ஆம்",
+        "no": "இல்லை",
+        "skip": "தவிர்",
+        "done": "முடிந்தது"
+    },
+    "te": {
+        "welcome": "OEMLinker కు స్వాగతం!",
+        "welcome_vendor": "స్వాగతం",
+        "registration": "విక్రేత నమోదు",
+        "send_gst": "మీ GST సర్టిఫికేట్ పంపండి (ఫోటో లేదా PDF)",
+        "gst_found": "GST వివరాలు దొరికాయి",
+        "confirm_details": "ఈ వివరాలు సరైనవా?",
+        "type_yes": "నిర్ధారించడానికి 'అవును' టైప్ చేయండి",
+        "type_no": "రద్దు చేయడానికి 'కాదు' టైప్ చేయండి",
+        "registration_success": "నమోదు విజయవంతం!",
+        "registration_failed": "నమోదు విఫలం",
+        "registration_cancelled": "నమోదు రద్దు",
+        "machine_identified": "మెషిన్ గుర్తించబడింది!",
+        "add_dimensions": "ఇప్పుడు కొలతలు జోడించండి:",
+        "machine_saved": "మెషిన్ విజయవంతంగా సేవ్ అయింది!",
+        "machine_cancelled": "మెషిన్ జోడించడం రద్దు",
+        "send_machine_photo": "మెషిన్ ఫోటో పంపండి",
+        "no_machines": "ఇంకా మెషిన్లు జోడించబడలేదు",
+        "your_machines": "మీ మెషిన్లు",
+        "help": "సహాయం",
+        "processing": "ప్రాసెస్ అవుతోంది...",
+        "error_occurred": "లోపం సంభవించింది",
+        "try_again": "దయచేసి మళ్ళీ ప్రయత్నించండి",
+        "not_understood": "అర్థం కాలేదు",
+        "yes": "అవును",
+        "no": "కాదు",
+        "skip": "దాటవేయి",
+        "done": "పూర్తయింది"
+    },
+    "kn": {
+        "welcome": "OEMLinker ಗೆ ಸ್ವಾಗತ!",
+        "welcome_vendor": "ಸ್ವಾಗತ",
+        "registration": "ಮಾರಾಟಗಾರ ನೋಂದಣಿ",
+        "send_gst": "ನಿಮ್ಮ GST ಪ್ರಮಾಣಪತ್ರವನ್ನು ಕಳುಹಿಸಿ (ಫೋಟೋ ಅಥವಾ PDF)",
+        "gst_found": "GST ವಿವರಗಳು ಸಿಕ್ಕಿವೆ",
+        "confirm_details": "ಈ ವಿವರಗಳು ಸರಿಯೇ?",
+        "type_yes": "ದೃಢೀಕರಿಸಲು 'ಹೌದು' ಟೈಪ್ ಮಾಡಿ",
+        "type_no": "ರದ್ದು ಮಾಡಲು 'ಇಲ್ಲ' ಟೈಪ್ ಮಾಡಿ",
+        "registration_success": "ನೋಂದಣಿ ಯಶಸ್ವಿ!",
+        "registration_failed": "ನೋಂದಣಿ ವಿಫಲ",
+        "registration_cancelled": "ನೋಂದಣಿ ರದ್ದು",
+        "machine_identified": "ಯಂತ್ರ ಗುರುತಿಸಲಾಗಿದೆ!",
+        "add_dimensions": "ಈಗ ಆಯಾಮಗಳನ್ನು ಸೇರಿಸಿ:",
+        "machine_saved": "ಯಂತ್ರ ಯಶಸ್ವಿಯಾಗಿ ಉಳಿಸಲಾಗಿದೆ!",
+        "machine_cancelled": "ಯಂತ್ರ ಸೇರಿಸುವುದು ರದ್ದು",
+        "send_machine_photo": "ಯಂತ್ರದ ಫೋಟೋ ಕಳುಹಿಸಿ",
+        "no_machines": "ಇನ್ನೂ ಯಾವುದೇ ಯಂತ್ರ ಸೇರಿಸಲಾಗಿಲ್ಲ",
+        "your_machines": "ನಿಮ್ಮ ಯಂತ್ರಗಳು",
+        "help": "ಸಹಾಯ",
+        "processing": "ಪ್ರಕ್ರಿಯೆ ನಡೆಯುತ್ತಿದೆ...",
+        "error_occurred": "ದೋಷ ಸಂಭವಿಸಿದೆ",
+        "try_again": "ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ",
+        "not_understood": "ಅರ್ಥವಾಗಲಿಲ್ಲ",
+        "yes": "ಹೌದು",
+        "no": "ಇಲ್ಲ",
+        "skip": "ಬಿಡಿ",
+        "done": "ಮುಗಿಯಿತು"
+    },
+    "bn": {
+        "welcome": "OEMLinker-এ স্বাগতম!",
+        "welcome_vendor": "স্বাগতম",
+        "registration": "বিক্রেতা নিবন্ধন",
+        "send_gst": "আপনার GST সার্টিফিকেট পাঠান (ছবি বা PDF)",
+        "gst_found": "GST বিবরণ পাওয়া গেছে",
+        "confirm_details": "এই বিবরণগুলি কি সঠিক?",
+        "type_yes": "নিশ্চিত করতে 'হ্যাঁ' টাইপ করুন",
+        "type_no": "বাতিল করতে 'না' টাইপ করুন",
+        "registration_success": "নিবন্ধন সফল!",
+        "registration_failed": "নিবন্ধন ব্যর্থ",
+        "registration_cancelled": "নিবন্ধন বাতিল",
+        "machine_identified": "মেশিন চিহ্নিত হয়েছে!",
+        "add_dimensions": "এখন মাত্রা যোগ করুন:",
+        "machine_saved": "মেশিন সফলভাবে সেভ হয়েছে!",
+        "machine_cancelled": "মেশিন যোগ করা বাতিল",
+        "send_machine_photo": "মেশিনের ছবি পাঠান",
+        "no_machines": "এখনও কোনো মেশিন যোগ করা হয়নি",
+        "your_machines": "আপনার মেশিনগুলি",
+        "help": "সাহায্য",
+        "processing": "প্রক্রিয়াকরণ চলছে...",
+        "error_occurred": "ত্রুটি ঘটেছে",
+        "try_again": "অনুগ্রহ করে আবার চেষ্টা করুন",
+        "not_understood": "বুঝতে পারিনি",
+        "yes": "হ্যাঁ",
+        "no": "না",
+        "skip": "এড়িয়ে যান",
+        "done": "সম্পন্ন"
+    },
+    "pa": {
+        "welcome": "OEMLinker ਵਿੱਚ ਤੁਹਾਡਾ ਸਵਾਗਤ ਹੈ!",
+        "welcome_vendor": "ਸਵਾਗਤ ਹੈ",
+        "registration": "ਵਿਕਰੇਤਾ ਰਜਿਸਟ੍ਰੇਸ਼ਨ",
+        "send_gst": "ਆਪਣਾ GST ਸਰਟੀਫਿਕੇਟ ਭੇਜੋ (ਫੋਟੋ ਜਾਂ PDF)",
+        "gst_found": "GST ਵੇਰਵੇ ਮਿਲੇ",
+        "confirm_details": "ਕੀ ਇਹ ਵੇਰਵੇ ਸਹੀ ਹਨ?",
+        "type_yes": "ਪੁਸ਼ਟੀ ਲਈ 'ਹਾਂ' ਟਾਈਪ ਕਰੋ",
+        "type_no": "ਰੱਦ ਕਰਨ ਲਈ 'ਨਹੀਂ' ਟਾਈਪ ਕਰੋ",
+        "registration_success": "ਰਜਿਸਟ੍ਰੇਸ਼ਨ ਸਫਲ!",
+        "registration_failed": "ਰਜਿਸਟ੍ਰੇਸ਼ਨ ਅਸਫਲ",
+        "registration_cancelled": "ਰਜਿਸਟ੍ਰੇਸ਼ਨ ਰੱਦ",
+        "machine_identified": "ਮਸ਼ੀਨ ਪਛਾਣੀ ਗਈ!",
+        "add_dimensions": "ਹੁਣ ਮਾਪ ਜੋੜੋ:",
+        "machine_saved": "ਮਸ਼ੀਨ ਸਫਲਤਾਪੂਰਵਕ ਸੇਵ ਹੋਈ!",
+        "machine_cancelled": "ਮਸ਼ੀਨ ਜੋੜਨਾ ਰੱਦ",
+        "send_machine_photo": "ਮਸ਼ੀਨ ਦੀ ਫੋਟੋ ਭੇਜੋ",
+        "no_machines": "ਅਜੇ ਕੋਈ ਮਸ਼ੀਨ ਨਹੀਂ ਜੋੜੀ",
+        "your_machines": "ਤੁਹਾਡੀਆਂ ਮਸ਼ੀਨਾਂ",
+        "help": "ਮਦਦ",
+        "processing": "ਪ੍ਰਕਿਰਿਆ ਹੋ ਰਹੀ ਹੈ...",
+        "error_occurred": "ਗਲਤੀ ਹੋਈ",
+        "try_again": "ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ",
+        "not_understood": "ਸਮਝ ਨਹੀਂ ਆਇਆ",
+        "yes": "ਹਾਂ",
+        "no": "ਨਹੀਂ",
+        "skip": "ਛੱਡੋ",
+        "done": "ਪੂਰਾ"
+    }
+}
+
+def get_bilingual_message(key: str, vendor: dict, fallback: str = "") -> str:
+    """Get bilingual message (English line will be added by caller, this returns regional translation)"""
+    if not vendor:
+        return ""
+    
+    lang_info = get_vendor_language(vendor)
+    lang_code = lang_info.get("code", "hi")
+    
+    messages = WHATSAPP_MESSAGES_BILINGUAL.get(lang_code, WHATSAPP_MESSAGES_BILINGUAL.get("hi", {}))
+    regional_text = messages.get(key, "")
+    
+    if regional_text:
+        return f"\n_{regional_text}_"
+    return ""
+
+def format_bilingual(english_text: str, message_key: str, vendor: dict) -> str:
+    """Format a complete bilingual message with English + Regional language"""
+    regional = get_bilingual_message(message_key, vendor)
+    if regional:
+        return f"{english_text}{regional}"
+    return english_text
+
 def get_vendor_language(vendor: dict) -> dict:
     """Get language info based on vendor's state"""
     if not vendor:
@@ -10237,10 +10543,18 @@ You can also register manually at https://oemlinker.com/register"""
         
         logger.info(f"Pending registration stored for {sender[:6]}***: {company_name}")
         
+        # Get bilingual messages (use state from GST data for language)
+        temp_vendor = {"state": state}
+        gst_found_regional = get_bilingual_message("gst_found", temp_vendor)
+        confirm_regional = get_bilingual_message("confirm_details", temp_vendor)
+        yes_regional = get_bilingual_message("type_yes", temp_vendor)
+        no_regional = get_bilingual_message("type_no", temp_vendor)
+        
         # Send company details and ask for confirmation
-        return f"""📋 *GST Details Found*
+        return f"""📋 *GST Details Found*{gst_found_regional}
 
 Please confirm your company details:
+{confirm_regional}
 
 🏢 *Company Name:* {company_name}
 📋 *GSTIN:* {extracted_text}
@@ -10253,8 +10567,8 @@ Please confirm your company details:
 ━━━━━━━━━━━━━━━━━━━━━━
 *Is this information correct?*
 
-Reply *YES* to confirm and register
-Reply *NO* to cancel
+Reply *YES* to confirm and register{yes_regional}
+Reply *NO* to cancel{no_regional}
 
 ⏳ This confirmation expires in {PENDING_REGISTRATION_TTL_MINUTES} minutes."""
         
@@ -10780,9 +11094,13 @@ Or add manually at https://oemlinker.com/vendor/machines"""
         lang_info = get_vendor_language(vendor)
         lang_name = lang_info.get("lang", "Hindi")
         
+        # Get bilingual messages
+        machine_identified_regional = get_bilingual_message("machine_identified", vendor)
+        add_dimensions_regional = get_bilingual_message("add_dimensions", vendor)
+        
         logger.info(f"Machine identified via WhatsApp, starting dimension flow: {machine_name} for vendor {vendor['vendor_id']} (lang: {lang_name})")
         
-        return f"""✅ *Machine Identified!*
+        return f"""✅ *Machine Identified!*{machine_identified_regional}
 
 {confidence_emoji} AI Identification ({confidence} confidence)
 
@@ -10793,7 +11111,7 @@ Or add manually at https://oemlinker.com/vendor/machines"""
 📝 Model: {model}
 
 ━━━━━━━━━━━━━━━━━━━━━━
-📏 *Now let's add dimensions:*
+📏 *Now let's add dimensions:*{add_dimensions_regional}
 _{fields_preview}_
 
 *Step 1/{total_fields}:*
@@ -10914,7 +11232,10 @@ async def save_pending_machine(sender: str, vendor: dict) -> str:
         
         dim_text = ", ".join(dim_summary) if dim_summary else "No dimensions added"
         
-        return f"""✅ *Machine Saved Successfully!*
+        # Get bilingual message
+        machine_saved_regional = get_bilingual_message("machine_saved", vendor)
+        
+        return f"""✅ *Machine Saved Successfully!*{machine_saved_regional}
 
 🏭 *{machine_info['name']}*
 📋 Type: {machine_info['machine_type']}
@@ -11185,9 +11506,14 @@ You can also register manually at https://oemlinker.com/register"""
         
         logger.info(f"New vendor registered via WhatsApp: {company_name} (GST: {gst_number}, Phone: {phone_login})")
         
-        return f"""🎉 *Registration Successful!*
+        # Get bilingual messages
+        new_vendor = {"state": state}
+        success_regional = get_bilingual_message("registration_success", new_vendor)
+        welcome_regional = get_bilingual_message("welcome", new_vendor)
+        
+        return f"""🎉 *Registration Successful!*{success_regional}
 
-Welcome to *OEMLinker*, {company_name}!
+Welcome to *OEMLinker*, {company_name}!{welcome_regional}
 
 ✅ *Account Created*
 🏢 Company: {company_name}
@@ -11358,9 +11684,14 @@ async def process_whatsapp_command(
                      *bengali_help, *gujarati_help, *kannada_help, *punjabi_help]
     if intent == "help" or matches_command(text_normalized, help_variants):
         if vendor:
-            return f"""👋 Welcome to *OEMLinker*, {vendor.get('company_name', 'Vendor')}!
+            # Get bilingual welcome message
+            welcome_regional = get_bilingual_message("welcome_vendor", vendor)
+            help_regional = get_bilingual_message("help", vendor)
+            commands_regional = get_bilingual_message("available_commands", vendor)
+            
+            return f"""👋 Welcome to *OEMLinker*, {vendor.get('company_name', 'Vendor')}!{welcome_regional}
 
-📋 *Available Commands:*
+📋 *Available Commands:*{commands_regional}
 
 *rfqs* - View open RFQs matching your capabilities
 *details <rfq_id>* - Get details of a specific RFQ
@@ -11368,7 +11699,7 @@ async def process_whatsapp_command(
 *my orders* - View your active orders
 *machines* - View your machines
 *profile* - View your vendor profile
-*help* - Show this menu
+*help* - Show this menu{help_regional}
 
 📷 *Add Machine:* Send a photo of your machine!
 🎤 *Voice Search:* Send a voice message to search!
@@ -11403,9 +11734,14 @@ _We'll automatically extract your details and create your account!_
             gst_number = gst_match.group(0)
             return await process_whatsapp_registration(sender, gst_number)
         else:
-            return """📝 *Vendor Registration*
+            # For non-registered users, use Hindi as default
+            default_vendor = {"state": ""}
+            reg_regional = get_bilingual_message("registration", default_vendor)
+            send_gst_regional = get_bilingual_message("send_gst", default_vendor)
+            
+            return f"""📝 *Vendor Registration*{reg_regional}
 
-📷 Send a photo of your *GST Certificate*
+📷 Send a photo of your *GST Certificate*{send_gst_regional}
 _AI will read and fill your details automatically!_
 
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -11413,10 +11749,13 @@ Your account will be created with business details from GSTIN database."""
 
     # Must be a registered vendor for other commands
     if not vendor:
-        return """⚠️ Your phone is not linked to a vendor account.
+        default_vendor = {"state": ""}
+        send_gst_regional = get_bilingual_message("send_gst", default_vendor)
+        
+        return f"""⚠️ Your phone is not linked to a vendor account.
 
 📷 *Register Now:*
-Send a photo of your *GST Certificate* to register instantly!"""
+Send a photo of your *GST Certificate* to register instantly!{send_gst_regional}"""
     
     # Base URL for links
     BASE_URL = "https://oemlinker.com"
@@ -11580,11 +11919,15 @@ Send a photo of your *GST Certificate* to register instantly!"""
                         *hindi_profile, *tamil_profile, *telugu_profile, *marathi_profile,
                         *bengali_profile, *gujarati_profile, *kannada_profile, *punjabi_profile]
     if intent == "profile" or matches_command(text_normalized, profile_variants):
-        response = f"""👤 *Your Vendor Profile*
+        profile_regional = get_bilingual_message("profile", vendor)
+        company_regional = get_bilingual_message("company_name", vendor)
+        
+        response = f"""👤 *Your Vendor Profile*{profile_regional}
 
-🏢 *{vendor.get('company_name', 'N/A')}*
+🏢 *{vendor.get('company_name', 'N/A')}*{company_regional}
 
-📍 Location: {vendor.get('city', 'N/A')}, {vendor.get('country', 'N/A')}
+📍 Location: {vendor.get('city', 'N/A')}, {vendor.get('state', '')}, {vendor.get('country', 'India')}
+📮 Pincode: {vendor.get('pincode', 'N/A')}
 📞 Phone: {vendor.get('phone', 'N/A')}
 ⭐ Rating: {vendor.get('rating', 0):.1f}/5
 📊 Total Jobs: {vendor.get('total_jobs', 0)}
@@ -11604,17 +11947,22 @@ Send a photo of your *GST Certificate* to register instantly!"""
         ).sort("created_at", -1).limit(10).to_list(length=10)
         
         if not machines:
-            return f"""🔧 *No Machines Added Yet*
+            no_machines_regional = get_bilingual_message("no_machines", vendor)
+            send_photo_regional = get_bilingual_message("send_machine_photo", vendor)
+            
+            return f"""🔧 *No Machines Added Yet*{no_machines_regional}
 
 Add your machines to get matched with relevant RFQs!
 
-📷 *Quick Add:* Send a photo of your machine
+📷 *Quick Add:* Send a photo of your machine{send_photo_regional}
 ✏️ *Manual Add:* {BASE_URL}/vendor/machines
 
 Your machines help us match you with the right opportunities."""
         
         machine_count = len(machines)
-        response = f"🔧 *Your Machines ({machine_count}):*\n\n"
+        your_machines_regional = get_bilingual_message("your_machines", vendor)
+        
+        response = f"🔧 *Your Machines ({machine_count}):*{your_machines_regional}\n\n"
         
         for m in machines:
             status_emoji = {"available": "🟢", "engaged": "🔵", "maintenance": "🟡", "offline": "⚫"}.get(m.get("availability_status", "available"), "🟢")
