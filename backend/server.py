@@ -9362,6 +9362,7 @@ This expires in {PENDING_REGISTRATION_TTL_MINUTES} minutes."""
         if datetime.now(timezone.utc) > pending["expires_at"]:
             del pending_machines[sender]
             logger.info(f"Pending machine flow expired for {sender[:6]}***")
+            # Continue to normal command processing after expiry
         else:
             text_clean = text.strip().lower()
             
@@ -9383,6 +9384,13 @@ Send another machine photo to try again."""
                     await whatsapp_service.send_text_message(sender, response_message)
                 return {"status": "ok"}
             
+            # Get current dimension info
+            current_field = pending["step"]
+            machine_category = pending["machine_info"]["machine_category"]
+            dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
+            current_prompt = dim_config["prompts"].get(current_field, "Enter the value (mm):")
+            machine_name = pending["machine_info"].get("name", "Machine")
+            
             # Try to parse dimension value
             try:
                 # Extract number from text (handles "500mm", "500 mm", "500")
@@ -9390,12 +9398,9 @@ Send another machine photo to try again."""
                 number_match = re.search(r'[\d.]+', text_clean)
                 if number_match:
                     value = float(number_match.group())
-                    current_field = pending["step"]
                     pending["dimensions"][current_field] = value
                     
                     # Move to next field
-                    machine_category = pending["machine_info"]["machine_category"]
-                    dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
                     current_index = pending["field_index"]
                     next_index = current_index + 1
                     
@@ -9421,25 +9426,36 @@ Type *skip* to save machine now."""
                         await whatsapp_service.send_text_message(sender, response_message)
                     return {"status": "ok"}
                 else:
-                    # Not a valid number - prompt again
-                    current_field = pending["step"]
-                    machine_category = pending["machine_info"]["machine_category"]
-                    dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
-                    current_prompt = dim_config["prompts"][current_field]
-                    
-                    response_message = f"""⚠️ Please enter a valid number.
+                    # Not a valid number - stay in flow and prompt again
+                    response_message = f"""📏 *Adding Dimensions for:* {machine_name}
+
+⚠️ Please enter a valid number for *{current_field.replace('_', ' ').title()}*
 
 {current_prompt}
 
 Example: _500_ or _500mm_
 
-Type *skip* to skip this field."""
+━━━━━━━━━━━━━━━━━━━━━━
+Type *skip* to save without this dimension
+Type *cancel* to abort"""
                     if whatsapp_service.is_configured():
                         await whatsapp_service.send_text_message(sender, response_message)
                     return {"status": "ok"}
                     
             except Exception as e:
                 logger.error(f"Error processing dimension input: {str(e)}")
+                # Stay in flow even on error
+                response_message = f"""📏 *Adding Dimensions for:* {machine_name}
+
+⚠️ Something went wrong. Please try again.
+
+{current_prompt}
+
+Type *skip* to save without dimensions
+Type *cancel* to abort"""
+                if whatsapp_service.is_configured():
+                    await whatsapp_service.send_text_message(sender, response_message)
+                return {"status": "ok"}
     
     # Process commands
     response_message = await process_whatsapp_command(text, sender, vendor, user)
