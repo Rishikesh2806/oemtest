@@ -428,6 +428,31 @@ WhatsApp machine dimension flow now dynamically asks for category-specific param
 - **Step Progress**: Shows "Step N/total" during dimension collection for better UX
 - **Fuzzy Category Matching**: AI-identified categories are mapped to the correct dimension fields using `get_dimension_config_for_category` helper
 - **All Dimension Fields Supported**: Including specialized fields like `laser_power`, `amperage`, `max_temp`, `accuracy`, `layer_thickness`, etc.
+- **Bilingual Prompts**: Shows prompts in English + vendor's regional language based on their state location
+
+### Bilingual Language Support (Dec 2025):
+The dimension prompts now display in two languages:
+1. **English** (primary)
+2. **Regional Language** (based on vendor's state)
+
+Supported languages:
+- Hindi (Delhi, UP, MP, Bihar, Rajasthan, Haryana, Uttarakhand, Jharkhand, Chhattisgarh, HP)
+- Marathi (Maharashtra)
+- Gujarati (Gujarat)
+- Tamil (Tamil Nadu)
+- Telugu (Andhra Pradesh, Telangana)
+- Kannada (Karnataka)
+- Bengali (West Bengal)
+- Punjabi (Punjab)
+- Malayalam (Kerala)
+- Odia (Odisha)
+- Assamese (Assam)
+
+### Key Files:
+- `/app/backend/server.py` - STATE_LANGUAGE_MAP (line ~8847)
+- `/app/backend/server.py` - DIMENSION_PROMPTS_BILINGUAL (line ~8880)
+- `/app/backend/server.py` - `get_bilingual_prompt()` function
+- `/app/backend/server.py` - `get_vendor_language()` function
 
 ### Dimension Fields by Category Examples:
 - **CNC Turning/Lathe**: max_length, max_diameter, max_swing

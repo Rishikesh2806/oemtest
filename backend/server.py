@@ -8844,6 +8844,212 @@ PENDING_REGISTRATION_TTL_MINUTES = 10  # Pending registration expires after 10 m
 pending_machines = {}  # {phone_number: {"machine_info": dict, "step": str, "dimensions": dict, "image_url": str, "expires_at": datetime}}
 PENDING_MACHINE_TTL_MINUTES = 15  # Pending machine flow expires after 15 minutes
 
+# Indian State to Language Mapping for WhatsApp localization
+STATE_LANGUAGE_MAP = {
+    # Hindi Belt
+    "Delhi": {"lang": "Hindi", "code": "hi"},
+    "Uttar Pradesh": {"lang": "Hindi", "code": "hi"},
+    "Madhya Pradesh": {"lang": "Hindi", "code": "hi"},
+    "Bihar": {"lang": "Hindi", "code": "hi"},
+    "Rajasthan": {"lang": "Hindi", "code": "hi"},
+    "Haryana": {"lang": "Hindi", "code": "hi"},
+    "Uttarakhand": {"lang": "Hindi", "code": "hi"},
+    "Jharkhand": {"lang": "Hindi", "code": "hi"},
+    "Chhattisgarh": {"lang": "Hindi", "code": "hi"},
+    "Himachal Pradesh": {"lang": "Hindi", "code": "hi"},
+    # South India
+    "Tamil Nadu": {"lang": "Tamil", "code": "ta"},
+    "Karnataka": {"lang": "Kannada", "code": "kn"},
+    "Kerala": {"lang": "Malayalam", "code": "ml"},
+    "Andhra Pradesh": {"lang": "Telugu", "code": "te"},
+    "Telangana": {"lang": "Telugu", "code": "te"},
+    # West India
+    "Maharashtra": {"lang": "Marathi", "code": "mr"},
+    "Gujarat": {"lang": "Gujarati", "code": "gu"},
+    "Goa": {"lang": "Konkani", "code": "kok"},
+    # East India
+    "West Bengal": {"lang": "Bengali", "code": "bn"},
+    "Odisha": {"lang": "Odia", "code": "or"},
+    "Assam": {"lang": "Assamese", "code": "as"},
+    # North India
+    "Punjab": {"lang": "Punjabi", "code": "pa"},
+    "Jammu and Kashmir": {"lang": "Urdu", "code": "ur"},
+    # Default
+    "default": {"lang": "Hindi", "code": "hi"}
+}
+
+# Bilingual dimension prompts - English + Regional Language
+DIMENSION_PROMPTS_BILINGUAL = {
+    # Hindi translations
+    "hi": {
+        "max_thickness": "अधिकतम मोटाई (mm)?",
+        "max_length": "अधिकतम लंबाई (mm)?",
+        "amperage": "अधिकतम एम्पेयर (A)?",
+        "max_x": "X-अक्ष ट्रैवल (mm)?",
+        "max_y": "Y-अक्ष ट्रैवल (mm)?",
+        "max_z": "Z-अक्ष ट्रैवल (mm)?",
+        "max_diameter": "अधिकतम व्यास (mm)?",
+        "bore_diameter": "स्पिंडल बोर व्यास (mm)?",
+        "table_diameter": "टेबल व्यास (mm)?",
+        "max_weight": "अधिकतम वजन (kg)?",
+        "table_size_x": "टेबल साइज़ X (mm)?",
+        "table_size_y": "टेबल साइज़ Y (mm)?",
+        "pallet_size": "पैलेट साइज़ (mm)?",
+        "spindle_bore": "स्पिंडल बोर (mm)?",
+        "max_swing": "अधिकतम स्विंग (mm)?",
+        "max_stroke": "अधिकतम स्ट्रोक (mm)?",
+        "stroke": "स्ट्रोक (mm)?",
+        "tonnage": "टनेज (ton)?",
+        "laser_power": "लेजर पावर (kW)?",
+        "max_temp": "अधिकतम तापमान (°C)?",
+        "accuracy": "सटीकता (μm)?",
+        "layer_thickness": "लेयर मोटाई (μm)?",
+        "max_taper_angle": "अधिकतम टेपर एंगल (°)?",
+        "max_module": "अधिकतम मॉड्यूल (mm)?",
+        "min_teeth": "न्यूनतम दांत?",
+        "a_axis_range": "A-अक्ष रेंज (°)?",
+        "c_axis_range": "C-अक्ष रेंज (°)?",
+        "spindle_travel": "स्पिंडल ट्रैवल (mm)?",
+        "arm_length": "आर्म लंबाई (mm)?",
+        "max_depth": "अधिकतम गहराई (mm)?",
+        "skip": "छोड़ें",
+        "or_skip": "(या 'skip' टाइप करें)"
+    },
+    # Marathi translations
+    "mr": {
+        "max_thickness": "कमाल जाडी (mm)?",
+        "max_length": "कमाल लांबी (mm)?",
+        "amperage": "कमाल अँपिअर (A)?",
+        "max_x": "X-अक्ष ट्रॅव्हल (mm)?",
+        "max_y": "Y-अक्ष ट्रॅव्हल (mm)?",
+        "max_z": "Z-अक्ष ट्रॅव्हल (mm)?",
+        "max_diameter": "कमाल व्यास (mm)?",
+        "max_weight": "कमाल वजन (kg)?",
+        "tonnage": "टनेज (ton)?",
+        "skip": "वगळा",
+        "or_skip": "(किंवा 'skip' टाइप करा)"
+    },
+    # Gujarati translations
+    "gu": {
+        "max_thickness": "મહત્તમ જાડાઈ (mm)?",
+        "max_length": "મહત્તમ લંબાઈ (mm)?",
+        "amperage": "મહત્તમ એમ્પિયર (A)?",
+        "max_x": "X-અક્ષ ટ્રાવેલ (mm)?",
+        "max_y": "Y-અક્ષ ટ્રાવેલ (mm)?",
+        "max_z": "Z-અક્ષ ટ્રાવેલ (mm)?",
+        "max_diameter": "મહત્તમ વ્યાસ (mm)?",
+        "max_weight": "મહત્તમ વજન (kg)?",
+        "skip": "છોડો",
+        "or_skip": "(અથવા 'skip' ટાઇપ કરો)"
+    },
+    # Tamil translations
+    "ta": {
+        "max_thickness": "அதிகபட்ச தடிமன் (mm)?",
+        "max_length": "அதிகபட்ச நீளம் (mm)?",
+        "amperage": "அதிகபட்ச ஆம்பியர் (A)?",
+        "max_x": "X-அச்சு பயணம் (mm)?",
+        "max_y": "Y-அச்சு பயணம் (mm)?",
+        "max_z": "Z-அச்சு பயணம் (mm)?",
+        "max_diameter": "அதிகபட்ச விட்டம் (mm)?",
+        "max_weight": "அதிகபட்ச எடை (kg)?",
+        "skip": "தவிர்",
+        "or_skip": "(அல்லது 'skip' தட்டச்சு செய்யவும்)"
+    },
+    # Telugu translations
+    "te": {
+        "max_thickness": "గరిష్ట మందం (mm)?",
+        "max_length": "గరిష్ట పొడవు (mm)?",
+        "amperage": "గరిష్ట ఆంపియర్ (A)?",
+        "max_x": "X-అక్షం ట్రావెల్ (mm)?",
+        "max_y": "Y-అక్షం ట్రావెల్ (mm)?",
+        "max_z": "Z-అక్షం ట్రావెల్ (mm)?",
+        "max_diameter": "గరిష్ట వ్యాసం (mm)?",
+        "max_weight": "గరిష్ట బరువు (kg)?",
+        "skip": "దాటవేయి",
+        "or_skip": "(లేదా 'skip' టైప్ చేయండి)"
+    },
+    # Kannada translations
+    "kn": {
+        "max_thickness": "ಗರಿಷ್ಠ ದಪ್ಪ (mm)?",
+        "max_length": "ಗರಿಷ್ಠ ಉದ್ದ (mm)?",
+        "amperage": "ಗರಿಷ್ಠ ಆಂಪಿಯರ್ (A)?",
+        "max_x": "X-ಅಕ್ಷ ಪ್ರಯಾಣ (mm)?",
+        "max_y": "Y-ಅಕ್ಷ ಪ್ರಯಾಣ (mm)?",
+        "max_z": "Z-ಅಕ್ಷ ಪ್ರಯಾಣ (mm)?",
+        "max_diameter": "ಗರಿಷ್ಠ ವ್ಯಾಸ (mm)?",
+        "max_weight": "ಗರಿಷ್ಠ ತೂಕ (kg)?",
+        "skip": "ಬಿಡಿ",
+        "or_skip": "(ಅಥವಾ 'skip' ಟೈಪ್ ಮಾಡಿ)"
+    },
+    # Bengali translations
+    "bn": {
+        "max_thickness": "সর্বোচ্চ পুরুত্ব (mm)?",
+        "max_length": "সর্বোচ্চ দৈর্ঘ্য (mm)?",
+        "amperage": "সর্বোচ্চ অ্যাম্পিয়ার (A)?",
+        "max_x": "X-অক্ষ ট্রাভেল (mm)?",
+        "max_y": "Y-অক্ষ ট্রাভেল (mm)?",
+        "max_z": "Z-অক্ষ ট্রাভেল (mm)?",
+        "max_diameter": "সর্বোচ্চ ব্যাস (mm)?",
+        "max_weight": "সর্বোচ্চ ওজন (kg)?",
+        "skip": "এড়িয়ে যান",
+        "or_skip": "(অথবা 'skip' টাইপ করুন)"
+    },
+    # Punjabi translations
+    "pa": {
+        "max_thickness": "ਵੱਧ ਤੋਂ ਵੱਧ ਮੋਟਾਈ (mm)?",
+        "max_length": "ਵੱਧ ਤੋਂ ਵੱਧ ਲੰਬਾਈ (mm)?",
+        "amperage": "ਵੱਧ ਤੋਂ ਵੱਧ ਐਂਪੀਅਰ (A)?",
+        "max_x": "X-ਧੁਰਾ ਟ੍ਰੈਵਲ (mm)?",
+        "max_y": "Y-ਧੁਰਾ ਟ੍ਰੈਵਲ (mm)?",
+        "max_z": "Z-ਧੁਰਾ ਟ੍ਰੈਵਲ (mm)?",
+        "max_diameter": "ਵੱਧ ਤੋਂ ਵੱਧ ਵਿਆਸ (mm)?",
+        "max_weight": "ਵੱਧ ਤੋਂ ਵੱਧ ਭਾਰ (kg)?",
+        "skip": "ਛੱਡੋ",
+        "or_skip": "(ਜਾਂ 'skip' ਟਾਈਪ ਕਰੋ)"
+    }
+}
+
+def get_vendor_language(vendor: dict) -> dict:
+    """Get language info based on vendor's state"""
+    if not vendor:
+        return STATE_LANGUAGE_MAP["default"]
+    
+    state = vendor.get("state", "")
+    if not state:
+        # Try to get from address or GST state code
+        address = vendor.get("address", "") or ""
+        # Check for state names in address
+        for state_name in STATE_LANGUAGE_MAP:
+            if state_name != "default" and state_name.lower() in address.lower():
+                return STATE_LANGUAGE_MAP[state_name]
+        return STATE_LANGUAGE_MAP["default"]
+    
+    # Normalize state name
+    state_normalized = state.strip().title()
+    return STATE_LANGUAGE_MAP.get(state_normalized, STATE_LANGUAGE_MAP["default"])
+
+def get_bilingual_prompt(field_key: str, english_prompt: str, vendor: dict) -> str:
+    """Generate bilingual prompt (English + Regional Language)"""
+    lang_info = get_vendor_language(vendor)
+    lang_code = lang_info.get("code", "hi")
+    lang_name = lang_info.get("lang", "Hindi")
+    
+    # Get regional translation
+    regional_prompts = DIMENSION_PROMPTS_BILINGUAL.get(lang_code, DIMENSION_PROMPTS_BILINGUAL.get("hi", {}))
+    regional_prompt = regional_prompts.get(field_key, "")
+    
+    # Check if this is an optional field (contains 'skip')
+    is_optional = "skip" in english_prompt.lower()
+    skip_text = regional_prompts.get("or_skip", "(या 'skip' टाइप करें)")
+    
+    if regional_prompt:
+        if is_optional:
+            return f"{english_prompt}\n_{regional_prompt}_ {skip_text}"
+        else:
+            return f"{english_prompt}\n_{regional_prompt}_"
+    else:
+        return english_prompt
+
 # Dimension fields by machine category - ALIGNED WITH /api/machine-categories endpoint
 # Each field now includes "key", "label", and "type" to match web app structure
 MACHINE_DIMENSION_FIELDS = {
@@ -9615,7 +9821,9 @@ Send another machine photo to try again."""
                 current_field_info = fields_list[field_index]
                 current_field_key = current_field_info["key"]
                 current_field_label = current_field_info["label"]
-                current_prompt = current_field_info["prompt"]
+                current_prompt_en = current_field_info["prompt"]
+                # Get bilingual prompt based on vendor's state
+                current_prompt = get_bilingual_prompt(current_field_key, current_prompt_en, vendor)
             else:
                 # Should not happen, but fallback
                 current_field_key = "max_x"
@@ -9634,10 +9842,11 @@ Send another machine photo to try again."""
                     next_index = field_index + 1
                     
                     if next_index < total_fields:
-                        # Ask for next dimension
+                        # Ask for next dimension with bilingual prompt
                         next_field_info = fields_list[next_index]
                         next_field_key = next_field_info["key"]
-                        next_prompt = next_field_info["prompt"]
+                        next_prompt_en = next_field_info["prompt"]
+                        next_prompt = get_bilingual_prompt(next_field_key, next_prompt_en, vendor)
                         pending["step"] = next_field_key
                         pending["field_index"] = next_index
                         
@@ -10530,7 +10739,9 @@ Or add manually at https://oemlinker.com/vendor/machines"""
         fields_list = dim_config["fields"]
         first_field_info = fields_list[0]
         first_field_key = first_field_info["key"]
-        first_prompt = first_field_info["prompt"]
+        first_prompt_en = first_field_info["prompt"]
+        # Get bilingual prompt based on vendor's state
+        first_prompt = get_bilingual_prompt(first_field_key, first_prompt_en, vendor)
         
         # Store pending machine for dimension collection
         logger.info(f"Setting pending_machines for sender: '{sender}', category: '{machine_category}'")
@@ -10561,7 +10772,11 @@ Or add manually at https://oemlinker.com/vendor/machines"""
         if total_fields > 3:
             fields_preview += f" +{total_fields - 3} more"
         
-        logger.info(f"Machine identified via WhatsApp, starting dimension flow: {machine_name} for vendor {vendor['vendor_id']}")
+        # Get vendor's language for localized instructions
+        lang_info = get_vendor_language(vendor)
+        lang_name = lang_info.get("lang", "Hindi")
+        
+        logger.info(f"Machine identified via WhatsApp, starting dimension flow: {machine_name} for vendor {vendor['vendor_id']} (lang: {lang_name})")
         
         return f"""✅ *Machine Identified!*
 
