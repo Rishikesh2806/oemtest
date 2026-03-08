@@ -25,6 +25,16 @@ const MATERIALS = [
   "Brass", "Copper", "Titanium", "Plastic", "Other"
 ];
 
+const INDIAN_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+  "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
+  "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur",
+  "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
+  "Uttar Pradesh", "Uttarakhand", "West Bengal",
+  "Delhi", "Jammu and Kashmir", "Ladakh", "Puducherry"
+];
+
 const VendorProfile = () => {
   const { user, updateUser } = useAuth();
   const navigate = useNavigate();
@@ -51,7 +61,9 @@ const VendorProfile = () => {
     description: "",
     address: "",
     city: "",
-    country: "",
+    state: "",
+    pincode: "",
+    country: "India",
     phone: "",
     website: "",
     certifications: [],
@@ -73,7 +85,9 @@ const VendorProfile = () => {
         description: response.data.description || "",
         address: response.data.address || "",
         city: response.data.city || "",
-        country: response.data.country || "",
+        state: response.data.state || "",
+        pincode: response.data.pincode || "",
+        country: response.data.country || "India",
         phone: response.data.phone || "",
         website: response.data.website || "",
         certifications: response.data.certifications || [],
@@ -277,6 +291,7 @@ const VendorProfile = () => {
                     onChange={(e) => handleInputChange("address", e.target.value)}
                     placeholder="Street address"
                     className="mt-1"
+                    data-testid="address-input"
                   />
                 </div>
                 <div>
@@ -288,6 +303,43 @@ const VendorProfile = () => {
                     onChange={(e) => handleInputChange("city", e.target.value)}
                     placeholder="City"
                     className="mt-1"
+                    data-testid="city-input"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    State *
+                  </Label>
+                  <select
+                    value={formData.state}
+                    onChange={(e) => handleInputChange("state", e.target.value)}
+                    className="mt-1 w-full h-10 px-3 rounded-md border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    data-testid="state-select"
+                  >
+                    <option value="">Select State</option>
+                    {INDIAN_STATES.map((state) => (
+                      <option key={state} value={state}>{state}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Pincode
+                  </Label>
+                  <Input
+                    value={formData.pincode}
+                    onChange={(e) => {
+                      // Allow only numbers and limit to 6 digits
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                      handleInputChange("pincode", value);
+                    }}
+                    placeholder="6-digit pincode"
+                    className="mt-1"
+                    maxLength={6}
+                    data-testid="pincode-input"
                   />
                 </div>
               </div>
@@ -302,6 +354,7 @@ const VendorProfile = () => {
                     onChange={(e) => handleInputChange("country", e.target.value)}
                     placeholder="Country"
                     className="mt-1"
+                    data-testid="country-input"
                   />
                 </div>
                 <div>
@@ -311,8 +364,9 @@ const VendorProfile = () => {
                   <Input
                     value={formData.phone}
                     onChange={(e) => handleInputChange("phone", e.target.value)}
-                    placeholder="+1 234 567 8900"
+                    placeholder="+91 98765 43210"
                     className="mt-1"
+                    data-testid="phone-input"
                   />
                 </div>
               </div>

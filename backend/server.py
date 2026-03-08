@@ -681,6 +681,8 @@ class VendorProfile(BaseModel):
     description: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None
+    state: Optional[str] = None
+    pincode: Optional[str] = None
     country: Optional[str] = None
     phone: Optional[str] = None
     website: Optional[str] = None
@@ -708,6 +710,8 @@ class VendorProfileCreate(BaseModel):
     description: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None
+    state: Optional[str] = None
+    pincode: Optional[str] = None
     country: Optional[str] = None
     phone: Optional[str] = None
     website: Optional[str] = None
