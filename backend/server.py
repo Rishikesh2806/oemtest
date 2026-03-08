@@ -9117,6 +9117,10 @@ Type *"help"* for more commands."""
 processed_message_ids = {}  # {message_id: timestamp}
 MESSAGE_ID_TTL_SECONDS = 300  # 5 minutes
 
+# Processing locks to prevent concurrent handling for same sender
+processing_locks = {}  # {sender: timestamp}
+PROCESSING_LOCK_TTL_SECONDS = 30  # Lock expires after 30 seconds
+
 def is_duplicate_message(message_id: str) -> bool:
     """Check if message was already processed (with cleanup of old entries)"""
     if not message_id:
@@ -9137,6 +9141,32 @@ def is_duplicate_message(message_id: str) -> bool:
     # Mark as processed
     processed_message_ids[message_id] = current_time
     return False
+
+def acquire_processing_lock(sender: str) -> bool:
+    """Acquire a processing lock for a sender to prevent concurrent handling"""
+    if not sender:
+        return True
+    
+    current_time = datetime.now(timezone.utc).timestamp()
+    
+    # Cleanup expired locks
+    expired = [s for s, ts in processing_locks.items() 
+               if current_time - ts > PROCESSING_LOCK_TTL_SECONDS]
+    for s in expired:
+        del processing_locks[s]
+    
+    # Check if already locked
+    if sender in processing_locks:
+        return False
+    
+    # Acquire lock
+    processing_locks[sender] = current_time
+    return True
+
+def release_processing_lock(sender: str):
+    """Release the processing lock for a sender"""
+    if sender in processing_locks:
+        del processing_locks[sender]
 
 @api_router.post("/whatsapp/webhook")
 async def whatsapp_webhook(request: Request):
@@ -9171,115 +9201,132 @@ async def whatsapp_webhook(request: Request):
         sender = parsed.get("sender", "")
         msg_type = parsed.get("type", "text")
         
-        # Find vendor by phone number
-        vendor = await db.vendors.find_one(
-            {"phone": {"$regex": sender[-10:]}},  # Match last 10 digits
-            {"_id": 0}
-        )
+        # Acquire processing lock to prevent concurrent handling
+        if not acquire_processing_lock(sender):
+            logger.info(f"Message queued - already processing for: {sender[:6]}***")
+            return {"status": "processing"}
         
-        user = None
+        try:
+            return await _process_whatsapp_message(sender, msg_type, parsed)
+        finally:
+            release_processing_lock(sender)
+        
+    except Exception as e:
+        logger.error(f"WhatsApp webhook error: {str(e)}")
+        return {"status": "error", "message": str(e)}
+
+
+async def _process_whatsapp_message(sender: str, msg_type: str, parsed: dict):
+    """Internal function to process WhatsApp message - separated for lock management"""
+    # Find vendor by phone number
+    vendor = await db.vendors.find_one(
+        {"phone": {"$regex": sender[-10:]}},  # Match last 10 digits
+        {"_id": 0}
+    )
+    
+    user = None
+    if vendor:
+        user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0})
+    
+    # Handle voice/audio messages
+    if msg_type == "audio" and parsed.get("audio_url"):
+        text = await process_voice_message(parsed.get("audio_url"), sender, vendor, user)
+        if not text:
+            # Failed to transcribe
+            if whatsapp_service.is_configured():
+                await whatsapp_service.send_text_message(
+                    sender, 
+                    "⚠️ Sorry, I couldn't understand your voice message. Please try again or type your query."
+                )
+            return {"status": "ok"}
+    # Handle image messages
+    elif msg_type == "image" and parsed.get("image_url"):
+        # Check if user is already registered - process as machine photo
         if vendor:
-            user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0})
-        
-        # Handle voice/audio messages
-        if msg_type == "audio" and parsed.get("audio_url"):
-            text = await process_voice_message(parsed.get("audio_url"), sender, vendor, user)
-            if not text:
-                # Failed to transcribe
-                if whatsapp_service.is_configured():
-                    await whatsapp_service.send_text_message(
-                        sender, 
-                        "⚠️ Sorry, I couldn't understand your voice message. Please try again or type your query."
-                    )
-                return {"status": "ok"}
-        # Handle image messages
-        elif msg_type == "image" and parsed.get("image_url"):
-            # Check if user is already registered - process as machine photo
-            if vendor:
-                # Check if there's a pending machine - this might be a nameplate image
-                if sender in pending_machines:
-                    response_message = await process_nameplate_image(
-                        parsed.get("image_url"),
-                        sender,
-                        vendor
-                    )
-                else:
-                    # New machine photo
-                    response_message = await process_machine_photo_upload(
-                        parsed.get("image_url"), 
-                        sender, 
-                        vendor,
-                        parsed.get("caption", "")
-                    )
-                if response_message and whatsapp_service.is_configured():
-                    await whatsapp_service.send_text_message(sender, response_message)
-                return {"status": "ok"}
-            
-            # Not registered - process image for GST certificate extraction
-            response_message = await process_gst_certificate_image(parsed.get("image_url"), sender)
+            # Check if there's a pending machine - this might be a nameplate image
+            if sender in pending_machines:
+                response_message = await process_nameplate_image(
+                    parsed.get("image_url"),
+                    sender,
+                    vendor
+                )
+            else:
+                # New machine photo
+                response_message = await process_machine_photo_upload(
+                    parsed.get("image_url"), 
+                    sender, 
+                    vendor,
+                    parsed.get("caption", "")
+                )
             if response_message and whatsapp_service.is_configured():
                 await whatsapp_service.send_text_message(sender, response_message)
             return {"status": "ok"}
-        # Handle document messages (PDF GST certificate upload)
-        elif msg_type == "document" and parsed.get("document_url"):
-            filename = parsed.get("filename", "").lower()
-            
-            # Check if it's a PDF (likely GST certificate)
-            if filename.endswith(".pdf") or "pdf" in filename:
-                # Check if user is already registered
-                if vendor:
-                    if whatsapp_service.is_configured():
-                        await whatsapp_service.send_text_message(
-                            sender,
-                            "📄 PDF received! You're already registered.\n\nType *help* to see available commands."
-                        )
-                    return {"status": "ok"}
-                
-                # Process PDF for GST certificate extraction
-                logger.info(f"Processing PDF document for GST: {filename}")
-                response_message = await process_gst_certificate_document(parsed.get("document_url"), sender, filename)
-                if response_message and whatsapp_service.is_configured():
-                    await whatsapp_service.send_text_message(sender, response_message)
-                return {"status": "ok"}
-            else:
-                # Non-PDF document
+        
+        # Not registered - process image for GST certificate extraction
+        response_message = await process_gst_certificate_image(parsed.get("image_url"), sender)
+        if response_message and whatsapp_service.is_configured():
+            await whatsapp_service.send_text_message(sender, response_message)
+        return {"status": "ok"}
+    # Handle document messages (PDF GST certificate upload)
+    elif msg_type == "document" and parsed.get("document_url"):
+        filename = parsed.get("filename", "").lower()
+        
+        # Check if it's a PDF (likely GST certificate)
+        if filename.endswith(".pdf") or "pdf" in filename:
+            # Check if user is already registered
+            if vendor:
                 if whatsapp_service.is_configured():
                     await whatsapp_service.send_text_message(
                         sender,
-                        f"📄 Document received: {filename}\n\nFor GST registration, please upload your GST certificate as:\n• PDF file, OR\n• Image (JPG/PNG)\n\nType *help* for available commands."
+                        "📄 PDF received! You're already registered.\n\nType *help* to see available commands."
                     )
                 return {"status": "ok"}
-        else:
-            text = parsed.get("text", "").strip().lower()
-        
-        if not sender or not text:
-            logger.warning(f"WhatsApp: Missing sender or text. Sender: {sender}, Text: '{text}'")
-            return {"status": "ok"}
-        
-        logger.info(f"WhatsApp processing command: '{text}' from {sender[:6]}***")
-        
-        # Check for pending registration confirmation
-        if sender in pending_registrations:
-            pending = pending_registrations[sender]
             
-            # Check if expired
-            if datetime.now(timezone.utc) > pending["expires_at"]:
+            # Process PDF for GST certificate extraction
+            logger.info(f"Processing PDF document for GST: {filename}")
+            response_message = await process_gst_certificate_document(parsed.get("document_url"), sender, filename)
+            if response_message and whatsapp_service.is_configured():
+                await whatsapp_service.send_text_message(sender, response_message)
+            return {"status": "ok"}
+        else:
+            # Non-PDF document
+            if whatsapp_service.is_configured():
+                await whatsapp_service.send_text_message(
+                    sender,
+                    f"📄 Document received: {filename}\n\nFor GST registration, please upload your GST certificate as:\n• PDF file, OR\n• Image (JPG/PNG)\n\nType *help* for available commands."
+                )
+            return {"status": "ok"}
+    else:
+        text = parsed.get("text", "").strip().lower()
+    
+    if not sender or not text:
+        logger.warning(f"WhatsApp: Missing sender or text. Sender: {sender}, Text: '{text}'")
+        return {"status": "ok"}
+    
+    logger.info(f"WhatsApp processing command: '{text}' from {sender[:6]}***")
+    
+    # Check for pending registration confirmation
+    if sender in pending_registrations:
+        pending = pending_registrations[sender]
+        
+        # Check if expired
+        if datetime.now(timezone.utc) > pending["expires_at"]:
+            del pending_registrations[sender]
+            logger.info(f"Pending registration expired for {sender[:6]}***")
+        else:
+            # Handle YES/NO confirmation
+            text_clean = text.strip().lower()
+            if text_clean in ["yes", "y", "confirm", "ok", "haan", "ha", "हां", "हाँ"]:
+                # User confirmed - proceed with registration
                 del pending_registrations[sender]
-                logger.info(f"Pending registration expired for {sender[:6]}***")
-            else:
-                # Handle YES/NO confirmation
-                text_clean = text.strip().lower()
-                if text_clean in ["yes", "y", "confirm", "ok", "haan", "ha", "हां", "हाँ"]:
-                    # User confirmed - proceed with registration
-                    del pending_registrations[sender]
-                    response_message = await process_whatsapp_registration(sender, pending["gstin"])
-                    if response_message and whatsapp_service.is_configured():
-                        await whatsapp_service.send_text_message(sender, response_message)
-                    return {"status": "ok"}
-                elif text_clean in ["no", "n", "cancel", "nahi", "nhi", "नहीं"]:
-                    # User cancelled
-                    del pending_registrations[sender]
-                    response_message = """❌ *Registration Cancelled*
+                response_message = await process_whatsapp_registration(sender, pending["gstin"])
+                if response_message and whatsapp_service.is_configured():
+                    await whatsapp_service.send_text_message(sender, response_message)
+                return {"status": "ok"}
+            elif text_clean in ["no", "n", "cancel", "nahi", "nhi", "नहीं"]:
+                # User cancelled
+                del pending_registrations[sender]
+                response_message = """❌ *Registration Cancelled*
 
 Your registration has been cancelled.
 
@@ -9288,12 +9335,12 @@ To register again:
 • Type *register YOUR_GST_NUMBER*
 
 Or register manually at https://oemlinker.com/register"""
-                    if whatsapp_service.is_configured():
-                        await whatsapp_service.send_text_message(sender, response_message)
-                    return {"status": "ok"}
-                else:
-                    # Remind user to confirm
-                    response_message = f"""⏳ *Confirmation Pending*
+                if whatsapp_service.is_configured():
+                    await whatsapp_service.send_text_message(sender, response_message)
+                return {"status": "ok"}
+            else:
+                # Remind user to confirm
+                response_message = f"""⏳ *Confirmation Pending*
 
 You have a pending registration for:
 🏢 *{pending['company_name']}*
@@ -9303,165 +9350,161 @@ Please reply:
 • *NO* to cancel
 
 This expires in {PENDING_REGISTRATION_TTL_MINUTES} minutes."""
-                    if whatsapp_service.is_configured():
-                        await whatsapp_service.send_text_message(sender, response_message)
-                    return {"status": "ok"}
+                if whatsapp_service.is_configured():
+                    await whatsapp_service.send_text_message(sender, response_message)
+                return {"status": "ok"}
+    
+    # Check for pending machine dimension input
+    if sender in pending_machines:
+        pending = pending_machines[sender]
         
-        # Check for pending machine dimension input
-        if sender in pending_machines:
-            pending = pending_machines[sender]
+        # Check if expired
+        if datetime.now(timezone.utc) > pending["expires_at"]:
+            del pending_machines[sender]
+            logger.info(f"Pending machine flow expired for {sender[:6]}***")
+        else:
+            text_clean = text.strip().lower()
             
-            # Check if expired
-            if datetime.now(timezone.utc) > pending["expires_at"]:
+            # Handle skip - save machine without dimensions
+            if text_clean in ["skip", "done", "save", "finish"]:
+                response_message = await save_pending_machine(sender, vendor)
                 del pending_machines[sender]
-                logger.info(f"Pending machine flow expired for {sender[:6]}***")
-            else:
-                text_clean = text.strip().lower()
-                
-                # Handle skip - save machine without dimensions
-                if text_clean in ["skip", "done", "save", "finish"]:
-                    response_message = await save_pending_machine(sender, vendor)
-                    del pending_machines[sender]
-                    if response_message and whatsapp_service.is_configured():
-                        await whatsapp_service.send_text_message(sender, response_message)
-                    return {"status": "ok"}
-                
-                # Handle cancel
-                if text_clean in ["cancel", "exit", "quit"]:
-                    del pending_machines[sender]
-                    response_message = """❌ *Machine Addition Cancelled*
+                if response_message and whatsapp_service.is_configured():
+                    await whatsapp_service.send_text_message(sender, response_message)
+                return {"status": "ok"}
+            
+            # Handle cancel
+            if text_clean in ["cancel", "exit", "quit"]:
+                del pending_machines[sender]
+                response_message = """❌ *Machine Addition Cancelled*
 
 Send another machine photo to try again."""
-                    if whatsapp_service.is_configured():
-                        await whatsapp_service.send_text_message(sender, response_message)
-                    return {"status": "ok"}
-                
-                # Try to parse dimension value
-                try:
-                    # Extract number from text (handles "500mm", "500 mm", "500")
-                    import re
-                    number_match = re.search(r'[\d.]+', text_clean)
-                    if number_match:
-                        value = float(number_match.group())
-                        current_field = pending["step"]
-                        pending["dimensions"][current_field] = value
+                if whatsapp_service.is_configured():
+                    await whatsapp_service.send_text_message(sender, response_message)
+                return {"status": "ok"}
+            
+            # Try to parse dimension value
+            try:
+                # Extract number from text (handles "500mm", "500 mm", "500")
+                import re
+                number_match = re.search(r'[\d.]+', text_clean)
+                if number_match:
+                    value = float(number_match.group())
+                    current_field = pending["step"]
+                    pending["dimensions"][current_field] = value
+                    
+                    # Move to next field
+                    machine_category = pending["machine_info"]["machine_category"]
+                    dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
+                    current_index = pending["field_index"]
+                    next_index = current_index + 1
+                    
+                    if next_index < len(dim_config["fields"]):
+                        # Ask for next dimension
+                        next_field = dim_config["fields"][next_index]
+                        next_prompt = dim_config["prompts"][next_field]
+                        pending["step"] = next_field
+                        pending["field_index"] = next_index
                         
-                        # Move to next field
-                        machine_category = pending["machine_info"]["machine_category"]
-                        dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
-                        current_index = pending["field_index"]
-                        next_index = current_index + 1
-                        
-                        if next_index < len(dim_config["fields"]):
-                            # Ask for next dimension
-                            next_field = dim_config["fields"][next_index]
-                            next_prompt = dim_config["prompts"][next_field]
-                            pending["step"] = next_field
-                            pending["field_index"] = next_index
-                            
-                            response_message = f"""✅ *{current_field.replace('_', ' ').title()}:* {value} mm
+                        response_message = f"""✅ *{current_field.replace('_', ' ').title()}:* {value} mm
 
 {next_prompt}
 
 📷 _Or send nameplate photo to auto-fill remaining_
 Type *skip* to save machine now."""
-                        else:
-                            # All dimensions collected - save machine
-                            response_message = await save_pending_machine(sender, vendor)
-                            del pending_machines[sender]
-                        
-                        if whatsapp_service.is_configured():
-                            await whatsapp_service.send_text_message(sender, response_message)
-                        return {"status": "ok"}
                     else:
-                        # Not a valid number - prompt again
-                        current_field = pending["step"]
-                        machine_category = pending["machine_info"]["machine_category"]
-                        dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
-                        current_prompt = dim_config["prompts"][current_field]
-                        
-                        response_message = f"""⚠️ Please enter a valid number.
+                        # All dimensions collected - save machine
+                        response_message = await save_pending_machine(sender, vendor)
+                        del pending_machines[sender]
+                    
+                    if whatsapp_service.is_configured():
+                        await whatsapp_service.send_text_message(sender, response_message)
+                    return {"status": "ok"}
+                else:
+                    # Not a valid number - prompt again
+                    current_field = pending["step"]
+                    machine_category = pending["machine_info"]["machine_category"]
+                    dim_config = MACHINE_DIMENSION_FIELDS.get(machine_category, MACHINE_DIMENSION_FIELDS["default"])
+                    current_prompt = dim_config["prompts"][current_field]
+                    
+                    response_message = f"""⚠️ Please enter a valid number.
 
 {current_prompt}
 
 Example: _500_ or _500mm_
 
 Type *skip* to skip this field."""
-                        if whatsapp_service.is_configured():
-                            await whatsapp_service.send_text_message(sender, response_message)
-                        return {"status": "ok"}
-                        
-                except Exception as e:
-                    logger.error(f"Error processing dimension input: {str(e)}")
-        
-        # Process commands
-        response_message = await process_whatsapp_command(text, sender, vendor, user)
-        
-        logger.info(f"WhatsApp response generated: {response_message[:100] if response_message else 'None'}...")
-        
-        # Send text response
-        if response_message and whatsapp_service.is_configured():
-            send_result = await whatsapp_service.send_text_message(sender, response_message)
-            logger.info(f"WhatsApp send result: {send_result}")
-            
-            # Also send voice response for voice queries
-            if msg_type == "audio" and EMERGENT_LLM_KEY:
-                try:
-                    # Generate audio response (shorter version for WhatsApp)
-                    short_response = response_message[:500] if len(response_message) > 500 else response_message
-                    # Remove markdown formatting for TTS
-                    clean_response = short_response.replace("*", "").replace("_", "").replace("`", "")
+                    if whatsapp_service.is_configured():
+                        await whatsapp_service.send_text_message(sender, response_message)
+                    return {"status": "ok"}
                     
-                    tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
-                    audio_bytes = await tts.generate_speech(
-                        text=clean_response,
-                        voice="nova"
+            except Exception as e:
+                logger.error(f"Error processing dimension input: {str(e)}")
+    
+    # Process commands
+    response_message = await process_whatsapp_command(text, sender, vendor, user)
+    
+    logger.info(f"WhatsApp response generated: {response_message[:100] if response_message else 'None'}...")
+    
+    # Send text response
+    if response_message and whatsapp_service.is_configured():
+        send_result = await whatsapp_service.send_text_message(sender, response_message)
+        logger.info(f"WhatsApp send result: {send_result}")
+        
+        # Also send voice response for voice queries
+        if msg_type == "audio" and EMERGENT_LLM_KEY:
+            try:
+                # Generate audio response (shorter version for WhatsApp)
+                short_response = response_message[:500] if len(response_message) > 500 else response_message
+                # Remove markdown formatting for TTS
+                clean_response = short_response.replace("*", "").replace("_", "").replace("`", "")
+                
+                tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
+                audio_bytes = await tts.generate_speech(
+                    text=clean_response,
+                    voice="nova"
+                )
+                
+                if audio_bytes:
+                    # Send audio response via WhatsApp
+                    audio_result = await whatsapp_service.send_audio_message(
+                        to_number=sender,
+                        audio_data=audio_bytes,
+                        file_name="oemlinker_response.mp3"
                     )
                     
-                    if audio_bytes:
-                        # Send audio response via WhatsApp
-                        audio_result = await whatsapp_service.send_audio_message(
-                            to_number=sender,
-                            audio_data=audio_bytes,
-                            file_name="oemlinker_response.mp3"
-                        )
-                        
-                        if audio_result.get("success"):
-                            logger.info(f"Voice response sent to {sender[:6]}***")
-                        else:
-                            logger.warning(f"Voice response upload failed: {audio_result.get('error')}")
-                except Exception as e:
-                    logger.error(f"TTS generation error: {str(e)}")
-        
-        # Store conversation for context
-        if sender not in whatsapp_sessions:
-            whatsapp_sessions[sender] = {
-                "user_id": user.get("user_id") if user else None,
-                "vendor_id": vendor.get("vendor_id") if vendor else None,
-                "conversation": [],
-                "last_active": datetime.now(timezone.utc)
-            }
-        
+                    if audio_result.get("success"):
+                        logger.info(f"Voice response sent to {sender[:6]}***")
+                    else:
+                        logger.warning(f"Voice response upload failed: {audio_result.get('error')}")
+            except Exception as e:
+                logger.error(f"TTS generation error: {str(e)}")
+    
+    # Store conversation for context
+    if sender not in whatsapp_sessions:
+        whatsapp_sessions[sender] = {
+            "user_id": user.get("user_id") if user else None,
+            "vendor_id": vendor.get("vendor_id") if vendor else None,
+            "conversation": [],
+            "last_active": datetime.now(timezone.utc)
+        }
+    
+    whatsapp_sessions[sender]["conversation"].append({
+        "role": "user",
+        "content": text,
+        "type": msg_type,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+    whatsapp_sessions[sender]["last_active"] = datetime.now(timezone.utc)
+    
+    if response_message:
         whatsapp_sessions[sender]["conversation"].append({
-            "role": "user",
-            "content": text,
-            "type": msg_type,
+            "role": "assistant",
+            "content": response_message,
             "timestamp": datetime.now(timezone.utc).isoformat()
         })
-        whatsapp_sessions[sender]["last_active"] = datetime.now(timezone.utc)
-        
-        if response_message:
-            whatsapp_sessions[sender]["conversation"].append({
-                "role": "assistant",
-                "content": response_message,
-                "timestamp": datetime.now(timezone.utc).isoformat()
-            })
-        
-        return {"status": "ok"}
-        
-    except Exception as e:
-        logger.error(f"WhatsApp webhook error: {str(e)}")
-        return {"status": "error", "message": str(e)}
+    
+    return {"status": "ok"}
 
 
 async def process_voice_message(audio_url: str, sender: str, vendor: Optional[dict], user: Optional[dict]) -> Optional[str]:
