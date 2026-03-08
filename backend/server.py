@@ -11636,61 +11636,85 @@ async def process_whatsapp_command(
     intent = extract_intent(text_normalized)
     
     # ===== INDIAN LANGUAGE SUPPORT =====
-    # Hindi variants
-    hindi_rfq = ["आरएफक्यू", "काम", "नौकरी", "अवसर", "काम दिखाओ", "आर्डर दिखाओ", "कोटेशन", "रिक्वेस्ट"]
-    hindi_orders = ["मेरे ऑर्डर", "ऑर्डर", "आर्डर", "मेरा आर्डर", "ऑर्डर दिखाओ", "आर्डर दिखाओ"]
-    hindi_quotes = ["मेरे कोट्स", "कोट्स", "मेरा कोट", "बोली", "मेरी बोली", "कोटेशन"]
-    hindi_profile = ["प्रोफाइल", "मेरी प्रोफाइल", "अकाउंट", "खाता", "मेरा खाता"]
-    hindi_help = ["मदद", "सहायता", "हेल्प", "मेन्यू", "शुरू"]
+    # Hindi variants (including common voice transcription variations)
+    hindi_rfq = ["आरएफक्यू", "काम", "नौकरी", "अवसर", "काम दिखाओ", "आर्डर दिखाओ", "कोटेशन", "रिक्वेस्ट",
+                 "kaam", "naukri", "avsar", "kaam dikhao", "order dikhao"]
+    hindi_orders = ["मेरे ऑर्डर", "ऑर्डर", "आर्डर", "मेरा आर्डर", "ऑर्डर दिखाओ", "आर्डर दिखाओ",
+                    "mere order", "mera order", "order dikhao"]
+    hindi_quotes = ["मेरे कोट्स", "कोट्स", "मेरा कोट", "बोली", "मेरी बोली", "कोटेशन",
+                    "mere quotes", "mera quote", "meri boli", "quotation"]
+    hindi_profile = ["प्रोफाइल", "मेरी प्रोफाइल", "अकाउंट", "खाता", "मेरा खाता",
+                     "meri profile", "mera account", "mera khata"]
+    hindi_help = ["मदद", "सहायता", "हेल्प", "मेन्यू", "शुरू",
+                  "madad", "sahayata", "help karo", "menu dikhao", "shuru"]
+    hindi_machines = ["मशीन", "मेरी मशीन", "मशीनें", "मशीन दिखाओ", "उपकरण",
+                      "machine", "meri machine", "machines dikhao", "upkaran"]
+    hindi_availability = ["उपलब्धता", "बिजी", "फ्री", "खाली", "व्यस्त", "मशीन खाली", "मशीन बिजी",
+                          "availability", "busy", "free", "khali", "vyast", "machine khali", "machine busy",
+                          "available karo", "busy karo", "maintenance", "offline"]
     
-    # Tamil variants
-    tamil_rfq = ["வேலை", "வாய்ப்பு", "கோரிக்கை"]
-    tamil_orders = ["என் ஆர்டர்", "ஆர்டர்கள்", "ஆர்டர்"]
-    tamil_quotes = ["என் மேற்கோள்", "மேற்கோள்கள்"]
-    tamil_profile = ["சுயவிவரம்", "என் சுயவிவரம்"]
-    tamil_help = ["உதவி", "மெனு"]
+    # Tamil variants (including romanized versions)
+    tamil_rfq = ["வேலை", "வாய்ப்பு", "கோரிக்கை", "velai", "vaippu"]
+    tamil_orders = ["என் ஆர்டர்", "ஆர்டர்கள்", "ஆர்டர்", "en order", "orders"]
+    tamil_quotes = ["என் மேற்கோள்", "மேற்கோள்கள்", "en quote", "quotes"]
+    tamil_profile = ["சுயவிவரம்", "என் சுயவிவரம்", "profile", "en profile"]
+    tamil_help = ["உதவி", "மெனு", "உதவி செய்", "uthavi", "menu"]
+    tamil_machines = ["இயந்திரம்", "இயந்திரங்கள்", "என் இயந்திரங்கள்", "iyanthiram", "machines"]
+    tamil_availability = ["கிடைக்கும்", "பிசி", "ஃப்ரீ", "kidaikkum", "busy", "free"]
     
-    # Telugu variants  
-    telugu_rfq = ["పని", "అవకాశం", "అభ్యర్థన"]
-    telugu_orders = ["నా ఆర్డర్లు", "ఆర్డర్లు"]
-    telugu_quotes = ["నా కోట్స్", "కోట్స్"]
-    telugu_profile = ["ప్రొఫైల్", "నా ప్రొఫైల్"]
-    telugu_help = ["సహాయం", "మెను"]
+    # Telugu variants (including romanized versions)
+    telugu_rfq = ["పని", "అవకాశం", "అభ్యర్థన", "pani", "avakasam"]
+    telugu_orders = ["నా ఆర్డర్లు", "ఆర్డర్లు", "naa orders", "orders"]
+    telugu_quotes = ["నా కోట్స్", "కోట్స్", "naa quotes", "quotes"]
+    telugu_profile = ["ప్రొఫైల్", "నా ప్రొఫైల్", "naa profile", "profile"]
+    telugu_help = ["సహాయం", "మెను", "sahayam", "menu"]
+    telugu_machines = ["యంత్రాలు", "నా యంత్రాలు", "machines", "naa machines"]
+    telugu_availability = ["అందుబాటులో", "బిజీ", "ఫ్రీ", "andubatulo", "busy", "free"]
     
-    # Marathi variants
-    marathi_rfq = ["काम", "संधी", "विनंती"]
-    marathi_orders = ["माझे ऑर्डर", "ऑर्डर"]
-    marathi_quotes = ["माझे कोट्स", "कोट्स"]
-    marathi_profile = ["प्रोफाइल", "माझी प्रोफाइल"]
-    marathi_help = ["मदत", "मेनू"]
+    # Marathi variants (including romanized versions)
+    marathi_rfq = ["काम", "संधी", "विनंती", "kaam", "sandhi", "vinanti"]
+    marathi_orders = ["माझे ऑर्डर", "ऑर्डर", "majhe order", "order"]
+    marathi_quotes = ["माझे कोट्स", "कोट्स", "majhe quotes", "quotes"]
+    marathi_profile = ["प्रोफाइल", "माझी प्रोफाइल", "majhi profile", "profile"]
+    marathi_help = ["मदत", "मेनू", "madat", "menu"]
+    marathi_machines = ["मशीन", "माझ्या मशीन्स", "मशीन्स", "majhya machines", "machines"]
+    marathi_availability = ["उपलब्ध", "बिझी", "फ्री", "uplabdha", "busy", "free"]
     
-    # Bengali variants
-    bengali_rfq = ["কাজ", "সুযোগ", "অনুরোধ"]
-    bengali_orders = ["আমার অর্ডার", "অর্ডার"]
-    bengali_quotes = ["আমার কোট", "কোট"]
-    bengali_profile = ["প্রোফাইল", "আমার প্রোফাইল"]
-    bengali_help = ["সাহায্য", "মেনু"]
+    # Bengali variants (including romanized versions)
+    bengali_rfq = ["কাজ", "সুযোগ", "অনুরোধ", "kaaj", "sujog", "anurodh"]
+    bengali_orders = ["আমার অর্ডার", "অর্ডার", "amar order", "order"]
+    bengali_quotes = ["আমার কোট", "কোট", "amar quote", "quote"]
+    bengali_profile = ["প্রোফাইল", "আমার প্রোফাইল", "amar profile", "profile"]
+    bengali_help = ["সাহায্য", "মেনু", "sahajyo", "menu"]
+    bengali_machines = ["যন্ত্র", "আমার যন্ত্র", "jantra", "amar machines", "machines"]
+    bengali_availability = ["উপলব্ধ", "বিজি", "ফ্রি", "upolabdho", "busy", "free"]
     
-    # Gujarati variants
-    gujarati_rfq = ["કામ", "તક", "વિનંતી"]
-    gujarati_orders = ["મારા ઓર્ડર", "ઓર્ડર"]
-    gujarati_quotes = ["મારા કોટ્સ", "કોટ્સ"]
-    gujarati_profile = ["પ્રોફાઇલ", "મારી પ્રોફાઇલ"]
-    gujarati_help = ["મદદ", "મેનુ"]
+    # Gujarati variants (including romanized versions)
+    gujarati_rfq = ["કામ", "તક", "વિનંતી", "kaam", "tak", "vinanti"]
+    gujarati_orders = ["મારા ઓર્ડર", "ઓર્ડર", "mara order", "order"]
+    gujarati_quotes = ["મારા કોટ્સ", "કોટ્સ", "mara quotes", "quotes"]
+    gujarati_profile = ["પ્રોફાઇલ", "મારી પ્રોફાઇલ", "mari profile", "profile"]
+    gujarati_help = ["મદદ", "મેનુ", "madad", "menu"]
+    gujarati_machines = ["મશીન", "મારી મશીનો", "machine", "mari machines"]
+    gujarati_availability = ["ઉપલબ્ધ", "બિઝી", "ફ્રી", "uplabdh", "busy", "free"]
     
-    # Kannada variants
-    kannada_rfq = ["ಕೆಲಸ", "ಅವಕಾಶ"]
-    kannada_orders = ["ನನ್ನ ಆರ್ಡರ್", "ಆರ್ಡರ್"]
-    kannada_quotes = ["ನನ್ನ ಕೋಟ್ಸ್", "ಕೋಟ್ಸ್"]
-    kannada_profile = ["ಪ್ರೊಫೈಲ್"]
-    kannada_help = ["ಸಹಾಯ", "ಮೆನು"]
+    # Kannada variants (including romanized versions)
+    kannada_rfq = ["ಕೆಲಸ", "ಅವಕಾಶ", "kelasa", "avakasha"]
+    kannada_orders = ["ನನ್ನ ಆರ್ಡರ್", "ಆರ್ಡರ್", "nanna order", "order"]
+    kannada_quotes = ["ನನ್ನ ಕೋಟ್ಸ್", "ಕೋಟ್ಸ್", "nanna quotes", "quotes"]
+    kannada_profile = ["ಪ್ರೊಫೈಲ್", "nanna profile", "profile"]
+    kannada_help = ["ಸಹಾಯ", "ಮೆನು", "sahaya", "menu"]
+    kannada_machines = ["ಯಂತ್ರ", "ನನ್ನ ಯಂತ್ರಗಳು", "yantra", "nanna machines"]
+    kannada_availability = ["ಲಭ್ಯ", "ಬಿಜಿ", "ಫ್ರೀ", "labhya", "busy", "free"]
     
-    # Punjabi variants
-    punjabi_rfq = ["ਕੰਮ", "ਮੌਕਾ"]
-    punjabi_orders = ["ਮੇਰੇ ਆਰਡਰ", "ਆਰਡਰ"]
-    punjabi_quotes = ["ਮੇਰੇ ਕੋਟਸ", "ਕੋਟਸ"]
-    punjabi_profile = ["ਪ੍ਰੋਫਾਈਲ"]
-    punjabi_help = ["ਮਦਦ", "ਮੀਨੂ"]
+    # Punjabi variants (including romanized versions)
+    punjabi_rfq = ["ਕੰਮ", "ਮੌਕਾ", "kamm", "mauka"]
+    punjabi_orders = ["ਮੇਰੇ ਆਰਡਰ", "ਆਰਡਰ", "mere order", "order"]
+    punjabi_quotes = ["ਮੇਰੇ ਕੋਟਸ", "ਕੋਟਸ", "mere quotes", "quotes"]
+    punjabi_profile = ["ਪ੍ਰੋਫਾਈਲ", "meri profile", "profile"]
+    punjabi_help = ["ਮਦਦ", "ਮੀਨੂ", "madad", "menu"]
+    punjabi_machines = ["ਮਸ਼ੀਨ", "ਮੇਰੀਆਂ ਮਸ਼ੀਨਾਂ", "machine", "meri machines"]
+    punjabi_availability = ["ਉਪਲਬਧ", "ਬਿਜ਼ੀ", "ਫ੍ਰੀ", "uplabdh", "busy", "free"]
     
     # Help command - expanded with Indian languages
     help_variants = ["help", "hi", "hello", "menu", "start", "hey", "helo", "assist", "assistance",
@@ -11712,6 +11736,7 @@ async def process_whatsapp_command(
 *my quotes* - View your submitted quotes
 *my orders* - View your active orders
 *machines* - View your machines
+*availability* - Set machine availability (busy/free)
 *profile* - View your vendor profile
 *help* - Show this menu{help_regional}
 
@@ -11951,9 +11976,118 @@ Send a photo of your *GST Certificate* to register instantly!{send_gst_regional}
 🔗 *Manage Machines:* {BASE_URL}/vendor/machines"""
         return response
     
+    # Machine Availability command - set/view machine availability
+    # MUST be checked BEFORE machines command to handle "machine 1 busy" pattern
+    availability_variants = ["availability", "set status", "machine status", "set availability",
+                             "all busy", "all free", "all available", "sab busy", "sab free",
+                             *hindi_availability, *tamil_availability, *telugu_availability, 
+                             *marathi_availability, *bengali_availability, *gujarati_availability,
+                             *kannada_availability, *punjabi_availability]
+    
+    # Check for availability set commands like "machine 1 busy" or "1 busy"
+    availability_set_pattern = re.match(r'(?:machine\s*)?(\d+)\s*(busy|available|free|maintenance|offline|engaged)', text_normalized)
+    all_status_pattern = re.match(r'(?:all|sab|sabhi|सभी|सब)\s*(busy|available|free|maintenance|offline)', text_normalized)
+    
+    if availability_set_pattern or all_status_pattern or matches_command(text_normalized, availability_variants):
+        machines = await db.machines.find(
+            {"vendor_id": vendor.get("vendor_id"), "is_active": True},
+            {"_id": 0, "machine_id": 1, "name": 1, "machine_type": 1, "availability_status": 1}
+        ).sort("created_at", -1).limit(20).to_list(length=20)
+        
+        if not machines:
+            return "⚠️ No machines found. Add machines first by sending a machine photo!"
+        
+        # Handle "all busy" / "all free" commands
+        if all_status_pattern:
+            new_status = all_status_pattern.group(1)
+            if new_status == "free":
+                new_status = "available"
+            elif new_status == "busy":
+                new_status = "engaged"
+            
+            # Update all machines
+            result = await db.machines.update_many(
+                {"vendor_id": vendor.get("vendor_id"), "is_active": True},
+                {"$set": {"availability_status": new_status}}
+            )
+            
+            status_emoji = {"available": "🟢", "engaged": "🔵", "maintenance": "🟡", "offline": "⚫"}.get(new_status, "🟢")
+            status_labels = {"available": "Available", "engaged": "Busy/Engaged", "maintenance": "Maintenance", "offline": "Offline"}
+            
+            return f"""✅ *All Machines Updated!*
+
+{status_emoji} Status: *{status_labels.get(new_status, new_status)}*
+📊 Machines updated: {result.modified_count}
+
+Type *machines* to view your machines."""
+        
+        # Handle individual machine status update
+        if availability_set_pattern:
+            machine_num = int(availability_set_pattern.group(1)) - 1
+            new_status = availability_set_pattern.group(2)
+            
+            if new_status == "free":
+                new_status = "available"
+            elif new_status == "busy":
+                new_status = "engaged"
+            
+            if 0 <= machine_num < len(machines):
+                machine = machines[machine_num]
+                await db.machines.update_one(
+                    {"machine_id": machine["machine_id"]},
+                    {"$set": {"availability_status": new_status}}
+                )
+                
+                status_emoji = {"available": "🟢", "engaged": "🔵", "maintenance": "🟡", "offline": "⚫"}.get(new_status, "🟢")
+                
+                return f"""✅ *Status Updated!*
+
+{status_emoji} *{machine['name']}*
+   New Status: *{new_status.title()}*
+
+Type *availability* to see all machines."""
+            else:
+                return f"⚠️ Invalid machine number. You have {len(machines)} machines (1-{len(machines)})."
+        
+        # Show availability menu
+        response = f"""🔧 *Machine Availability*
+
+"""
+        for i, m in enumerate(machines, 1):
+            status_emoji = {"available": "🟢", "engaged": "🔵", "maintenance": "🟡", "offline": "⚫"}.get(m.get("availability_status", "available"), "🟢")
+            response += f"{i}. {status_emoji} *{m.get('name', 'Unknown')}* - {m.get('availability_status', 'available').title()}\n"
+        
+        # Get bilingual instructions
+        lang_info = get_vendor_language(vendor)
+        lang_code = lang_info.get("code", "hi")
+        
+        bilingual_instructions = {
+            "hi": "_उदाहरण: '1 busy' या 'all free'_",
+            "mr": "_उदाहरण: '1 busy' किंवा 'all free'_",
+            "gu": "_ઉદાહરણ: '1 busy' અથવા 'all free'_",
+            "ta": "_எடுத்துக்காட்டு: '1 busy' அல்லது 'all free'_",
+            "te": "_ఉదాహరణ: '1 busy' లేదా 'all free'_",
+            "kn": "_ಉದಾಹರಣೆ: '1 busy' ಅಥವಾ 'all free'_",
+            "bn": "_উদাহরণ: '1 busy' বা 'all free'_",
+            "pa": "_ਉਦਾਹਰਨ: '1 busy' ਜਾਂ 'all free'_"
+        }
+        
+        response += f"""
+━━━━━━━━━━━━━━━━━━━━━━
+*Set Status:*
+Reply: `<number> <status>`
+Example: `1 busy` or `all free`
+{bilingual_instructions.get(lang_code, "")}
+
+*Statuses:* available, busy, maintenance, offline"""
+        
+        return response
+
     # Machines command - list vendor's machines
     machines_variants = ["machines", "my machines", "machine", "equipment", "show machines", "list machines",
-                         "मशीन", "मेरी मशीन", "मशीनें", "उपकरण", "যন্ত্র", "இயந்திரங்கள்"]
+                         "मशीन", "मेरी मशीन", "मशीनें", "उपकरण", "যন্ত্র", "இயந்திரங்கள்",
+                         *hindi_machines, *tamil_machines, *telugu_machines, *marathi_machines,
+                         *bengali_machines, *gujarati_machines, *kannada_machines, *punjabi_machines]
     if matches_command(text_normalized, machines_variants):
         machines = await db.machines.find(
             {"vendor_id": vendor.get("vendor_id"), "is_active": True},
