@@ -10151,7 +10151,7 @@ async def process_machine_photo_upload(image_url: str, sender: str, vendor: dict
 
 Could not download the image. Please try again.
 
-You can also add machines manually at https://oemlinker.com/machines"""
+You can also add machines manually at https://oemlinker.com/vendor/machines"""
             
             image_data = response.content
         
@@ -10164,7 +10164,7 @@ You can also add machines manually at https://oemlinker.com/machines"""
             logger.error("EMERGENT_LLM_KEY not configured for machine identification")
             return """⚠️ *Service Unavailable*
 
-AI service is not configured. Please add machines manually at https://oemlinker.com/machines"""
+AI service is not configured. Please add machines manually at https://oemlinker.com/vendor/machines"""
         
         # Get machine categories for AI context
         machine_categories_list = []
@@ -10248,7 +10248,7 @@ Please try:
 • Include the nameplate/brand in the photo
 • Add a caption describing the machine
 
-Or add manually at https://oemlinker.com/machines"""
+Or add manually at https://oemlinker.com/vendor/machines"""
         
         # Check if it's an error response
         if "error" in machine_info:
@@ -10264,7 +10264,7 @@ Please upload a photo of your:
 🔧 Lathes, mills, grinders
 ⚙️ Manufacturing equipment
 
-Or add manually at https://oemlinker.com/machines"""
+Or add manually at https://oemlinker.com/vendor/machines"""
         
         # Extract machine details
         machine_name = machine_info.get("name", "Unknown Machine")
@@ -10369,7 +10369,7 @@ Type *skip* to skip dimensions and save machine as-is."""
 
 An error occurred while processing your machine photo.
 
-Please try again or add machines manually at https://oemlinker.com/machines
+Please try again or add machines manually at https://oemlinker.com/vendor/machines
 
 Contact support@oemlinker.com for assistance."""
 
@@ -10455,7 +10455,7 @@ You now have *{machine_count} machines* in your profile.
 
 ━━━━━━━━━━━━━━━━━━━━━━
 📷 Send more machine photos to add them
-✏️ Edit details at https://oemlinker.com/machines
+✏️ Edit details at https://oemlinker.com/vendor/machines
 
 Type *machines* to see all your machines"""
         
