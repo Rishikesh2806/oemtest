@@ -9307,6 +9307,7 @@ async def _process_whatsapp_message(sender: str, msg_type: str, parsed: dict):
     
     # Check for pending registration confirmation
     if sender in pending_registrations:
+        logger.info(f"Sender {sender[:6]}*** has pending registration")
         pending = pending_registrations[sender]
         
         # Check if expired
@@ -9355,12 +9356,33 @@ This expires in {PENDING_REGISTRATION_TTL_MINUTES} minutes."""
                 return {"status": "ok"}
     
     # Check for pending machine dimension input
+    # Normalize sender to handle phone number format differences
+    sender_normalized = sender.replace("+", "").replace(" ", "").replace("-", "")
+    sender_last10 = sender_normalized[-10:] if len(sender_normalized) >= 10 else sender_normalized
+    
+    # Check both exact match and normalized match
+    pending_sender = None
     if sender in pending_machines:
-        pending = pending_machines[sender]
+        pending_sender = sender
+    else:
+        # Try to find by last 10 digits
+        for key in pending_machines.keys():
+            key_normalized = key.replace("+", "").replace(" ", "").replace("-", "")
+            key_last10 = key_normalized[-10:] if len(key_normalized) >= 10 else key_normalized
+            if key_last10 == sender_last10:
+                pending_sender = key
+                logger.info(f"Found pending_machines by normalized match: '{key}' matches '{sender}'")
+                break
+    
+    logger.info(f"Checking pending_machines for sender: '{sender}', found: {pending_sender is not None}")
+    
+    if pending_sender:
+        logger.info(f"Sender {sender[:6]}*** has pending machine dimension input")
+        pending = pending_machines[pending_sender]
         
         # Check if expired
         if datetime.now(timezone.utc) > pending["expires_at"]:
-            del pending_machines[sender]
+            del pending_machines[pending_sender]
             logger.info(f"Pending machine flow expired for {sender[:6]}***")
             # Continue to normal command processing after expiry
         else:
@@ -9368,15 +9390,15 @@ This expires in {PENDING_REGISTRATION_TTL_MINUTES} minutes."""
             
             # Handle skip - save machine without dimensions
             if text_clean in ["skip", "done", "save", "finish"]:
-                response_message = await save_pending_machine(sender, vendor)
-                del pending_machines[sender]
+                response_message = await save_pending_machine(pending_sender, vendor)
+                del pending_machines[pending_sender]
                 if response_message and whatsapp_service.is_configured():
                     await whatsapp_service.send_text_message(sender, response_message)
                 return {"status": "ok"}
             
             # Handle cancel
             if text_clean in ["cancel", "exit", "quit"]:
-                del pending_machines[sender]
+                del pending_machines[pending_sender]
                 response_message = """❌ *Machine Addition Cancelled*
 
 Send another machine photo to try again."""
@@ -9419,8 +9441,8 @@ Send another machine photo to try again."""
 Type *skip* to save machine now."""
                     else:
                         # All dimensions collected - save machine
-                        response_message = await save_pending_machine(sender, vendor)
-                        del pending_machines[sender]
+                        response_message = await save_pending_machine(pending_sender, vendor)
+                        del pending_machines[pending_sender]
                     
                     if whatsapp_service.is_configured():
                         await whatsapp_service.send_text_message(sender, response_message)
@@ -10298,6 +10320,7 @@ Or add manually at https://oemlinker.com/machines"""
         first_prompt = dim_config["prompts"][first_field]
         
         # Store pending machine for dimension collection
+        logger.info(f"Setting pending_machines for sender: '{sender}'")
         pending_machines[sender] = {
             "machine_info": {
                 "name": machine_name if machine_name != "Unknown Machine" else f"{brand} {model}".strip(),
