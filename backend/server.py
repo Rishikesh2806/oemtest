@@ -11753,8 +11753,7 @@ async def process_whatsapp_command(
 *details <rfq_id>* - Get details of a specific RFQ
 *my quotes* - View your submitted quotes
 *my orders* - View your active orders
-*machines* - View your machines
-*availability* - Set machine availability (busy/free)
+*machines* - View machines & set availability
 *profile* - View your vendor profile
 *help* - Show this menu{help_regional}
 
@@ -11994,19 +11993,12 @@ Send a photo of your *GST Certificate* to register instantly!{send_gst_regional}
 🔗 *Manage Machines:* {BASE_URL}/vendor/machines"""
         return response
     
-    # Machine Availability command - set/view machine availability
+    # Machine Availability status update commands (handles "1 busy", "machine 1 busy", "all free" etc.)
     # MUST be checked BEFORE machines command to handle "machine 1 busy" pattern
-    availability_variants = ["availability", "set status", "machine status", "set availability",
-                             "all busy", "all free", "all available", "sab busy", "sab free",
-                             *hindi_availability, *tamil_availability, *telugu_availability, 
-                             *marathi_availability, *bengali_availability, *gujarati_availability,
-                             *kannada_availability, *punjabi_availability]
-    
-    # Check for availability set commands like "machine 1 busy" or "1 busy"
     availability_set_pattern = re.match(r'(?:machine\s*)?(\d+)\s*(busy|available|free|maintenance|offline|engaged)', text_normalized)
     all_status_pattern = re.match(r'(?:all|sab|sabhi|सभी|सब)\s*(busy|available|free|maintenance|offline)', text_normalized)
     
-    if availability_set_pattern or all_status_pattern or matches_command(text_normalized, availability_variants):
+    if availability_set_pattern or all_status_pattern:
         machines = await db.machines.find(
             {"vendor_id": vendor.get("vendor_id"), "is_active": True},
             {"_id": 0, "machine_id": 1, "name": 1, "machine_type": 1, "availability_status": 1}
@@ -12063,45 +12055,11 @@ Type *machines* to view your machines."""
 {status_emoji} *{machine['name']}*
    New Status: *{new_status.title()}*
 
-Type *availability* to see all machines."""
+Type *machines* to see all machines."""
             else:
                 return f"⚠️ Invalid machine number. You have {len(machines)} machines (1-{len(machines)})."
-        
-        # Show availability menu
-        response = f"""🔧 *Machine Availability*
 
-"""
-        for i, m in enumerate(machines, 1):
-            status_emoji = {"available": "🟢", "engaged": "🔵", "maintenance": "🟡", "offline": "⚫"}.get(m.get("availability_status", "available"), "🟢")
-            response += f"{i}. {status_emoji} *{m.get('name', 'Unknown')}* - {m.get('availability_status', 'available').title()}\n"
-        
-        # Get bilingual instructions
-        lang_info = get_vendor_language(vendor)
-        lang_code = lang_info.get("code", "hi")
-        
-        bilingual_instructions = {
-            "hi": "_उदाहरण: '1 busy' या 'all free'_",
-            "mr": "_उदाहरण: '1 busy' किंवा 'all free'_",
-            "gu": "_ઉદાહરણ: '1 busy' અથવા 'all free'_",
-            "ta": "_எடுத்துக்காட்டு: '1 busy' அல்லது 'all free'_",
-            "te": "_ఉదాహరణ: '1 busy' లేదా 'all free'_",
-            "kn": "_ಉದಾಹರಣೆ: '1 busy' ಅಥವಾ 'all free'_",
-            "bn": "_উদাহরণ: '1 busy' বা 'all free'_",
-            "pa": "_ਉਦਾਹਰਨ: '1 busy' ਜਾਂ 'all free'_"
-        }
-        
-        response += f"""
-━━━━━━━━━━━━━━━━━━━━━━
-*Set Status:*
-Reply: `<number> <status>`
-Example: `1 busy` or `all free`
-{bilingual_instructions.get(lang_code, "")}
-
-*Statuses:* available, busy, maintenance, offline"""
-        
-        return response
-
-    # Machines command - list vendor's machines
+    # Machines command - list vendor's machines with availability options
     machines_variants = ["machines", "my machines", "machine", "equipment", "show machines", "list machines",
                          "मशीन", "मेरी मशीन", "मशीनें", "उपकरण", "যন্ত্র", "இயந்திரங்கள்",
                          *hindi_machines, *tamil_machines, *telugu_machines, *marathi_machines,
@@ -12110,7 +12068,7 @@ Example: `1 busy` or `all free`
         machines = await db.machines.find(
             {"vendor_id": vendor.get("vendor_id"), "is_active": True},
             {"_id": 0, "machine_id": 1, "name": 1, "machine_type": 1, "machine_category": 1, "brand": 1, "model": 1, "images": 1, "availability_status": 1}
-        ).sort("created_at", -1).limit(10).to_list(length=10)
+        ).sort("created_at", -1).limit(15).to_list(length=15)
         
         if not machines:
             no_machines_regional = get_bilingual_message("no_machines", vendor)
@@ -12128,17 +12086,41 @@ Your machines help us match you with the right opportunities."""
         machine_count = len(machines)
         your_machines_regional = get_bilingual_message("your_machines", vendor)
         
+        # Get bilingual instructions for availability
+        lang_info = get_vendor_language(vendor)
+        lang_code = lang_info.get("code", "hi")
+        
+        bilingual_status = {
+            "hi": "_स्टेटस बदलें: '1 busy' या 'all free'_",
+            "mr": "_स्टेटस बदला: '1 busy' किंवा 'all free'_",
+            "gu": "_સ્ટેટસ બદલો: '1 busy' અથવા 'all free'_",
+            "ta": "_நிலையை மாற்றவும்: '1 busy' அல்லது 'all free'_",
+            "te": "_స్టేటస్ మార్చండి: '1 busy' లేదా 'all free'_",
+            "kn": "_ಸ್ಥಿತಿ ಬದಲಾಯಿಸಿ: '1 busy' ಅಥವಾ 'all free'_",
+            "bn": "_স্ট্যাটাস পরিবর্তন: '1 busy' বা 'all free'_",
+            "pa": "_ਸਟੇਟਸ ਬਦਲੋ: '1 busy' ਜਾਂ 'all free'_"
+        }
+        
         response = f"🔧 *Your Machines ({machine_count}):*{your_machines_regional}\n\n"
         
-        for m in machines:
+        for i, m in enumerate(machines, 1):
             status_emoji = {"available": "🟢", "engaged": "🔵", "maintenance": "🟡", "offline": "⚫"}.get(m.get("availability_status", "available"), "🟢")
+            status_text = m.get("availability_status", "available").title()
             has_image = "📷" if m.get("images") else ""
             
-            response += f"{status_emoji} *{m.get('name', 'Unknown')}*\n"
-            response += f"   {m.get('machine_type', 'N/A')} | {m.get('brand', '')} {m.get('model', '')} {has_image}\n\n"
+            response += f"*{i}.* {status_emoji} *{m.get('name', 'Unknown')}* ({status_text})\n"
+            response += f"    {m.get('machine_type', 'N/A')} | {m.get('brand', '')} {m.get('model', '')} {has_image}\n\n"
         
-        response += f"📷 _Send machine photos to add more!_\n"
-        response += f"🔗 _Manage:_ {BASE_URL}/vendor/machines"
+        response += f"""━━━━━━━━━━━━━━━━━━━━━━
+📊 *Set Availability:*
+Reply: `1 busy` or `2 available` or `all free`
+{bilingual_status.get(lang_code, "")}
+
+*Statuses:* available, busy, maintenance, offline
+
+━━━━━━━━━━━━━━━━━━━━━━
+📷 _Send machine photo to add new_
+🔗 *Manage:* {BASE_URL}/vendor/machines"""
         return response
     
     # Natural language query using AI
