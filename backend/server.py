@@ -9315,6 +9315,205 @@ WHATSAPP_MESSAGES_BILINGUAL = {
     }
 }
 
+# Email reminder messages in regional languages
+EMAIL_REMINDER_MESSAGES = {
+    "hi": {
+        "reminder_title": "ईमेल आईडी अपडेट करें",
+        "reminder_msg": "कृपया अपना ईमेल आईडी जोड़ें",
+        "why_needed": "RFQ मैच और कोटेशन अपडेट के लिए जरूरी",
+        "how_to_add": "ईमेल भेजने के लिए 'email' टाइप करें"
+    },
+    "mr": {
+        "reminder_title": "ईमेल आयडी अपडेट करा",
+        "reminder_msg": "कृपया तुमचा ईमेल आयडी जोडा",
+        "why_needed": "RFQ मॅच आणि कोटेशन अपडेटसाठी आवश्यक",
+        "how_to_add": "ईमेल पाठवण्यासाठी 'email' टाइप करा"
+    },
+    "gu": {
+        "reminder_title": "ઈમેલ આઈડી અપડેટ કરો",
+        "reminder_msg": "કૃપા કરીને તમારો ઈમેલ આઈડી ઉમેરો",
+        "why_needed": "RFQ મેચ અને કોટેશન અપડેટ માટે જરૂરી",
+        "how_to_add": "ઈમેલ મોકલવા માટે 'email' ટાઈપ કરો"
+    },
+    "ta": {
+        "reminder_title": "மின்னஞ்சல் ஐடி புதுப்பிக்கவும்",
+        "reminder_msg": "தயவுசெய்து உங்கள் மின்னஞ்சல் ஐடி சேர்க்கவும்",
+        "why_needed": "RFQ பொருத்தம் மற்றும் மேற்கோள் புதுப்பிப்புகளுக்கு தேவை",
+        "how_to_add": "மின்னஞ்சல் அனுப்ப 'email' தட்டச்சு செய்யவும்"
+    },
+    "te": {
+        "reminder_title": "ఇమెయిల్ ఐడి అప్‌డేట్ చేయండి",
+        "reminder_msg": "దయచేసి మీ ఇమెయిల్ ఐడి జోడించండి",
+        "why_needed": "RFQ మ్యాచ్ మరియు కొటేషన్ అప్‌డేట్‌లకు అవసరం",
+        "how_to_add": "ఇమెయిల్ పంపడానికి 'email' టైప్ చేయండి"
+    },
+    "kn": {
+        "reminder_title": "ಇಮೇಲ್ ಐಡಿ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ",
+        "reminder_msg": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಇಮೇಲ್ ಐಡಿ ಸೇರಿಸಿ",
+        "why_needed": "RFQ ಹೊಂದಾಣಿಕೆ ಮತ್ತು ಕೋಟೇಶನ್ ಅಪ್‌ಡೇಟ್‌ಗಳಿಗೆ ಅಗತ್ಯ",
+        "how_to_add": "ಇಮೇಲ್ ಕಳುಹಿಸಲು 'email' ಟೈಪ್ ಮಾಡಿ"
+    },
+    "bn": {
+        "reminder_title": "ইমেল আইডি আপডেট করুন",
+        "reminder_msg": "অনুগ্রহ করে আপনার ইমেল আইডি যোগ করুন",
+        "why_needed": "RFQ ম্যাচ এবং কোটেশন আপডেটের জন্য প্রয়োজনীয়",
+        "how_to_add": "ইমেল পাঠাতে 'email' টাইপ করুন"
+    },
+    "pa": {
+        "reminder_title": "ਈਮੇਲ ਆਈਡੀ ਅੱਪਡੇਟ ਕਰੋ",
+        "reminder_msg": "ਕਿਰਪਾ ਕਰਕੇ ਆਪਣੀ ਈਮੇਲ ਆਈਡੀ ਜੋੜੋ",
+        "why_needed": "RFQ ਮੈਚ ਅਤੇ ਕੋਟੇਸ਼ਨ ਅੱਪਡੇਟਸ ਲਈ ਜ਼ਰੂਰੀ",
+        "how_to_add": "ਈਮੇਲ ਭੇਜਣ ਲਈ 'email' ਟਾਈਪ ਕਰੋ"
+    }
+}
+
+# Email reminder interval in hours (send reminder every 24 hours)
+EMAIL_REMINDER_INTERVAL_HOURS = 24
+
+# Store pending email inputs
+pending_email_inputs = {}  # {phone_number: {"expires_at": datetime}}
+
+async def check_and_send_email_reminder(vendor: dict, user: dict) -> Optional[str]:
+    """Check if vendor needs email reminder and return reminder message if needed"""
+    if not vendor or not user:
+        return None
+    
+    # Check if user already has a valid email (not phone number)
+    user_email = user.get("email", "")
+    # Phone-based logins use phone number as email field
+    if user.get("phone_login") or (user_email and user_email.isdigit() and len(user_email) == 10):
+        # User registered via WhatsApp and doesn't have real email
+        pass
+    elif user_email and "@" in user_email:
+        # User has valid email, no reminder needed
+        return None
+    
+    # Also check vendor contact_email
+    if vendor.get("contact_email") and "@" in vendor.get("contact_email", ""):
+        return None
+    
+    # Check when last reminder was sent
+    last_reminder = vendor.get("email_reminder_sent_at")
+    if last_reminder:
+        try:
+            if isinstance(last_reminder, str):
+                last_reminder_dt = datetime.fromisoformat(last_reminder.replace('Z', '+00:00'))
+            else:
+                last_reminder_dt = last_reminder
+            
+            hours_since_reminder = (datetime.now(timezone.utc) - last_reminder_dt).total_seconds() / 3600
+            if hours_since_reminder < EMAIL_REMINDER_INTERVAL_HOURS:
+                return None  # Not yet time for another reminder
+        except:
+            pass  # If parsing fails, send reminder
+    
+    # Update last reminder time
+    await db.vendors.update_one(
+        {"vendor_id": vendor["vendor_id"]},
+        {"$set": {"email_reminder_sent_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    # Get bilingual reminder message
+    lang_info = get_vendor_language(vendor)
+    lang_code = lang_info.get("code", "hi")
+    messages = EMAIL_REMINDER_MESSAGES.get(lang_code, EMAIL_REMINDER_MESSAGES.get("hi", {}))
+    
+    reminder = f"""
+📧 *{messages.get('reminder_title', 'Update Email ID')}*
+_{messages.get('reminder_msg', 'Please add your email ID')}_
+
+⚠️ Email is required for:
+• Receiving RFQ match notifications
+• Getting quotation updates
+• Important platform alerts
+
+_{messages.get('why_needed', 'Required for RFQ match and quotation updates')}_
+
+👉 Type *email* to add your email ID
+_{messages.get('how_to_add', "Type 'email' to send your email")}_
+"""
+    return reminder.strip()
+
+async def process_email_input(sender: str, text: str, vendor: dict, user: dict) -> Optional[str]:
+    """Process email input from vendor"""
+    import re
+    
+    # Check if we're expecting email input
+    if sender not in pending_email_inputs:
+        return None
+    
+    pending = pending_email_inputs[sender]
+    
+    # Check if expired
+    if datetime.now(timezone.utc) > pending["expires_at"]:
+        del pending_email_inputs[sender]
+        return None
+    
+    # Validate email format
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    email = text.strip().lower()
+    
+    if not re.match(email_pattern, email):
+        lang_info = get_vendor_language(vendor)
+        return f"""❌ *Invalid Email Format*
+
+Please enter a valid email address.
+Example: yourname@company.com
+
+_{get_bilingual_message("try_again", vendor)}_"""
+    
+    # Check if email already exists for another user
+    existing = await db.users.find_one({"email": email, "user_id": {"$ne": user["user_id"]}})
+    if existing:
+        return f"""❌ *Email Already Registered*
+
+This email is already associated with another account.
+Please use a different email address."""
+    
+    # Update user email
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"email": email, "contact_email": email}}
+    )
+    
+    # Update vendor contact email
+    await db.vendors.update_one(
+        {"vendor_id": vendor["vendor_id"]},
+        {"$set": {"contact_email": email, "email_updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    # Remove from pending
+    del pending_email_inputs[sender]
+    
+    # Get bilingual success message
+    lang_info = get_vendor_language(vendor)
+    lang_code = lang_info.get("code", "hi")
+    
+    success_messages = {
+        "hi": "ईमेल सफलतापूर्वक अपडेट हुआ!",
+        "mr": "ईमेल यशस्वीरित्या अपडेट झाले!",
+        "gu": "ઈમેલ સફળતાપૂર્વક અપડેટ થયો!",
+        "ta": "மின்னஞ்சல் வெற்றிகரமாக புதுப்பிக்கப்பட்டது!",
+        "te": "ఇమెయిల్ విజయవంతంగా అప్‌డేట్ చేయబడింది!",
+        "kn": "ಇಮೇಲ್ ಯಶಸ್ವಿಯಾಗಿ ಅಪ್‌ಡೇಟ್ ಆಯಿತು!",
+        "bn": "ইমেল সফলভাবে আপডেট হয়েছে!",
+        "pa": "ਈਮੇਲ ਸਫਲਤਾਪੂਰਵਕ ਅੱਪਡੇਟ ਹੋਈ!"
+    }
+    
+    regional_success = success_messages.get(lang_code, success_messages["hi"])
+    
+    return f"""✅ *Email Updated Successfully!*
+_{regional_success}_
+
+📧 Your email: *{email}*
+
+You will now receive:
+• RFQ match notifications
+• Quotation updates
+• Platform alerts
+
+Thank you for updating your profile! 🎉"""
+
 def get_bilingual_message(key: str, vendor: dict, fallback: str = "") -> str:
     """Get bilingual message (English line will be added by caller, this returns regional translation)"""
     if not vendor:
@@ -10287,13 +10486,35 @@ Type *cancel* to abort"""
                     await whatsapp_service.send_text_message(sender, response_message)
                 return {"status": "ok"}
     
+    # Check for pending email input
+    if sender in pending_email_inputs:
+        pending_email = pending_email_inputs[sender]
+        if datetime.now(timezone.utc) > pending_email["expires_at"]:
+            del pending_email_inputs[sender]
+        else:
+            # Process email input
+            email_response = await process_email_input(sender, text, vendor, user)
+            if email_response:
+                if whatsapp_service.is_configured():
+                    await whatsapp_service.send_text_message(sender, email_response)
+                return {"status": "ok"}
+    
     # Process commands
     response_message = await process_whatsapp_command(text, sender, vendor, user)
     
     logger.info(f"WhatsApp response generated: {response_message[:100] if response_message else 'None'}...")
     
+    # Check if email reminder should be sent (append to response if vendor has no email)
+    email_reminder = None
+    if vendor and user and response_message:
+        email_reminder = await check_and_send_email_reminder(vendor, user)
+    
     # Send text response
     if response_message and whatsapp_service.is_configured():
+        # Append email reminder if applicable
+        if email_reminder:
+            response_message = f"{response_message}\n\n━━━━━━━━━━━━━━━━━━━━━━\n{email_reminder}"
+        
         send_result = await whatsapp_service.send_text_message(sender, response_message)
         logger.info(f"WhatsApp send result: {send_result}")
         
@@ -11672,7 +11893,11 @@ Welcome to *OEMLinker*, {company_name}!{welcome_regional}
 💡 *Next Steps:*
 • Login at https://oemlinker.com/login
 • Add your machines to receive RFQ matches
+• Type *email* to add your email for notifications
 • Type *help* to see WhatsApp commands
+
+📧 *Important:* Add your email to receive RFQ match alerts!
+Type *email* to add now.
 
 📷 *Quick Tip:* Send machine photos to add them instantly!"""
 
@@ -11880,6 +12105,7 @@ async def process_whatsapp_command(
 *my orders* - View your active orders
 *machines* - View machines & set availability
 *profile* - View your vendor profile
+*email* - Add/update your email address
 *help* - Show this menu{help_regional}
 
 📷 *Add Machine:* Send a photo of your machine!
@@ -12117,6 +12343,50 @@ Send a photo of your *GST Certificate* to register instantly!{send_gst_regional}
 🔗 *Edit Profile:* {BASE_URL}/vendor/profile
 🔗 *Manage Machines:* {BASE_URL}/vendor/machines"""
         return response
+    
+    # Email command - for adding/updating email address
+    email_variants = ["email", "add email", "update email", "my email", "set email", "change email",
+                      "ईमेल", "मेरा ईमेल", "ईमेल जोड़ें", "email id", "email address",
+                      "ইমেল", "மின்னஞ்சல்", "ಇಮೇಲ್", "ఇమెయిల్", "ઈમેલ", "ਈਮੇਲ"]
+    if matches_command(text_normalized, email_variants):
+        # Check if already has email
+        user_email = user.get("email", "") if user else ""
+        vendor_email = vendor.get("contact_email", "")
+        
+        # Check if current email is a phone number (WhatsApp registration)
+        has_real_email = False
+        if user_email and "@" in user_email and not user_email.replace("@", "").isdigit():
+            has_real_email = True
+        if vendor_email and "@" in vendor_email:
+            has_real_email = True
+        
+        if has_real_email:
+            current_email = vendor_email if vendor_email and "@" in vendor_email else user_email
+            return f"""📧 *Your Current Email*
+
+Your registered email: *{current_email}*
+
+To update, simply send your new email address.
+Example: yourname@company.com"""
+        
+        # Set pending email state
+        pending_email_inputs[sender] = {
+            "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10)
+        }
+        
+        lang_info = get_vendor_language(vendor)
+        lang_code = lang_info.get("code", "hi")
+        messages = EMAIL_REMINDER_MESSAGES.get(lang_code, EMAIL_REMINDER_MESSAGES.get("hi", {}))
+        
+        return f"""📧 *Add Your Email*
+_{messages.get('reminder_msg', 'Please add your email ID')}_
+
+Please send your email address.
+Example: yourname@company.com
+
+_{messages.get('why_needed', 'Required for RFQ match and quotation updates')}_
+
+⏱️ _You have 10 minutes to respond_"""
     
     # Machine Availability status update commands (handles "1 busy", "machine 1 busy", "all free" etc.)
     # MUST be checked BEFORE machines command to handle "machine 1 busy" pattern
