@@ -476,6 +476,50 @@ The WhatsApp flows now display messages in two languages:
 
 ### Test Report: /app/test_reports/iteration_17.json (100% pass - 27 tests)
 
+## Buyer-Facing Vendor Machine Photos & Details (NEW - Mar 9, 2026)
+
+### Feature Overview
+Buyers can now view complete machine details including photos when viewing a vendor's profile. This helps buyers make informed decisions about which vendors to work with.
+
+### Implementation Details:
+**Frontend**: `/app/frontend/src/pages/VendorProfileView.jsx`
+- Enhanced machine cards with photo display
+- Full-screen image gallery modal with navigation
+- Dynamic dimension display based on machine category
+- Availability status badges (Available, Engaged, Maintenance, Offline)
+- Materials supported with colored badges
+
+**Backend**: `/api/vendors/{vendor_id}/full` endpoint
+- Returns all machines with images array
+- Already includes all dimension fields
+
+### Machine Display Features:
+1. **Machine Photos**:
+   - Main image with hover zoom effect
+   - Thumbnail gallery for multiple images
+   - "No photos available" placeholder when no images
+   - Full-screen gallery modal with prev/next navigation
+
+2. **Dynamic Dimensions** (based on machine category):
+   - CNC Turning/Lathe: max_diameter, max_length, max_swing
+   - VMC/HMC: Work Envelope (XYZ), table_size
+   - Boring: bore_diameter, spindle_bore, spindle_travel
+   - Sheet Metal: tonnage, max_thickness, laser_power
+   - Welding: amperage, max_thickness
+   - Heat Treatment: max_temp
+   - Inspection/CMM: accuracy
+   - 5-Axis: A-axis range, C-axis range
+
+3. **Availability Status**:
+   - Available (green badge)
+   - Engaged (amber badge)
+   - Maintenance (slate badge)
+   - Offline (red badge)
+
+4. **Materials Supported**: Emerald green badges showing all materials
+
+### Test Report: /app/test_reports/iteration_18.json (100% pass - frontend verified)
+
 ## Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders
