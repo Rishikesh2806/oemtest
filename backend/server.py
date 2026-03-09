@@ -10134,6 +10134,66 @@ Send another machine photo to try again."""
                     await whatsapp_service.send_text_message(sender, response_message)
                 return {"status": "ok"}
             
+            # Handle waiting_for_name step - user is providing machine name
+            if pending.get("step") == "waiting_for_name":
+                # User provided machine name
+                machine_name_input = text.strip()
+                
+                if len(machine_name_input) < 2:
+                    response_message = """⚠️ Please enter a valid machine name.
+
+Example: _Mazak Quick Turn 200_ or _Haas VF-2_
+
+Type *cancel* to abort."""
+                    if whatsapp_service.is_configured():
+                        await whatsapp_service.send_text_message(sender, response_message)
+                    return {"status": "ok"}
+                
+                # Update machine name
+                pending["machine_info"]["name"] = machine_name_input
+                
+                # Get dimension fields for this machine category
+                machine_category = pending["machine_info"]["machine_category"]
+                dim_config = get_dimension_config_for_category(machine_category)
+                fields_list = dim_config["fields"]
+                first_field_info = fields_list[0]
+                first_field_key = first_field_info["key"]
+                first_prompt_en = first_field_info["prompt"]
+                first_prompt = get_bilingual_prompt(first_field_key, first_prompt_en, vendor)
+                
+                # Update step to start dimension collection
+                pending["step"] = first_field_key
+                pending["field_index"] = 0
+                
+                total_fields = len(fields_list)
+                fields_preview = ", ".join([f["label"].replace(" (mm)", "").replace(" (kg)", "").replace(" (°)", "").replace(" (μm)", "").replace(" (kW)", "").replace(" (A)", "").replace(" (°C)", "").replace(" (ton)", "") for f in fields_list[:3]])
+                if total_fields > 3:
+                    fields_preview += f" +{total_fields - 3} more"
+                
+                # Get bilingual messages
+                add_dimensions_regional = get_bilingual_message("add_dimensions", vendor)
+                
+                response_message = f"""✅ *Machine Name Set!*
+
+🏭 *{machine_name_input}*
+📂 Category: {machine_category}
+📋 Type: {pending["machine_info"]["machine_type"]}
+
+━━━━━━━━━━━━━━━━━━━━━━
+📏 *Now let's add dimensions:*{add_dimensions_regional}
+_{fields_preview}_
+
+*Step 1/{total_fields}:*
+{first_prompt}
+
+📷 _Or send nameplate photo to auto-fill!_
+
+Type *skip* to save without dimensions."""
+                
+                if whatsapp_service.is_configured():
+                    await whatsapp_service.send_text_message(sender, response_message)
+                return {"status": "ok"}
+            
             # Get current dimension info using the new structure
             machine_category = pending["machine_info"]["machine_category"]
             machine_name = pending["machine_info"].get("name", "Machine")
@@ -11031,6 +11091,14 @@ Or add manually at https://oemlinker.com/vendor/machines"""
         confidence = machine_info.get("confidence", "medium")
         description = machine_info.get("description", "")
         
+        # Check if machine name is unknown/generic
+        is_name_unknown = (
+            not machine_name or 
+            machine_name.lower() in ["unknown machine", "unknown", "machine", "unknown unknown"] or
+            machine_name.strip() == "" or
+            (brand.lower() == "unknown" and model.lower() == "unknown")
+        )
+        
         # Validate machine type against known categories
         valid_type = False
         for cat, data in MACHINE_CATEGORIES.items():
@@ -11070,6 +11138,64 @@ Or add manually at https://oemlinker.com/vendor/machines"""
         
         image_url_stored = f"/api/uploads/machines/{filename}"
         
+        # Get vendor's language for localized instructions
+        lang_info = get_vendor_language(vendor)
+        lang_code = lang_info.get("code", "hi")
+        lang_name = lang_info.get("lang", "Hindi")
+        
+        # If machine name is unknown, ask for it first
+        if is_name_unknown:
+            logger.info(f"Machine name not identified for sender '{sender}', asking for name")
+            
+            # Store pending machine with waiting_for_name step
+            pending_machines[sender] = {
+                "machine_info": {
+                    "name": "",  # Will be filled by user
+                    "machine_category": machine_category,
+                    "machine_type": machine_type,
+                    "brand": brand if brand.lower() != "unknown" else "",
+                    "model": model if model.lower() != "unknown" else "",
+                    "confidence": confidence,
+                    "description": description
+                },
+                "image_url": image_url_stored,
+                "vendor_id": vendor["vendor_id"],
+                "step": "waiting_for_name",
+                "field_index": 0,
+                "dimensions": {},
+                "expires_at": datetime.now(timezone.utc) + timedelta(minutes=PENDING_MACHINE_TTL_MINUTES)
+            }
+            
+            # Bilingual prompt for machine name
+            name_prompts = {
+                "hi": "_मशीन का नाम बताएं (जैसे: Mazak CNC Lathe)_",
+                "mr": "_मशीनचे नाव सांगा (उदा: Mazak CNC Lathe)_",
+                "gu": "_મશીનનું નામ જણાવો (દા.ત.: Mazak CNC Lathe)_",
+                "ta": "_இயந்திரத்தின் பெயரைக் கூறுங்கள் (எ.கா.: Mazak CNC Lathe)_",
+                "te": "_మెషిన్ పేరు చెప్పండి (ఉదా: Mazak CNC Lathe)_",
+                "kn": "_ಯಂತ್ರದ ಹೆಸರು ಹೇಳಿ (ಉದಾ: Mazak CNC Lathe)_",
+                "bn": "_মেশিনের নাম বলুন (যেমন: Mazak CNC Lathe)_",
+                "pa": "_ਮਸ਼ੀਨ ਦਾ ਨਾਮ ਦੱਸੋ (ਜਿਵੇਂ: Mazak CNC Lathe)_"
+            }
+            
+            regional_prompt = name_prompts.get(lang_code, name_prompts["hi"])
+            
+            return f"""📷 *Machine Photo Received!*
+
+⚠️ Could not identify the machine name automatically.
+
+📝 *Please enter the machine name:*
+{regional_prompt}
+
+Example: _Mazak Quick Turn 200_ or _Haas VF-2_
+
+━━━━━━━━━━━━━━━━━━━━━━
+📂 Detected Category: {machine_category}
+📋 Detected Type: {machine_type}
+
+Type *cancel* to abort."""
+        
+        # Machine name is known - proceed with dimension collection
         # Get dimension fields for this machine category using fuzzy matching
         dim_config = get_dimension_config_for_category(machine_category)
         fields_list = dim_config["fields"]
@@ -11079,11 +11205,14 @@ Or add manually at https://oemlinker.com/vendor/machines"""
         # Get bilingual prompt based on vendor's state
         first_prompt = get_bilingual_prompt(first_field_key, first_prompt_en, vendor)
         
+        # Use the identified name or construct from brand/model
+        final_machine_name = machine_name if machine_name != "Unknown Machine" else f"{brand} {model}".strip()
+        
         # Store pending machine for dimension collection
         logger.info(f"Setting pending_machines for sender: '{sender}', category: '{machine_category}'")
         pending_machines[sender] = {
             "machine_info": {
-                "name": machine_name if machine_name != "Unknown Machine" else f"{brand} {model}".strip(),
+                "name": final_machine_name,
                 "machine_category": machine_category,
                 "machine_type": machine_type,
                 "brand": brand,
@@ -11108,21 +11237,17 @@ Or add manually at https://oemlinker.com/vendor/machines"""
         if total_fields > 3:
             fields_preview += f" +{total_fields - 3} more"
         
-        # Get vendor's language for localized instructions
-        lang_info = get_vendor_language(vendor)
-        lang_name = lang_info.get("lang", "Hindi")
-        
         # Get bilingual messages
         machine_identified_regional = get_bilingual_message("machine_identified", vendor)
         add_dimensions_regional = get_bilingual_message("add_dimensions", vendor)
         
-        logger.info(f"Machine identified via WhatsApp, starting dimension flow: {machine_name} for vendor {vendor['vendor_id']} (lang: {lang_name})")
+        logger.info(f"Machine identified via WhatsApp, starting dimension flow: {final_machine_name} for vendor {vendor['vendor_id']} (lang: {lang_name})")
         
         return f"""✅ *Machine Identified!*{machine_identified_regional}
 
 {confidence_emoji} AI Identification ({confidence} confidence)
 
-🏭 *{machine_name}*
+🏭 *{final_machine_name}*
 📋 Type: {machine_type}
 📂 Category: {machine_category}
 🔧 Brand: {brand}
