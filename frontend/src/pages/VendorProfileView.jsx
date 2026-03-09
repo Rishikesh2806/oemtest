@@ -4,13 +4,91 @@ import { useAuth, api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
 import { toast } from "sonner";
 import { 
   Building2, MapPin, Phone, Globe, Mail, Award, Star,
   Wrench, Package, CheckCircle2, ArrowLeft, Loader2,
   MessageSquare, ExternalLink, Briefcase, TrendingUp, ThumbsUp,
-  Quote
+  Quote, Image, X, ChevronLeft, ChevronRight, Maximize2,
+  Settings, Gauge, Ruler, Activity, Info
 } from "lucide-react";
+
+// Helper function to get machine availability badge
+const getAvailabilityBadge = (status) => {
+  const badges = {
+    available: { label: "Available", color: "bg-green-100 text-green-700 border-green-200" },
+    engaged: { label: "Engaged", color: "bg-amber-100 text-amber-700 border-amber-200" },
+    maintenance: { label: "Maintenance", color: "bg-slate-100 text-slate-600 border-slate-200" },
+    offline: { label: "Offline", color: "bg-red-100 text-red-700 border-red-200" }
+  };
+  return badges[status] || badges.available;
+};
+
+// Helper to format dimension display based on machine category/type
+const getMachineDimensions = (machine) => {
+  const dims = [];
+  
+  // Standard XYZ dimensions
+  if (machine.max_x || machine.max_y || machine.max_z) {
+    dims.push({ 
+      label: "Work Envelope (XYZ)", 
+      value: `${machine.max_x || '-'} × ${machine.max_y || '-'} × ${machine.max_z || '-'} mm` 
+    });
+  }
+  
+  // Turning/Lathe specific
+  if (machine.max_diameter) dims.push({ label: "Max Diameter", value: `Ø${machine.max_diameter} mm` });
+  if (machine.max_length) dims.push({ label: "Max Length", value: `${machine.max_length} mm` });
+  if (machine.max_swing) dims.push({ label: "Max Swing", value: `Ø${machine.max_swing} mm` });
+  
+  // Boring specific
+  if (machine.spindle_bore) dims.push({ label: "Spindle Bore", value: `Ø${machine.spindle_bore} mm` });
+  if (machine.spindle_travel) dims.push({ label: "Spindle Travel", value: `${machine.spindle_travel} mm` });
+  if (machine.bore_diameter) dims.push({ label: "Bore Diameter", value: `Ø${machine.bore_diameter} mm` });
+  
+  // VTL/Table specific
+  if (machine.table_diameter) dims.push({ label: "Table Diameter", value: `Ø${machine.table_diameter} mm` });
+  if (machine.table_size_x || machine.table_size_y) {
+    dims.push({ label: "Table Size", value: `${machine.table_size_x || '-'} × ${machine.table_size_y || '-'} mm` });
+  }
+  if (machine.max_weight) dims.push({ label: "Max Weight", value: `${machine.max_weight} kg` });
+  
+  // Sheet Metal specific
+  if (machine.tonnage) dims.push({ label: "Tonnage", value: `${machine.tonnage} tons` });
+  if (machine.max_thickness) dims.push({ label: "Max Thickness", value: `${machine.max_thickness} mm` });
+  if (machine.laser_power) dims.push({ label: "Laser Power", value: `${machine.laser_power} W` });
+  
+  // Gear specific
+  if (machine.max_module) dims.push({ label: "Max Module", value: machine.max_module });
+  if (machine.min_teeth) dims.push({ label: "Min Teeth", value: machine.min_teeth });
+  
+  // Grinding/Drilling specific
+  if (machine.arm_length) dims.push({ label: "Arm Length", value: `${machine.arm_length} mm` });
+  if (machine.max_depth) dims.push({ label: "Max Depth", value: `${machine.max_depth} mm` });
+  if (machine.max_stroke || machine.stroke) dims.push({ label: "Stroke", value: `${machine.max_stroke || machine.stroke} mm` });
+  
+  // Heat Treatment
+  if (machine.max_temp) dims.push({ label: "Max Temp", value: `${machine.max_temp}°C` });
+  
+  // EDM specific
+  if (machine.max_taper_angle) dims.push({ label: "Max Taper Angle", value: `${machine.max_taper_angle}°` });
+  
+  // 5-Axis specific
+  if (machine.a_axis_range) dims.push({ label: "A-Axis Range", value: `${machine.a_axis_range}°` });
+  if (machine.c_axis_range) dims.push({ label: "C-Axis Range", value: `${machine.c_axis_range}°` });
+  
+  // Welding
+  if (machine.amperage) dims.push({ label: "Amperage", value: `${machine.amperage} A` });
+  
+  // Inspection
+  if (machine.accuracy) dims.push({ label: "Accuracy", value: `±${machine.accuracy} mm` });
+  
+  // Additive
+  if (machine.layer_thickness) dims.push({ label: "Layer Thickness", value: `${machine.layer_thickness} mm` });
+  
+  return dims;
+};
 
 const VendorProfileView = () => {
   const { vendorId } = useParams();
@@ -19,11 +97,56 @@ const VendorProfileView = () => {
   const [vendor, setVendor] = useState(null);
   const [ratings, setRatings] = useState(null);
   const [loading, setLoading] = useState(true);
+  
+  // Image gallery state
+  const [selectedMachine, setSelectedMachine] = useState(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   useEffect(() => {
     fetchVendor();
     fetchRatings();
   }, [vendorId]);
+  
+  // Image gallery handlers
+  const openGallery = (machine, imageIndex = 0) => {
+    setSelectedMachine(machine);
+    setCurrentImageIndex(imageIndex);
+    setGalleryOpen(true);
+  };
+  
+  const closeGallery = () => {
+    setGalleryOpen(false);
+    setSelectedMachine(null);
+    setCurrentImageIndex(0);
+  };
+  
+  const nextImage = () => {
+    if (selectedMachine && selectedMachine.images) {
+      setCurrentImageIndex((prev) => 
+        prev === selectedMachine.images.length - 1 ? 0 : prev + 1
+      );
+    }
+  };
+  
+  const prevImage = () => {
+    if (selectedMachine && selectedMachine.images) {
+      setCurrentImageIndex((prev) => 
+        prev === 0 ? selectedMachine.images.length - 1 : prev - 1
+      );
+    }
+  };
+  
+  // Get the proper image URL
+  const getImageUrl = (imageUrl) => {
+    if (!imageUrl) return null;
+    // Handle relative URLs
+    if (imageUrl.startsWith('/api/')) {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
+      return `${backendUrl}${imageUrl}`;
+    }
+    return imageUrl;
+  };
 
   const fetchVendor = async () => {
     try {
@@ -332,67 +455,180 @@ const VendorProfileView = () => {
 
             {/* Machines */}
             {vendor.machines?.length > 0 && (
-              <Card className="border-slate-200">
+              <Card className="border-slate-200" data-testid="vendor-machines-section">
                 <CardHeader>
                   <CardTitle className="font-heading text-lg flex items-center gap-2">
-                    <Wrench className="w-5 h-5 text-orange-600" /> Manufacturing Equipment
+                    <Wrench className="w-5 h-5 text-orange-600" /> Manufacturing Equipment ({vendor.machines.length})
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid gap-4">
-                    {vendor.machines.map((machine) => (
-                      <div 
-                        key={machine.machine_id}
-                        className="p-4 bg-slate-50 rounded-lg border border-slate-200"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <p className="font-semibold text-slate-900">{machine.machine_type}</p>
-                            <p className="text-sm text-slate-500">
-                              {machine.brand} {machine.model}
-                            </p>
-                          </div>
-                          {machine.axis_config && (
-                            <span className="px-2 py-1 bg-slate-200 text-slate-700 text-xs rounded">
-                              {machine.axis_config}
-                            </span>
-                          )}
-                        </div>
-                        
-                        <div className="mt-3 grid grid-cols-2 gap-4 text-sm">
-                          {(machine.max_x || machine.max_y || machine.max_z) && (
-                            <div>
-                              <p className="text-xs text-slate-500 uppercase">Work Envelope</p>
-                              <p className="font-mono text-slate-700">
-                                {machine.max_x || "-"} × {machine.max_y || "-"} × {machine.max_z || "-"} mm
-                              </p>
+                  <div className="grid gap-6">
+                    {vendor.machines.map((machine) => {
+                      const availabilityBadge = getAvailabilityBadge(machine.availability_status);
+                      const dimensions = getMachineDimensions(machine);
+                      const hasImages = machine.images && machine.images.length > 0;
+                      
+                      return (
+                        <div 
+                          key={machine.machine_id}
+                          className="bg-slate-50 rounded-lg border border-slate-200 overflow-hidden"
+                          data-testid={`machine-card-${machine.machine_id}`}
+                        >
+                          <div className="flex flex-col lg:flex-row">
+                            {/* Machine Images Section */}
+                            <div className="lg:w-1/3 p-4">
+                              {hasImages ? (
+                                <div className="space-y-2">
+                                  {/* Main Image */}
+                                  <div 
+                                    className="relative aspect-video bg-white rounded-lg overflow-hidden cursor-pointer group"
+                                    onClick={() => openGallery(machine, 0)}
+                                    data-testid={`machine-main-image-${machine.machine_id}`}
+                                  >
+                                    <img 
+                                      src={getImageUrl(machine.images[0])}
+                                      alt={machine.name || machine.machine_type}
+                                      className="w-full h-full object-cover"
+                                    />
+                                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                                      <Maximize2 className="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                    {machine.images.length > 1 && (
+                                      <span className="absolute bottom-2 right-2 px-2 py-1 bg-black/60 text-white text-xs rounded flex items-center gap-1">
+                                        <Image className="w-3 h-3" />
+                                        {machine.images.length}
+                                      </span>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Thumbnail Gallery */}
+                                  {machine.images.length > 1 && (
+                                    <div className="flex gap-2 overflow-x-auto py-1">
+                                      {machine.images.slice(0, 4).map((img, idx) => (
+                                        <div 
+                                          key={idx}
+                                          className="w-16 h-16 flex-shrink-0 rounded-md overflow-hidden cursor-pointer border-2 border-transparent hover:border-orange-400 transition-colors"
+                                          onClick={() => openGallery(machine, idx)}
+                                        >
+                                          <img 
+                                            src={getImageUrl(img)}
+                                            alt={`${machine.name || machine.machine_type} ${idx + 1}`}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </div>
+                                      ))}
+                                      {machine.images.length > 4 && (
+                                        <div 
+                                          className="w-16 h-16 flex-shrink-0 rounded-md bg-slate-200 flex items-center justify-center cursor-pointer hover:bg-slate-300 transition-colors"
+                                          onClick={() => openGallery(machine, 4)}
+                                        >
+                                          <span className="text-sm font-medium text-slate-600">+{machine.images.length - 4}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="aspect-video bg-slate-100 rounded-lg flex flex-col items-center justify-center text-slate-400">
+                                  <Wrench className="w-12 h-12 mb-2" />
+                                  <span className="text-sm">No photos available</span>
+                                </div>
+                              )}
                             </div>
-                          )}
-                          {machine.max_diameter && (
-                            <div>
-                              <p className="text-xs text-slate-500 uppercase">Max Diameter</p>
-                              <p className="font-mono text-slate-700">Ø{machine.max_diameter} mm</p>
-                            </div>
-                          )}
-                          <div>
-                            <p className="text-xs text-slate-500 uppercase">Tolerance</p>
-                            <p className="font-mono text-slate-700">±{machine.tolerance_capability} mm</p>
-                          </div>
-                          {machine.materials_supported?.length > 0 && (
-                            <div className="col-span-2">
-                              <p className="text-xs text-slate-500 uppercase mb-1">Materials</p>
-                              <div className="flex flex-wrap gap-1">
-                                {machine.materials_supported.map((m, i) => (
-                                  <span key={i} className="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded">
-                                    {m}
+                            
+                            {/* Machine Details Section */}
+                            <div className="flex-1 p-4 lg:border-l border-slate-200">
+                              {/* Header */}
+                              <div className="flex items-start justify-between mb-4">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <h3 className="font-semibold text-lg text-slate-900">
+                                      {machine.name || machine.machine_type}
+                                    </h3>
+                                    {machine.machine_category && (
+                                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
+                                        {machine.machine_category}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-sm text-slate-500 mt-1">
+                                    {machine.brand} {machine.model}
+                                  </p>
+                                </div>
+                                <div className="flex flex-col items-end gap-2">
+                                  <span className={`px-3 py-1 text-xs font-medium rounded-full border ${availabilityBadge.color}`}>
+                                    {availabilityBadge.label}
                                   </span>
-                                ))}
+                                  {machine.axis_config && (
+                                    <span className="px-2 py-1 bg-slate-200 text-slate-700 text-xs rounded">
+                                      {machine.axis_config}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
+                              
+                              {/* Specifications Grid */}
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                                {/* Tolerance - Always show */}
+                                <div className="bg-white rounded-lg p-3 border border-slate-100">
+                                  <div className="flex items-center gap-2 text-slate-500 mb-1">
+                                    <Gauge className="w-4 h-4" />
+                                    <span className="text-xs uppercase">Tolerance</span>
+                                  </div>
+                                  <p className="font-mono font-medium text-slate-900">
+                                    ±{machine.tolerance || machine.tolerance_capability || 0.1} mm
+                                  </p>
+                                </div>
+                                
+                                {/* Dynamic dimensions based on machine type */}
+                                {dimensions.slice(0, 5).map((dim, idx) => (
+                                  <div key={idx} className="bg-white rounded-lg p-3 border border-slate-100">
+                                    <div className="flex items-center gap-2 text-slate-500 mb-1">
+                                      <Ruler className="w-4 h-4" />
+                                      <span className="text-xs uppercase">{dim.label}</span>
+                                    </div>
+                                    <p className="font-mono font-medium text-slate-900 text-sm">{dim.value}</p>
+                                  </div>
+                                ))}
+                                
+                                {/* Capacity */}
+                                {machine.monthly_capacity_hours && (
+                                  <div className="bg-white rounded-lg p-3 border border-slate-100">
+                                    <div className="flex items-center gap-2 text-slate-500 mb-1">
+                                      <Activity className="w-4 h-4" />
+                                      <span className="text-xs uppercase">Monthly Capacity</span>
+                                    </div>
+                                    <p className="font-mono font-medium text-slate-900">{machine.monthly_capacity_hours} hrs</p>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {/* Materials Supported */}
+                              {(machine.materials_supported?.length > 0 || machine.materials?.length > 0) && (
+                                <div>
+                                  <p className="text-xs text-slate-500 uppercase mb-2">Materials Supported</p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {(machine.materials_supported || machine.materials || []).map((m, i) => (
+                                      <span key={i} className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded">
+                                        {m}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Availability Note */}
+                              {machine.availability_note && (
+                                <div className="mt-3 flex items-start gap-2 p-2 bg-amber-50 rounded-lg border border-amber-200">
+                                  <Info className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                                  <p className="text-sm text-amber-700">{machine.availability_note}</p>
+                                </div>
+                              )}
                             </div>
-                          )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>
@@ -504,6 +740,89 @@ const VendorProfileView = () => {
           </div>
         </div>
       </div>
+      
+      {/* Image Gallery Modal */}
+      <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
+        <DialogContent className="max-w-4xl h-[90vh] p-0 bg-slate-900 border-slate-800" data-testid="image-gallery-modal">
+          <DialogHeader className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/80 to-transparent">
+            <div className="flex items-center justify-between text-white">
+              <DialogTitle className="text-lg font-medium">
+                {selectedMachine?.name || selectedMachine?.machine_type} - Photos
+              </DialogTitle>
+              <Button 
+                variant="ghost" 
+                size="icon"
+                className="text-white hover:bg-white/20"
+                onClick={closeGallery}
+              >
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+            {selectedMachine?.images?.length > 1 && (
+              <p className="text-slate-400 text-sm">
+                {currentImageIndex + 1} of {selectedMachine.images.length}
+              </p>
+            )}
+          </DialogHeader>
+          
+          {selectedMachine && selectedMachine.images && (
+            <div className="relative h-full flex items-center justify-center">
+              {/* Main Image */}
+              <img 
+                src={getImageUrl(selectedMachine.images[currentImageIndex])}
+                alt={`${selectedMachine.name || selectedMachine.machine_type} ${currentImageIndex + 1}`}
+                className="max-h-[80vh] max-w-full object-contain"
+                data-testid="gallery-main-image"
+              />
+              
+              {/* Navigation Arrows */}
+              {selectedMachine.images.length > 1 && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-white bg-black/50 hover:bg-black/70 rounded-full w-12 h-12"
+                    onClick={prevImage}
+                    data-testid="gallery-prev-btn"
+                  >
+                    <ChevronLeft className="w-8 h-8" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white bg-black/50 hover:bg-black/70 rounded-full w-12 h-12"
+                    onClick={nextImage}
+                    data-testid="gallery-next-btn"
+                  >
+                    <ChevronRight className="w-8 h-8" />
+                  </Button>
+                </>
+              )}
+              
+              {/* Thumbnail Strip */}
+              {selectedMachine.images.length > 1 && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-black/60 p-2 rounded-lg">
+                  {selectedMachine.images.map((img, idx) => (
+                    <button
+                      key={idx}
+                      className={`w-14 h-14 rounded overflow-hidden border-2 transition-all ${
+                        idx === currentImageIndex ? 'border-orange-500 scale-105' : 'border-transparent opacity-60 hover:opacity-100'
+                      }`}
+                      onClick={() => setCurrentImageIndex(idx)}
+                    >
+                      <img 
+                        src={getImageUrl(img)}
+                        alt={`Thumbnail ${idx + 1}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };
