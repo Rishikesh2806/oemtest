@@ -2911,13 +2911,31 @@ async def update_machine(machine_id: str, machine: MachineCreate, user: dict = D
     if not vendor:
         raise HTTPException(status_code=403, detail="Not authorized")
     
+    # Get existing machine to preserve images if not provided
+    existing_machine = await db.machines.find_one(
+        {"machine_id": machine_id, "vendor_id": vendor["vendor_id"]},
+        {"_id": 0}
+    )
+    if not existing_machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    
+    # Build update data, preserving images if empty/not provided
+    update_data = machine.model_dump()
+    
+    # Preserve existing images if new images list is empty
+    if not update_data.get("images") and existing_machine.get("images"):
+        update_data["images"] = existing_machine["images"]
+    
+    # Also preserve other fields that shouldn't be overwritten
+    fields_to_preserve = ["ai_identified", "ai_confidence", "ai_description", "source", "created_at"]
+    for field in fields_to_preserve:
+        if field in existing_machine and field not in update_data:
+            update_data[field] = existing_machine[field]
+    
     result = await db.machines.update_one(
         {"machine_id": machine_id, "vendor_id": vendor["vendor_id"]},
-        {"$set": machine.model_dump()}
+        {"$set": update_data}
     )
-    
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Machine not found")
     
     updated = await db.machines.find_one({"machine_id": machine_id}, {"_id": 0})
     return updated

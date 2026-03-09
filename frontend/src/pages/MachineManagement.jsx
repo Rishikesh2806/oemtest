@@ -236,6 +236,7 @@ const MachineManagement = () => {
       machine_type: machine.machine_type || "",
       brand: machine.brand || "",
       model: machine.model || "",
+      images: machine.images || [],  // Preserve existing images
       tolerance: machine.tolerance || machine.tolerance_capability || 0.01,
       max_x: machine.max_x || 0,
       max_y: machine.max_y || 0,
@@ -268,6 +269,7 @@ const MachineManagement = () => {
         machine_type: formData.machine_type,
         brand: formData.brand,
         model: formData.model,
+        images: formData.images || [],  // Include images in payload
         tolerance: parseFloat(formData.tolerance) || 0.01,
         max_x: parseFloat(formData.max_x) || 0,
         max_y: parseFloat(formData.max_y) || 0,
