@@ -520,6 +520,34 @@ Buyers can now view complete machine details including photos when viewing a ven
 
 ### Test Report: /app/test_reports/iteration_18.json (100% pass - frontend verified)
 
+## WhatsApp Email Reminder Feature (NEW - Mar 9, 2026)
+
+### Feature Overview
+WhatsApp-registered vendors now receive periodic reminders to add their email address. Email is important for receiving RFQ match notifications, quotation updates, and platform alerts.
+
+### Implementation Details:
+**Location**: `/app/backend/server.py`
+- `EMAIL_REMINDER_MESSAGES` - Bilingual messages for 8 Indian languages
+- `EMAIL_REMINDER_INTERVAL_HOURS = 24` - Reminder sent every 24 hours
+- `check_and_send_email_reminder()` - Checks if vendor needs reminder
+- `process_email_input()` - Validates and saves email
+- `pending_email_inputs` - Tracks pending email input state (10 min expiry)
+
+### WhatsApp Commands:
+- **`email`** - Add/update email address (supports regional language variants)
+- Email prompts appear in registration success message
+- Help menu includes email command
+
+### Email Validation:
+- Format validation using regex
+- Duplicate email check (prevents using another user's email)
+- 10-minute window to provide email after typing "email" command
+
+### Bilingual Support:
+Regional languages supported: Hindi, Marathi, Gujarati, Tamil, Telugu, Kannada, Bengali, Punjabi
+
+### Test Report: /app/test_reports/iteration_19.json (100% pass - 20 backend tests)
+
 ## Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders
