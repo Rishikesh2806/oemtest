@@ -1309,11 +1309,16 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
         website: res.data.vendor.website || "",
         address: res.data.vendor.address || "",
         city: res.data.vendor.city || "",
-        country: res.data.vendor.country || "",
+        state: res.data.vendor.state || "",
+        pincode: res.data.vendor.pincode || "",
+        country: res.data.vendor.country || "India",
+        gstin: res.data.vendor.gstin || "",
         certifications: res.data.vendor.certifications?.join(", ") || "",
         industries: res.data.vendor.industries?.join(", ") || "",
         rating: res.data.vendor.rating || 0,
-        is_approved: res.data.vendor.is_approved || false
+        is_approved: res.data.vendor.is_approved || false,
+        email: res.data.user?.email || "",
+        phone_login: res.data.vendor.phone_login || ""
       });
       setSelectedVendor(vendorId);
     } catch (error) {
@@ -1482,12 +1487,24 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
                 <Input value={profileForm.company_name} onChange={(e) => setProfileForm(p => ({...p, company_name: e.target.value}))} />
               </div>
               <div>
+                <Label>Email (User Account)</Label>
+                <Input value={profileForm.email} disabled className="bg-slate-50" />
+              </div>
+              <div>
                 <Label>Phone</Label>
                 <Input value={profileForm.phone} onChange={(e) => setProfileForm(p => ({...p, phone: e.target.value}))} />
               </div>
               <div>
+                <Label>WhatsApp Login Number</Label>
+                <Input value={profileForm.phone_login} disabled className="bg-slate-50 font-mono" placeholder="WhatsApp registered" />
+              </div>
+              <div>
                 <Label>Website</Label>
                 <Input value={profileForm.website} onChange={(e) => setProfileForm(p => ({...p, website: e.target.value}))} />
+              </div>
+              <div>
+                <Label>GSTIN</Label>
+                <Input value={profileForm.gstin} disabled className="bg-slate-50 font-mono text-xs" placeholder="GST Number" />
               </div>
               <div>
                 <Label>Rating (0-5)</Label>
@@ -1496,6 +1513,14 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
               <div>
                 <Label>City</Label>
                 <Input value={profileForm.city} onChange={(e) => setProfileForm(p => ({...p, city: e.target.value}))} />
+              </div>
+              <div>
+                <Label>State</Label>
+                <Input value={profileForm.state} onChange={(e) => setProfileForm(p => ({...p, state: e.target.value}))} />
+              </div>
+              <div>
+                <Label>Pincode</Label>
+                <Input value={profileForm.pincode} onChange={(e) => setProfileForm(p => ({...p, pincode: e.target.value}))} maxLength={6} />
               </div>
               <div>
                 <Label>Country</Label>
@@ -1730,10 +1755,11 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
             <thead className="bg-slate-50 border-b">
               <tr>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Company</th>
-                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Contact</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Contact / Email</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Phone</th>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Location</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">GST</th>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Machines</th>
-                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Rating</th>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Status</th>
                 <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
               </tr>
@@ -1745,19 +1771,50 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
                     <div>
                       <p className="font-medium text-slate-900">{vendor.company_name}</p>
                       <p className="text-xs text-slate-500 font-mono">{vendor.vendor_id}</p>
+                      {vendor.website && (
+                        <a href={vendor.website} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline">
+                          {vendor.website.replace(/https?:\/\//, '').slice(0, 25)}
+                        </a>
+                      )}
                     </div>
                   </td>
                   <td className="p-4">
                     <div>
-                      <p className="text-sm text-slate-900">{vendor.user_info?.name}</p>
-                      <p className="text-xs text-slate-500">{vendor.user_info?.email}</p>
+                      <p className="text-sm font-medium text-slate-900">{vendor.user_info?.name || '-'}</p>
+                      <p className="text-xs text-blue-600">{vendor.user_info?.email || '-'}</p>
+                      {vendor.phone_login && (
+                        <p className="text-xs text-slate-500">📱 {vendor.phone_login}</p>
+                      )}
                     </div>
                   </td>
-                  <td className="p-4 text-sm text-slate-600">
-                    {vendor.city}, {vendor.country}
+                  <td className="p-4">
+                    <p className="text-sm text-slate-900">{vendor.phone || '-'}</p>
                   </td>
-                  <td className="p-4 text-sm text-slate-900">{vendor.machine_count || 0}</td>
-                  <td className="p-4 text-sm text-slate-900">{vendor.rating?.toFixed(1) || "-"}</td>
+                  <td className="p-4">
+                    <div className="text-sm">
+                      <p className="text-slate-900">{vendor.city || '-'}{vendor.state ? `, ${vendor.state}` : ''}</p>
+                      {vendor.pincode && <p className="text-xs text-slate-500">📮 {vendor.pincode}</p>}
+                      <p className="text-xs text-slate-400">{vendor.country || 'India'}</p>
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    {vendor.gstin ? (
+                      <div>
+                        <p className="text-xs font-mono text-slate-700">{vendor.gstin}</p>
+                        <p className="text-xs text-green-600">✓ Verified</p>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-400">-</span>
+                    )}
+                  </td>
+                  <td className="p-4">
+                    <div className="flex items-center gap-1">
+                      <span className="text-sm font-medium text-slate-900">{vendor.machine_count || 0}</span>
+                      {vendor.rating > 0 && (
+                        <span className="text-xs text-amber-600">⭐ {vendor.rating?.toFixed(1)}</span>
+                      )}
+                    </div>
+                  </td>
                   <td className="p-4">
                     <StatusBadge status={vendor.is_approved ? "approved" : "pending"} />
                   </td>

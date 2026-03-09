@@ -7250,7 +7250,7 @@ async def admin_update_vendor_profile(vendor_id: str, request: Request, user: di
     body = await request.json()
     
     # Allowed vendor fields
-    vendor_fields = ["company_name", "description", "phone", "website", "address", "city", "country", 
+    vendor_fields = ["company_name", "description", "phone", "website", "address", "city", "state", "pincode", "country", 
                      "certifications", "industries", "is_approved", "rating", "min_order_value", "lead_time_days"]
     vendor_update = {k: v for k, v in body.items() if k in vendor_fields}
     
