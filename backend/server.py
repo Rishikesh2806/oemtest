@@ -1561,6 +1561,15 @@ async def login(login_data: LoginRequest, request: Request):
         # Try full normalized number as fallback
         if not user and normalized_phone != phone_10digit:
             user = await db.users.find_one({"email": normalized_phone}, {"_id": 0})
+        
+        # For users who updated their email, check the 'phone' field
+        # These are phone_login users whose email was changed to a real email
+        if not user:
+            # Try finding by phone field with various formats
+            user = await db.users.find_one({
+                "phone": {"$in": [phone_10digit, f"91{phone_10digit}", f"+91{phone_10digit}", normalized_phone]},
+                "phone_login": True
+            }, {"_id": 0})
     
     if not user:
         # Record failed attempt (use login_id even if not found to prevent enumeration)
