@@ -1546,6 +1546,10 @@ async def login(login_data: LoginRequest, request: Request):
     # Find user - try email first, then phone number
     user = await db.users.find_one({"email": login_id}, {"_id": 0})
     
+    # If not found by email field, also try contact_email (for users who added email later)
+    if not user and "@" in login_id:
+        user = await db.users.find_one({"contact_email": login_id}, {"_id": 0})
+    
     # If not found by email and looks like phone, try phone number variations
     if not user and is_phone_login:
         # Get last 10 digits for lookup
