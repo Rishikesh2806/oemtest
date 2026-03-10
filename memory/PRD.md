@@ -548,6 +548,27 @@ Regional languages supported: Hindi, Marathi, Gujarati, Tamil, Telugu, Kannada, 
 
 ### Test Report: /app/test_reports/iteration_19.json (100% pass - 20 backend tests)
 
+## Vendor Profile Email Field (NEW - Mar 10, 2026)
+
+### Feature Overview
+Added email field to vendor profile page on the web app. Email syncs correctly whether updated via WhatsApp or web app.
+
+### Implementation:
+**Frontend**: `/app/frontend/src/pages/VendorProfile.jsx`
+- Added `contact_email` field to form state
+- Email input with `data-testid="email-input"`
+- Placeholder: "contact@yourcompany.com"
+- Helper text: "For RFQ notifications & updates"
+
+**Backend**: `/app/backend/server.py`
+- Added `contact_email` field to `VendorProfileCreate` model (line 717)
+- `update_vendor_profile` endpoint syncs email correctly:
+  - Always saves `contact_email` to vendor record
+  - For WhatsApp users (phone-based email): also updates `user.email` for login
+  - For regular users: only updates `contact_email`, login email unchanged
+
+### Test Report: /app/backend/tests/test_vendor_profile_email.py (8 tests passed)
+
 ## Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders

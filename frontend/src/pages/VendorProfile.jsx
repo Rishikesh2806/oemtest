@@ -8,7 +8,7 @@ import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Save, Building2, Globe, Phone, MapPin, Award, X } from "lucide-react";
+import { Loader2, Save, Building2, Globe, Phone, MapPin, Award, X, Mail } from "lucide-react";
 
 const INDUSTRIES = [
   "Aerospace", "Automotive", "Medical", "Electronics", 
@@ -65,6 +65,7 @@ const VendorProfile = () => {
     pincode: "",
     country: "India",
     phone: "",
+    contact_email: "",
     website: "",
     certifications: [],
     industries: [],
@@ -89,6 +90,7 @@ const VendorProfile = () => {
         pincode: response.data.pincode || "",
         country: response.data.country || "India",
         phone: response.data.phone || "",
+        contact_email: response.data.contact_email || "",
         website: response.data.website || "",
         certifications: response.data.certifications || [],
         industries: response.data.industries || [],
@@ -347,6 +349,35 @@ const VendorProfile = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <Phone className="w-3 h-3 inline mr-1" /> Phone
+                  </Label>
+                  <Input
+                    value={formData.phone}
+                    onChange={(e) => handleInputChange("phone", e.target.value)}
+                    placeholder="+91 98765 43210"
+                    className="mt-1"
+                    data-testid="phone-input"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <Mail className="w-3 h-3 inline mr-1" /> Email *
+                  </Label>
+                  <Input
+                    type="email"
+                    value={formData.contact_email}
+                    onChange={(e) => handleInputChange("contact_email", e.target.value)}
+                    placeholder="contact@yourcompany.com"
+                    className="mt-1"
+                    data-testid="email-input"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">For RFQ notifications & updates</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
                     Country
                   </Label>
                   <Input
@@ -359,28 +390,15 @@ const VendorProfile = () => {
                 </div>
                 <div>
                   <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    <Phone className="w-3 h-3 inline mr-1" /> Phone
+                    <Globe className="w-3 h-3 inline mr-1" /> Website
                   </Label>
                   <Input
-                    value={formData.phone}
-                    onChange={(e) => handleInputChange("phone", e.target.value)}
-                    placeholder="+91 98765 43210"
+                    value={formData.website}
+                    onChange={(e) => handleInputChange("website", e.target.value)}
+                    placeholder="https://www.yourcompany.com"
                     className="mt-1"
-                    data-testid="phone-input"
                   />
                 </div>
-              </div>
-
-              <div>
-                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  <Globe className="w-3 h-3 inline mr-1" /> Website
-                </Label>
-                <Input
-                  value={formData.website}
-                  onChange={(e) => handleInputChange("website", e.target.value)}
-                  placeholder="https://www.yourcompany.com"
-                  className="mt-1"
-                />
               </div>
             </CardContent>
           </Card>

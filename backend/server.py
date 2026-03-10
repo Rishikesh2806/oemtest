@@ -714,6 +714,7 @@ class VendorProfileCreate(BaseModel):
     pincode: Optional[str] = None
     country: Optional[str] = None
     phone: Optional[str] = None
+    contact_email: Optional[str] = None
     website: Optional[str] = None
     certifications: List[str] = []
     industries: List[str] = []
@@ -2257,9 +2258,23 @@ async def update_vendor_profile(profile: VendorProfileCreate, user: dict = Depen
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Vendor profile not found")
     
+    # Sync company_name to user record
+    # Note: contact_email is for notifications, not for login
+    # Only update user email if user doesn't have one yet (WhatsApp-registered users)
+    user_update = {"company_name": profile.company_name}
+    if profile.contact_email:
+        # Always update contact_email for vendor notifications
+        user_update["contact_email"] = profile.contact_email
+        
+        # Only update primary email if user registered via WhatsApp (has phone-based email)
+        current_email = user.get("email", "")
+        is_phone_email = current_email.isdigit() or user.get("phone_login") or not current_email
+        if is_phone_email:
+            user_update["email"] = profile.contact_email
+    
     await db.users.update_one(
         {"user_id": user["user_id"]},
-        {"$set": {"company_name": profile.company_name}}
+        {"$set": user_update}
     )
     
     vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
