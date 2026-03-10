@@ -588,6 +588,67 @@ The `update_vendor_profile` endpoint was overwriting the `email` field (which st
 
 ### Test Report: /app/backend/tests/test_phone_login_preservation.py (2 tests passed)
 
+## WhatsApp Message Management System (NEW - Mar 10, 2026)
+
+### Feature Overview
+Admin dashboard to view WhatsApp conversations and send messages/broadcasts to vendors.
+
+### Backend Implementation (`/app/backend/server.py`):
+**New Endpoints:**
+- `GET /api/admin/whatsapp/conversations` - List all conversations with pagination and search
+- `GET /api/admin/whatsapp/conversations/{phone}` - Get messages for a specific phone
+- `POST /api/admin/whatsapp/send` - Send a message to a phone number
+- `POST /api/admin/whatsapp/broadcast` - Send bulk messages to multiple numbers
+- `GET /api/admin/whatsapp/stats` - Get messaging statistics
+- `POST /api/admin/whatsapp/grant-access/{user_id}` - Grant WhatsApp admin access to a user
+- `POST /api/admin/whatsapp/revoke-access/{user_id}` - Revoke access
+- `GET /api/admin/whatsapp/users-with-access` - List users with WhatsApp admin access
+
+**Message Storage:**
+- `store_whatsapp_message()` function stores all incoming/outgoing messages
+- Messages stored in `whatsapp_messages` collection
+- Tracks: phone, direction, type, content, vendor_id, vendor_name, read status
+
+**Access Control:**
+- Admin users have access by default
+- Other users need `whatsapp_admin: true` flag on their user record
+
+### Frontend Implementation:
+**Files:**
+- `/app/frontend/src/pages/WhatsAppInbox.jsx` - Full inbox UI with conversations and messaging
+- `/app/frontend/src/pages/WhatsAppAdmin.jsx` - Updated with "Open Inbox" button
+
+**Features:**
+- Conversation list with search
+- Real-time chat view with message history
+- Send text messages to vendors
+- Broadcast messages to multiple vendors
+- Stats dashboard (total messages, incoming, outgoing, unread)
+- Mark messages as read when viewed
+
+**Routes:**
+- `/admin/whatsapp` - Integration settings and testing
+- `/admin/whatsapp/inbox` - Message inbox (new)
+
+### Database Schema:
+**whatsapp_messages collection:**
+```json
+{
+  "message_id": "msg_xxx",
+  "phone": "+919876543210",
+  "phone_normalized": "9876543210",
+  "direction": "incoming|outgoing",
+  "message_type": "text|image|audio|template",
+  "content": "message text",
+  "vendor_id": "vendor_xxx",
+  "vendor_name": "Company Name",
+  "template_name": null,
+  "sent_by": "user_id (for outgoing)",
+  "read": true|false,
+  "created_at": "ISO timestamp"
+}
+```
+
 ## Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders

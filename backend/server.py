@@ -8106,6 +8106,374 @@ async def export_analytics_csv(user: dict = Depends(get_current_user)):
         headers={"Content-Disposition": "attachment; filename=orders_export.csv"}
     )
 
+# ============== WHATSAPP ADMIN - MESSAGE MANAGEMENT ==============
+
+class WhatsAppMessageCreate(BaseModel):
+    """Model for sending WhatsApp messages"""
+    phone: str
+    message: str
+    template_name: Optional[str] = None
+    template_params: Optional[List[str]] = None
+
+class WhatsAppBroadcast(BaseModel):
+    """Model for broadcast messages"""
+    phone_numbers: List[str]
+    message: str
+    template_name: Optional[str] = None
+    template_params: Optional[List[str]] = None
+
+# Store for WhatsApp messages
+async def store_whatsapp_message(
+    phone: str,
+    direction: str,  # "incoming" or "outgoing"
+    message_type: str,  # "text", "image", "audio", "template"
+    content: str,
+    vendor_id: Optional[str] = None,
+    vendor_name: Optional[str] = None,
+    message_id: Optional[str] = None,
+    template_name: Optional[str] = None,
+    sent_by: Optional[str] = None  # user_id of sender for outgoing
+):
+    """Store a WhatsApp message in the database"""
+    msg_doc = {
+        "message_id": message_id or f"msg_{uuid.uuid4().hex[:12]}",
+        "phone": phone,
+        "phone_normalized": phone.replace("+", "").replace(" ", "").replace("-", "")[-10:],
+        "direction": direction,
+        "message_type": message_type,
+        "content": content[:2000] if content else "",  # Limit content length
+        "vendor_id": vendor_id,
+        "vendor_name": vendor_name,
+        "template_name": template_name,
+        "sent_by": sent_by,
+        "read": direction == "outgoing",  # Outgoing messages are auto-read
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.whatsapp_messages.insert_one(msg_doc)
+    return msg_doc["message_id"]
+
+@api_router.get("/admin/whatsapp/conversations")
+async def admin_get_whatsapp_conversations(
+    user: dict = Depends(get_current_user),
+    page: int = 1,
+    limit: int = 50,
+    search: Optional[str] = None
+):
+    """Get list of WhatsApp conversations grouped by phone number"""
+    if user["role"] != UserRole.ADMIN and not user.get("whatsapp_admin"):
+        raise HTTPException(status_code=403, detail="WhatsApp admin access required")
+    
+    # Build aggregation pipeline
+    pipeline = [
+        {"$sort": {"created_at": -1}},
+        {"$group": {
+            "_id": "$phone_normalized",
+            "phone": {"$first": "$phone"},
+            "vendor_id": {"$first": "$vendor_id"},
+            "vendor_name": {"$first": "$vendor_name"},
+            "last_message": {"$first": "$content"},
+            "last_message_time": {"$first": "$created_at"},
+            "last_direction": {"$first": "$direction"},
+            "message_count": {"$sum": 1},
+            "unread_count": {"$sum": {"$cond": [{"$and": [{"$eq": ["$direction", "incoming"]}, {"$eq": ["$read", False]}]}, 1, 0]}}
+        }},
+        {"$sort": {"last_message_time": -1}}
+    ]
+    
+    # Add search filter if provided
+    if search:
+        pipeline.insert(0, {
+            "$match": {
+                "$or": [
+                    {"phone": {"$regex": search, "$options": "i"}},
+                    {"vendor_name": {"$regex": search, "$options": "i"}},
+                    {"content": {"$regex": search, "$options": "i"}}
+                ]
+            }
+        })
+    
+    # Add pagination
+    pipeline.extend([
+        {"$skip": (page - 1) * limit},
+        {"$limit": limit}
+    ])
+    
+    conversations = await db.whatsapp_messages.aggregate(pipeline).to_list(limit)
+    
+    # Get total count
+    count_pipeline = [
+        {"$group": {"_id": "$phone_normalized"}},
+        {"$count": "total"}
+    ]
+    count_result = await db.whatsapp_messages.aggregate(count_pipeline).to_list(1)
+    total = count_result[0]["total"] if count_result else 0
+    
+    return {
+        "conversations": conversations,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "pages": (total + limit - 1) // limit
+    }
+
+@api_router.get("/admin/whatsapp/conversations/{phone}")
+async def admin_get_conversation_messages(
+    phone: str,
+    user: dict = Depends(get_current_user),
+    page: int = 1,
+    limit: int = 100
+):
+    """Get messages for a specific phone number"""
+    if user["role"] != UserRole.ADMIN and not user.get("whatsapp_admin"):
+        raise HTTPException(status_code=403, detail="WhatsApp admin access required")
+    
+    # Normalize phone number
+    phone_normalized = phone.replace("+", "").replace(" ", "").replace("-", "")[-10:]
+    
+    # Get messages
+    messages = await db.whatsapp_messages.find(
+        {"phone_normalized": phone_normalized},
+        {"_id": 0}
+    ).sort("created_at", -1).skip((page - 1) * limit).limit(limit).to_list(limit)
+    
+    # Reverse to show oldest first in conversation view
+    messages.reverse()
+    
+    # Mark incoming messages as read
+    await db.whatsapp_messages.update_many(
+        {"phone_normalized": phone_normalized, "direction": "incoming", "read": False},
+        {"$set": {"read": True}}
+    )
+    
+    # Get vendor info
+    vendor = await db.vendors.find_one(
+        {"phone": {"$regex": phone_normalized}},
+        {"_id": 0, "vendor_id": 1, "company_name": 1, "city": 1, "state": 1}
+    )
+    
+    # Get total message count
+    total = await db.whatsapp_messages.count_documents({"phone_normalized": phone_normalized})
+    
+    return {
+        "messages": messages,
+        "vendor": vendor,
+        "phone": phone,
+        "total": total,
+        "page": page,
+        "limit": limit
+    }
+
+@api_router.post("/admin/whatsapp/send")
+async def admin_send_whatsapp_message(
+    msg: WhatsAppMessageCreate,
+    user: dict = Depends(get_current_user)
+):
+    """Send a WhatsApp message to a phone number"""
+    if user["role"] != UserRole.ADMIN and not user.get("whatsapp_admin"):
+        raise HTTPException(status_code=403, detail="WhatsApp admin access required")
+    
+    if not whatsapp_service.is_configured():
+        raise HTTPException(status_code=503, detail="WhatsApp service not configured")
+    
+    # Normalize phone number
+    phone = msg.phone.replace(" ", "").replace("-", "")
+    if not phone.startswith("+"):
+        if phone.startswith("91"):
+            phone = f"+{phone}"
+        else:
+            phone = f"+91{phone}"
+    
+    # Get vendor info for storing
+    phone_normalized = phone.replace("+", "")[-10:]
+    vendor = await db.vendors.find_one(
+        {"phone": {"$regex": phone_normalized}},
+        {"_id": 0, "vendor_id": 1, "company_name": 1}
+    )
+    
+    # Send message
+    if msg.template_name:
+        # Send template message
+        result = await whatsapp_service.send_template_message(
+            phone, 
+            msg.template_name, 
+            msg.template_params or []
+        )
+        message_type = "template"
+        content = f"[Template: {msg.template_name}] {msg.message}"
+    else:
+        # Send regular text message
+        result = await whatsapp_service.send_text_message(phone, msg.message)
+        message_type = "text"
+        content = msg.message
+    
+    # Store the outgoing message
+    await store_whatsapp_message(
+        phone=phone,
+        direction="outgoing",
+        message_type=message_type,
+        content=content,
+        vendor_id=vendor.get("vendor_id") if vendor else None,
+        vendor_name=vendor.get("company_name") if vendor else None,
+        template_name=msg.template_name,
+        sent_by=user["user_id"]
+    )
+    
+    return {
+        "success": result,
+        "phone": phone,
+        "message": "Message sent successfully" if result else "Failed to send message"
+    }
+
+@api_router.post("/admin/whatsapp/broadcast")
+async def admin_broadcast_whatsapp(
+    broadcast: WhatsAppBroadcast,
+    user: dict = Depends(get_current_user)
+):
+    """Send a broadcast message to multiple phone numbers"""
+    if user["role"] != UserRole.ADMIN and not user.get("whatsapp_admin"):
+        raise HTTPException(status_code=403, detail="WhatsApp admin access required")
+    
+    if not whatsapp_service.is_configured():
+        raise HTTPException(status_code=503, detail="WhatsApp service not configured")
+    
+    results = {
+        "success": [],
+        "failed": []
+    }
+    
+    for phone in broadcast.phone_numbers:
+        try:
+            # Normalize phone
+            phone_clean = phone.replace(" ", "").replace("-", "")
+            if not phone_clean.startswith("+"):
+                if phone_clean.startswith("91"):
+                    phone_clean = f"+{phone_clean}"
+                else:
+                    phone_clean = f"+91{phone_clean}"
+            
+            # Get vendor info
+            phone_normalized = phone_clean.replace("+", "")[-10:]
+            vendor = await db.vendors.find_one(
+                {"phone": {"$regex": phone_normalized}},
+                {"_id": 0, "vendor_id": 1, "company_name": 1}
+            )
+            
+            # Send message
+            if broadcast.template_name:
+                result = await whatsapp_service.send_template_message(
+                    phone_clean,
+                    broadcast.template_name,
+                    broadcast.template_params or []
+                )
+                message_type = "template"
+                content = f"[Template: {broadcast.template_name}] {broadcast.message}"
+            else:
+                result = await whatsapp_service.send_text_message(phone_clean, broadcast.message)
+                message_type = "text"
+                content = broadcast.message
+            
+            if result:
+                results["success"].append(phone)
+                # Store outgoing message
+                await store_whatsapp_message(
+                    phone=phone_clean,
+                    direction="outgoing",
+                    message_type=message_type,
+                    content=content,
+                    vendor_id=vendor.get("vendor_id") if vendor else None,
+                    vendor_name=vendor.get("company_name") if vendor else None,
+                    template_name=broadcast.template_name,
+                    sent_by=user["user_id"]
+                )
+            else:
+                results["failed"].append(phone)
+                
+        except Exception as e:
+            logger.error(f"Failed to send to {phone}: {str(e)}")
+            results["failed"].append(phone)
+    
+    return {
+        "total": len(broadcast.phone_numbers),
+        "success_count": len(results["success"]),
+        "failed_count": len(results["failed"]),
+        "results": results
+    }
+
+@api_router.get("/admin/whatsapp/stats")
+async def admin_get_whatsapp_stats(user: dict = Depends(get_current_user)):
+    """Get WhatsApp messaging statistics"""
+    if user["role"] != UserRole.ADMIN and not user.get("whatsapp_admin"):
+        raise HTTPException(status_code=403, detail="WhatsApp admin access required")
+    
+    # Get counts
+    total_messages = await db.whatsapp_messages.count_documents({})
+    incoming = await db.whatsapp_messages.count_documents({"direction": "incoming"})
+    outgoing = await db.whatsapp_messages.count_documents({"direction": "outgoing"})
+    unread = await db.whatsapp_messages.count_documents({"direction": "incoming", "read": False})
+    
+    # Get unique conversations
+    unique_phones = await db.whatsapp_messages.distinct("phone_normalized")
+    
+    # Get messages today
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_messages = await db.whatsapp_messages.count_documents({
+        "created_at": {"$gte": today_start.isoformat()}
+    })
+    
+    return {
+        "total_messages": total_messages,
+        "incoming": incoming,
+        "outgoing": outgoing,
+        "unread": unread,
+        "unique_conversations": len(unique_phones),
+        "messages_today": today_messages
+    }
+
+@api_router.post("/admin/whatsapp/grant-access/{user_id}")
+async def admin_grant_whatsapp_access(user_id: str, user: dict = Depends(get_current_user)):
+    """Grant WhatsApp admin access to a user"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"whatsapp_admin": True}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"message": "WhatsApp admin access granted"}
+
+@api_router.post("/admin/whatsapp/revoke-access/{user_id}")
+async def admin_revoke_whatsapp_access(user_id: str, user: dict = Depends(get_current_user)):
+    """Revoke WhatsApp admin access from a user"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    result = await db.users.update_one(
+        {"user_id": user_id},
+        {"$set": {"whatsapp_admin": False}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {"message": "WhatsApp admin access revoked"}
+
+@api_router.get("/admin/whatsapp/users-with-access")
+async def admin_get_whatsapp_users(user: dict = Depends(get_current_user)):
+    """Get list of users with WhatsApp admin access"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    users = await db.users.find(
+        {"whatsapp_admin": True},
+        {"_id": 0, "user_id": 1, "email": 1, "name": 1, "role": 1}
+    ).to_list(100)
+    
+    return users
+
 # ============== DISPUTE RESOLUTION SYSTEM ==============
 
 class DisputeType:
@@ -10180,6 +10548,29 @@ async def _process_whatsapp_message(sender: str, msg_type: str, parsed: dict):
     user = None
     if vendor:
         user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0})
+    
+    # Store incoming message for admin dashboard
+    message_content = ""
+    if msg_type == "text":
+        message_content = parsed.get("text", "")
+    elif msg_type == "image":
+        message_content = f"[Image] {parsed.get('caption', '')}"
+    elif msg_type == "audio":
+        message_content = "[Voice Message]"
+    elif msg_type == "document":
+        message_content = f"[Document] {parsed.get('filename', '')}"
+    elif msg_type == "button_reply":
+        message_content = f"[Button: {parsed.get('button_title', '')}]"
+    
+    await store_whatsapp_message(
+        phone=sender,
+        direction="incoming",
+        message_type=msg_type,
+        content=message_content,
+        vendor_id=vendor.get("vendor_id") if vendor else None,
+        vendor_name=vendor.get("company_name") if vendor else None,
+        message_id=parsed.get("message_id")
+    )
     
     # Handle voice/audio messages
     if msg_type == "audio" and parsed.get("audio_url"):

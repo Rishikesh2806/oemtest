@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
-import { MessageSquare, Send, CheckCircle, XCircle, Phone, RefreshCw, Bell } from 'lucide-react';
+import { MessageSquare, Send, CheckCircle, XCircle, Phone, RefreshCw, Bell, Inbox } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
@@ -142,10 +143,18 @@ export default function WhatsAppAdmin() {
           <h1 className="text-2xl font-bold text-slate-800">WhatsApp Integration</h1>
           <p className="text-slate-500">Manage WhatsApp Business messaging via Gupshup</p>
         </div>
-        <Button variant="outline" onClick={fetchStatus} data-testid="refresh-status-btn">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh Status
-        </Button>
+        <div className="flex gap-2">
+          <Link to="/admin/whatsapp/inbox">
+            <Button className="bg-green-600 hover:bg-green-700" data-testid="open-inbox-btn">
+              <Inbox className="w-4 h-4 mr-2" />
+              Open Inbox
+            </Button>
+          </Link>
+          <Button variant="outline" onClick={fetchStatus} data-testid="refresh-status-btn">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh Status
+          </Button>
+        </div>
       </div>
 
       {/* Status Card */}
