@@ -510,7 +510,83 @@ export default function WhatsAppInbox() {
                                 : 'bg-white text-slate-800 rounded-bl-none shadow-sm'
                             }`}
                           >
-                            <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                            {/* Media Content */}
+                            {msg.media_url && msg.message_type === 'image' && (
+                              <div className="mb-2">
+                                <img 
+                                  src={msg.media_url} 
+                                  alt="Shared image" 
+                                  className="rounded-lg max-w-full max-h-64 object-contain cursor-pointer hover:opacity-90 transition-opacity"
+                                  onClick={() => window.open(msg.media_url, '_blank')}
+                                />
+                              </div>
+                            )}
+                            
+                            {msg.media_url && msg.message_type === 'video' && (
+                              <div className="mb-2">
+                                <video 
+                                  src={msg.media_url} 
+                                  controls 
+                                  className="rounded-lg max-w-full max-h-64"
+                                  preload="metadata"
+                                >
+                                  Your browser does not support video playback.
+                                </video>
+                              </div>
+                            )}
+                            
+                            {msg.media_url && msg.message_type === 'audio' && (
+                              <div className="mb-2">
+                                <audio 
+                                  src={msg.media_url} 
+                                  controls 
+                                  className="w-full min-w-[200px]"
+                                >
+                                  Your browser does not support audio playback.
+                                </audio>
+                              </div>
+                            )}
+                            
+                            {msg.media_url && msg.message_type === 'document' && (
+                              <div className="mb-2">
+                                <a 
+                                  href={msg.media_url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className={`flex items-center gap-2 p-2 rounded ${
+                                    msg.direction === 'outgoing' ? 'bg-green-700' : 'bg-slate-100'
+                                  }`}
+                                >
+                                  <FileText className={`w-8 h-8 ${
+                                    msg.direction === 'outgoing' ? 'text-green-200' : 'text-slate-500'
+                                  }`} />
+                                  <div>
+                                    <p className={`text-sm font-medium ${
+                                      msg.direction === 'outgoing' ? 'text-white' : 'text-slate-700'
+                                    }`}>
+                                      {msg.filename || 'Document'}
+                                    </p>
+                                    <p className={`text-xs ${
+                                      msg.direction === 'outgoing' ? 'text-green-200' : 'text-slate-500'
+                                    }`}>
+                                      Click to download
+                                    </p>
+                                  </div>
+                                </a>
+                              </div>
+                            )}
+                            
+                            {/* Text Content */}
+                            {msg.content && !msg.content.startsWith('[Image]') && !msg.content.startsWith('[Video]') && !msg.content.startsWith('[Voice') && !msg.content.startsWith('[Document]') && (
+                              <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                            )}
+                            
+                            {/* Caption for media */}
+                            {msg.content && (msg.content.startsWith('[Image]') || msg.content.startsWith('[Video]')) && msg.content.length > 8 && (
+                              <p className="text-sm whitespace-pre-wrap">{msg.content.replace(/^\[(Image|Video)\]\s*/, '')}</p>
+                            )}
+                            
+                            {/* Timestamp */}
                             <div className={`flex items-center justify-end gap-1 mt-1 ${
                               msg.direction === 'outgoing' ? 'text-green-200' : 'text-slate-400'
                             }`}>

@@ -8126,13 +8126,17 @@ class WhatsAppBroadcast(BaseModel):
 async def store_whatsapp_message(
     phone: str,
     direction: str,  # "incoming" or "outgoing"
-    message_type: str,  # "text", "image", "audio", "template"
+    message_type: str,  # "text", "image", "audio", "video", "document", "template"
     content: str,
     vendor_id: Optional[str] = None,
     vendor_name: Optional[str] = None,
     message_id: Optional[str] = None,
     template_name: Optional[str] = None,
-    sent_by: Optional[str] = None  # user_id of sender for outgoing
+    sent_by: Optional[str] = None,  # user_id of sender for outgoing
+    media_url: Optional[str] = None,  # URL for images, videos, documents
+    media_type: Optional[str] = None,  # mime type of media
+    thumbnail_url: Optional[str] = None,  # thumbnail for videos
+    filename: Optional[str] = None  # original filename for documents
 ):
     """Store a WhatsApp message in the database"""
     msg_doc = {
@@ -8147,6 +8151,10 @@ async def store_whatsapp_message(
         "template_name": template_name,
         "sent_by": sent_by,
         "read": direction == "outgoing",  # Outgoing messages are auto-read
+        "media_url": media_url,
+        "media_type": media_type,
+        "thumbnail_url": thumbnail_url,
+        "filename": filename,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.whatsapp_messages.insert_one(msg_doc)
@@ -10602,14 +10610,29 @@ async def _process_whatsapp_message(sender: str, msg_type: str, parsed: dict):
     
     # Store incoming message for admin dashboard
     message_content = ""
+    media_url = None
+    media_type = None
+    filename = None
+    
     if msg_type == "text":
         message_content = parsed.get("text", "")
     elif msg_type == "image":
         message_content = f"[Image] {parsed.get('caption', '')}"
+        media_url = parsed.get("image_url")
+        media_type = parsed.get("mime_type", "image/jpeg")
     elif msg_type == "audio":
         message_content = "[Voice Message]"
+        media_url = parsed.get("audio_url")
+        media_type = parsed.get("mime_type", "audio/ogg")
+    elif msg_type == "video":
+        message_content = f"[Video] {parsed.get('caption', '')}"
+        media_url = parsed.get("video_url")
+        media_type = parsed.get("mime_type", "video/mp4")
     elif msg_type == "document":
-        message_content = f"[Document] {parsed.get('filename', '')}"
+        filename = parsed.get("filename", "document")
+        message_content = f"[Document] {filename}"
+        media_url = parsed.get("document_url")
+        media_type = parsed.get("mime_type", "application/octet-stream")
     elif msg_type == "button_reply":
         message_content = f"[Button: {parsed.get('button_title', '')}]"
     
@@ -10620,7 +10643,10 @@ async def _process_whatsapp_message(sender: str, msg_type: str, parsed: dict):
         content=message_content,
         vendor_id=vendor.get("vendor_id") if vendor else None,
         vendor_name=vendor.get("company_name") if vendor else None,
-        message_id=parsed.get("message_id")
+        message_id=parsed.get("message_id"),
+        media_url=media_url,
+        media_type=media_type,
+        filename=filename
     )
     
     # Handle voice/audio messages
