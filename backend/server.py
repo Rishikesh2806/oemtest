@@ -8290,16 +8290,42 @@ async def admin_send_whatsapp_message(
         {"_id": 0, "vendor_id": 1, "company_name": 1}
     )
     
+    # Template definitions with actual content
+    TEMPLATE_CONTENTS = {
+        "machine_upload_reminder": """Hello Team {0},
+📷Send photos of your machines to receive RFQs based on the machines you have.
+Or
+✏️ Edit details at https://oemlinker.com/vendor/machines
+Thanks Team OEMLinker""",
+        "rfq_notification": """Hello {0},
+🔔 New RFQ matching your capabilities is available!
+Check OEMLinker to view details and submit your quote.
+Team OEMLinker""",
+        "quote_reminder": """Hello {0},
+⏰ Reminder: You have pending RFQs waiting for your quote.
+Submit your quotes at https://oemlinker.com
+Team OEMLinker"""
+    }
+    
     # Send message
-    if msg.template_name:
-        # Send template message
-        result = await whatsapp_service.send_template_message(
-            phone, 
-            msg.template_name, 
-            msg.template_params or []
-        )
+    if msg.template_name and msg.template_name in TEMPLATE_CONTENTS:
+        # Format template with parameters
+        template_content = TEMPLATE_CONTENTS[msg.template_name]
+        params = msg.template_params or []
+        try:
+            formatted_message = template_content.format(*params)
+        except (IndexError, KeyError):
+            formatted_message = template_content
+        
+        # Send as regular text message (formatted template)
+        result = await whatsapp_service.send_text_message(phone, formatted_message)
         message_type = "template"
-        content = f"[Template: {msg.template_name}] {msg.message}"
+        content = formatted_message
+    elif msg.template_name:
+        # Unknown template - send the message as-is
+        result = await whatsapp_service.send_text_message(phone, msg.message)
+        message_type = "template"
+        content = msg.message
     else:
         # Send regular text message
         result = await whatsapp_service.send_text_message(phone, msg.message)
@@ -8336,6 +8362,23 @@ async def admin_broadcast_whatsapp(
     if not whatsapp_service.is_configured():
         raise HTTPException(status_code=503, detail="WhatsApp service not configured")
     
+    # Template definitions
+    TEMPLATE_CONTENTS = {
+        "machine_upload_reminder": """Hello Team {0},
+📷Send photos of your machines to receive RFQs based on the machines you have.
+Or
+✏️ Edit details at https://oemlinker.com/vendor/machines
+Thanks Team OEMLinker""",
+        "rfq_notification": """Hello {0},
+🔔 New RFQ matching your capabilities is available!
+Check OEMLinker to view details and submit your quote.
+Team OEMLinker""",
+        "quote_reminder": """Hello {0},
+⏰ Reminder: You have pending RFQs waiting for your quote.
+Submit your quotes at https://oemlinker.com
+Team OEMLinker"""
+    }
+    
     results = {
         "success": [],
         "failed": []
@@ -8359,20 +8402,28 @@ async def admin_broadcast_whatsapp(
             )
             
             # Send message
-            if broadcast.template_name:
-                result = await whatsapp_service.send_template_message(
-                    phone_clean,
-                    broadcast.template_name,
-                    broadcast.template_params or []
-                )
+            if broadcast.template_name and broadcast.template_name in TEMPLATE_CONTENTS:
+                # Format template with parameters
+                template_content = TEMPLATE_CONTENTS[broadcast.template_name]
+                params = broadcast.template_params or []
+                try:
+                    formatted_message = template_content.format(*params)
+                except (IndexError, KeyError):
+                    formatted_message = template_content
+                
+                result = await whatsapp_service.send_text_message(phone_clean, formatted_message)
                 message_type = "template"
-                content = f"[Template: {broadcast.template_name}] {broadcast.message}"
+                content = formatted_message
+            elif broadcast.template_name:
+                result = await whatsapp_service.send_text_message(phone_clean, broadcast.message)
+                message_type = "template"
+                content = broadcast.message
             else:
                 result = await whatsapp_service.send_text_message(phone_clean, broadcast.message)
                 message_type = "text"
                 content = broadcast.message
             
-            if result:
+            if result and result.get("success"):
                 results["success"].append(phone)
                 # Store outgoing message
                 await store_whatsapp_message(
