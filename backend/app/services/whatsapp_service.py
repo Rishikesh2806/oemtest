@@ -278,17 +278,18 @@ class WhatsAppService:
             "apikey": self.api_key
         }
         
-        # Build template message
-        template_message = {
+        # Build template message in Gupshup format
+        import json
+        template_message = json.dumps({
             "id": template_id,
             "params": params or []
-        }
+        })
         
         payload = {
             "channel": "whatsapp",
             "source": self.source_number,
             "destination": to_number,
-            "template": str(template_message),
+            "template": template_message,
             "src.name": self.app_name
         }
         

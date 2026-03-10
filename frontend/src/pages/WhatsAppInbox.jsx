@@ -7,13 +7,50 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
 import { api } from '../App';
 import { 
   MessageSquare, Send, Search, RefreshCw, Phone, User, Clock,
   ChevronLeft, ArrowUp, Check, CheckCheck, AlertCircle, Users,
-  Inbox, MessageCircle, BarChart3, Megaphone, X
+  Inbox, MessageCircle, BarChart3, Megaphone, X, FileText, Zap
 } from 'lucide-react';
+
+// Pre-defined templates (add your Gupshup approved templates here)
+const TEMPLATES = [
+  {
+    id: 'machine_upload_reminder',
+    name: 'Machine Upload Reminder',
+    preview: `Hello Team {{1}},
+📷Send photos of your machines to receive RFQs based on the machines you have.
+Or 
+✏️ Edit details at https://oemlinker.com/vendor/machines
+Thanks Team OEMLinker`,
+    paramCount: 1,
+    paramLabels: ['Team/Company Name']
+  },
+  {
+    id: 'rfq_notification',
+    name: 'New RFQ Notification',
+    preview: `Hello {{1}},
+🔔 New RFQ matching your capabilities is available!
+Check OEMLinker to view details and submit your quote.
+Team OEMLinker`,
+    paramCount: 1,
+    paramLabels: ['Vendor Name']
+  },
+  {
+    id: 'quote_reminder',
+    name: 'Quote Reminder',
+    preview: `Hello {{1}},
+⏰ Reminder: You have pending RFQs waiting for your quote.
+Submit your quotes at https://oemlinker.com
+Team OEMLinker`,
+    paramCount: 1,
+    paramLabels: ['Vendor Name']
+  }
+];
 
 export default function WhatsAppInbox() {
   const navigate = useNavigate();
@@ -33,6 +70,16 @@ export default function WhatsAppInbox() {
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [broadcastNumbers, setBroadcastNumbers] = useState('');
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
+  
+  // Template state
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [templateParams, setTemplateParams] = useState([]);
+  const [templatePhone, setTemplatePhone] = useState('');
+  const [sendingTemplate, setSendingTemplate] = useState(false);
+  const [useBroadcastTemplate, setUseBroadcastTemplate] = useState(false);
+  const [broadcastTemplate, setBroadcastTemplate] = useState(null);
+  const [broadcastTemplateParams, setBroadcastTemplateParams] = useState([]);
 
   useEffect(() => {
     fetchStats();
@@ -118,27 +165,43 @@ export default function WhatsAppInbox() {
   };
 
   const sendBroadcast = async () => {
-    if (!broadcastMessage.trim() || !broadcastNumbers.trim()) {
-      toast.error('Please enter message and phone numbers');
-      return;
-    }
-    
     const numbers = broadcastNumbers.split('\n').map(n => n.trim()).filter(n => n);
     if (numbers.length === 0) {
       toast.error('Please enter at least one phone number');
       return;
     }
     
+    // Check if using template
+    if (useBroadcastTemplate && broadcastTemplate) {
+      if (broadcastTemplateParams.some(p => !p.trim())) {
+        toast.error('Please fill all template parameters');
+        return;
+      }
+    } else if (!broadcastMessage.trim()) {
+      toast.error('Please enter a message');
+      return;
+    }
+    
     setSendingBroadcast(true);
     try {
-      const response = await api.post('/admin/whatsapp/broadcast', {
+      const payload = {
         phone_numbers: numbers,
-        message: broadcastMessage
-      });
+        message: useBroadcastTemplate ? `[Template: ${broadcastTemplate.name}]` : broadcastMessage
+      };
+      
+      if (useBroadcastTemplate && broadcastTemplate) {
+        payload.template_name = broadcastTemplate.id;
+        payload.template_params = broadcastTemplateParams;
+      }
+      
+      const response = await api.post('/admin/whatsapp/broadcast', payload);
       toast.success(`Broadcast sent: ${response.data.success_count}/${response.data.total} successful`);
       setBroadcastOpen(false);
       setBroadcastMessage('');
       setBroadcastNumbers('');
+      setUseBroadcastTemplate(false);
+      setBroadcastTemplate(null);
+      setBroadcastTemplateParams([]);
       fetchStats();
     } catch (error) {
       console.error('Failed to send broadcast:', error);
@@ -146,6 +209,56 @@ export default function WhatsAppInbox() {
     } finally {
       setSendingBroadcast(false);
     }
+  };
+
+  // Send template message
+  const sendTemplateMessage = async () => {
+    if (!selectedTemplate || !templatePhone.trim()) {
+      toast.error('Please select template and enter phone number');
+      return;
+    }
+    
+    if (templateParams.some(p => !p.trim())) {
+      toast.error('Please fill all template parameters');
+      return;
+    }
+    
+    setSendingTemplate(true);
+    try {
+      await api.post('/admin/whatsapp/send', {
+        phone: templatePhone,
+        message: `[Template: ${selectedTemplate.name}]`,
+        template_name: selectedTemplate.id,
+        template_params: templateParams
+      });
+      toast.success('Template message sent!');
+      setTemplateOpen(false);
+      setSelectedTemplate(null);
+      setTemplateParams([]);
+      setTemplatePhone('');
+      fetchStats();
+      if (selectedConversation) {
+        fetchMessages(selectedConversation.phone);
+      }
+    } catch (error) {
+      console.error('Failed to send template:', error);
+      toast.error('Failed to send template message');
+    } finally {
+      setSendingTemplate(false);
+    }
+  };
+
+  // Handle template selection
+  const handleTemplateSelect = (templateId) => {
+    const template = TEMPLATES.find(t => t.id === templateId);
+    setSelectedTemplate(template);
+    setTemplateParams(new Array(template?.paramCount || 0).fill(''));
+  };
+
+  const handleBroadcastTemplateSelect = (templateId) => {
+    const template = TEMPLATES.find(t => t.id === templateId);
+    setBroadcastTemplate(template);
+    setBroadcastTemplateParams(new Array(template?.paramCount || 0).fill(''));
   };
 
   const formatTime = (timestamp) => {
@@ -177,6 +290,14 @@ export default function WhatsAppInbox() {
             >
               <RefreshCw className="w-4 h-4 mr-2" />
               Refresh
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => setTemplateOpen(true)}
+              data-testid="template-btn"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Send Template
             </Button>
             <Button 
               className="bg-green-600 hover:bg-green-700"
@@ -458,9 +579,7 @@ export default function WhatsAppInbox() {
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Phone Numbers (one per line)
-                </label>
+                <Label className="mb-1">Phone Numbers (one per line)</Label>
                 <Textarea
                   placeholder="919876543210&#10;919876543211&#10;919876543212"
                   value={broadcastNumbers}
@@ -472,21 +591,78 @@ export default function WhatsAppInbox() {
                   Enter phone numbers with country code, one per line
                 </p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Message
-                </label>
-                <Textarea
-                  placeholder="Enter your broadcast message..."
-                  value={broadcastMessage}
-                  onChange={(e) => setBroadcastMessage(e.target.value)}
-                  rows={4}
-                  data-testid="broadcast-message-input"
+              
+              {/* Template Toggle */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="use-template"
+                  checked={useBroadcastTemplate}
+                  onChange={(e) => setUseBroadcastTemplate(e.target.checked)}
+                  className="rounded"
                 />
-                <p className="text-xs text-slate-500 mt-1">
-                  Use *text* for bold, _text_ for italic
-                </p>
+                <Label htmlFor="use-template" className="cursor-pointer">
+                  Use Template Message
+                </Label>
               </div>
+              
+              {useBroadcastTemplate ? (
+                <>
+                  <div>
+                    <Label className="mb-1">Select Template</Label>
+                    <Select onValueChange={handleBroadcastTemplateSelect}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {TEMPLATES.map(t => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {broadcastTemplate && (
+                    <>
+                      <div className="p-3 bg-slate-50 rounded-lg text-sm text-slate-600">
+                        <p className="font-medium mb-1">Preview:</p>
+                        <p>{broadcastTemplate.preview}</p>
+                      </div>
+                      
+                      {broadcastTemplate.paramLabels.map((label, idx) => (
+                        <div key={idx}>
+                          <Label className="mb-1">{label} (Parameter {idx + 1})</Label>
+                          <Input
+                            placeholder={`Enter ${label.toLowerCase()}`}
+                            value={broadcastTemplateParams[idx] || ''}
+                            onChange={(e) => {
+                              const newParams = [...broadcastTemplateParams];
+                              newParams[idx] = e.target.value;
+                              setBroadcastTemplateParams(newParams);
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </>
+              ) : (
+                <div>
+                  <Label className="mb-1">Message</Label>
+                  <Textarea
+                    placeholder="Enter your broadcast message..."
+                    value={broadcastMessage}
+                    onChange={(e) => setBroadcastMessage(e.target.value)}
+                    rows={4}
+                    data-testid="broadcast-message-input"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    Use *text* for bold, _text_ for italic
+                  </p>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setBroadcastOpen(false)}>
@@ -507,6 +683,93 @@ export default function WhatsAppInbox() {
                   <>
                     <Send className="w-4 h-4 mr-2" />
                     Send Broadcast
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Template Message Dialog */}
+        <Dialog open={templateOpen} onOpenChange={setTemplateOpen}>
+          <DialogContent className="max-w-lg" data-testid="template-dialog">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-blue-600" />
+                Send Template Message
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <Label className="mb-1">Phone Number</Label>
+                <Input
+                  placeholder="919876543210"
+                  value={templatePhone}
+                  onChange={(e) => setTemplatePhone(e.target.value)}
+                  data-testid="template-phone-input"
+                />
+              </div>
+              
+              <div>
+                <Label className="mb-1">Select Template</Label>
+                <Select onValueChange={handleTemplateSelect}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose a template" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TEMPLATES.map(t => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {selectedTemplate && (
+                <>
+                  <div className="p-3 bg-blue-50 rounded-lg text-sm text-slate-700 border border-blue-200">
+                    <p className="font-medium mb-1 text-blue-800">Template Preview:</p>
+                    <p className="whitespace-pre-wrap">{selectedTemplate.preview}</p>
+                  </div>
+                  
+                  {selectedTemplate.paramLabels.map((label, idx) => (
+                    <div key={idx}>
+                      <Label className="mb-1">{label} (replaces {`{{${idx + 1}}}`})</Label>
+                      <Input
+                        placeholder={`Enter ${label.toLowerCase()}`}
+                        value={templateParams[idx] || ''}
+                        onChange={(e) => {
+                          const newParams = [...templateParams];
+                          newParams[idx] = e.target.value;
+                          setTemplateParams(newParams);
+                        }}
+                        data-testid={`template-param-${idx}`}
+                      />
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setTemplateOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                onClick={sendTemplateMessage}
+                disabled={sendingTemplate || !selectedTemplate}
+                className="bg-blue-600 hover:bg-blue-700"
+                data-testid="send-template-btn"
+              >
+                {sendingTemplate ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 mr-2" />
+                    Send Template
                   </>
                 )}
               </Button>
