@@ -685,6 +685,7 @@ class VendorProfile(BaseModel):
     pincode: Optional[str] = None
     country: Optional[str] = None
     phone: Optional[str] = None
+    contact_email: Optional[str] = None
     website: Optional[str] = None
     certifications: List[str] = []
     industries: List[str] = []
@@ -2259,18 +2260,20 @@ async def update_vendor_profile(profile: VendorProfileCreate, user: dict = Depen
         raise HTTPException(status_code=404, detail="Vendor profile not found")
     
     # Sync company_name to user record
-    # Note: contact_email is for notifications, not for login
-    # Only update user email if user doesn't have one yet (WhatsApp-registered users)
+    # Note: contact_email is for notifications only
+    # NEVER change the primary email field for phone_login users - it breaks their login
     user_update = {"company_name": profile.company_name}
     if profile.contact_email:
-        # Always update contact_email for vendor notifications
+        # Always update contact_email for notifications (separate from login email)
         user_update["contact_email"] = profile.contact_email
         
-        # Only update primary email if user registered via WhatsApp (has phone-based email)
-        current_email = user.get("email", "")
-        is_phone_email = current_email.isdigit() or user.get("phone_login") or not current_email
-        if is_phone_email:
-            user_update["email"] = profile.contact_email
+        # Do NOT update primary email if user has phone_login flag
+        # This preserves their phone number as login ID
+        if not user.get("phone_login"):
+            # Only for regular email users who don't have a login email yet
+            current_email = user.get("email", "")
+            if not current_email or current_email == "":
+                user_update["email"] = profile.contact_email
     
     await db.users.update_one(
         {"user_id": user["user_id"]},
@@ -9477,18 +9480,28 @@ Example: yourname@company.com
 
 _{get_bilingual_message("try_again", vendor)}_"""
     
-    # Check if email already exists for another user
-    existing = await db.users.find_one({"email": email, "user_id": {"$ne": user["user_id"]}})
+    # Check if email already exists for another user (check contact_email, not login email)
+    existing = await db.users.find_one({
+        "contact_email": email, 
+        "user_id": {"$ne": user["user_id"]}
+    })
     if existing:
         return f"""❌ *Email Already Registered*
 
 This email is already associated with another account.
 Please use a different email address."""
     
-    # Update user email
+    # Update user contact_email only (DO NOT change login email for phone_login users)
+    # The phone number in 'email' field is their login ID - preserve it
+    user_update = {"contact_email": email}
+    
+    # Only update primary email if user does NOT have phone_login
+    if not user.get("phone_login"):
+        user_update["email"] = email
+    
     await db.users.update_one(
         {"user_id": user["user_id"]},
-        {"$set": {"email": email, "contact_email": email}}
+        {"$set": user_update}
     )
     
     # Update vendor contact email

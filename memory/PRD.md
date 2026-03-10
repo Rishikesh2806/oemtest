@@ -569,6 +569,25 @@ Added email field to vendor profile page on the web app. Email syncs correctly w
 
 ### Test Report: /app/backend/tests/test_vendor_profile_email.py (8 tests passed)
 
+## Phone Login Preservation Bug Fix (Mar 10, 2026)
+
+### Issue
+Phone number login was breaking after vendors updated their email via web app or WhatsApp.
+
+### Root Cause
+The `update_vendor_profile` endpoint was overwriting the `email` field (which stores phone number for WhatsApp users) with the new `contact_email`.
+
+### Fix Applied:
+1. **VendorProfile model**: Added `contact_email` field to response model
+2. **update_vendor_profile endpoint**: 
+   - Never changes `email` field for users with `phone_login=True`
+   - Only updates `contact_email` field for notifications
+3. **WhatsApp email update flow**: 
+   - Same fix - preserves phone number in `email` field
+   - Only updates `contact_email` for notifications
+
+### Test Report: /app/backend/tests/test_phone_login_preservation.py (2 tests passed)
+
 ## Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders
