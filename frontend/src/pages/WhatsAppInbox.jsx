@@ -49,7 +49,7 @@ export default function WhatsAppInbox() {
 
   const fetchStats = async () => {
     try {
-      const response = await api.get('/api/admin/whatsapp/stats');
+      const response = await api.get('/admin/whatsapp/stats');
       setStats(response.data);
     } catch (error) {
       console.error('Failed to fetch stats:', error);
@@ -59,7 +59,7 @@ export default function WhatsAppInbox() {
   const fetchConversations = async (search = '') => {
     setLoading(true);
     try {
-      const response = await api.get('/api/admin/whatsapp/conversations', {
+      const response = await api.get('/admin/whatsapp/conversations', {
         params: { search, limit: 50 }
       });
       setConversations(response.data.conversations || []);
@@ -77,7 +77,7 @@ export default function WhatsAppInbox() {
   const fetchMessages = async (phone) => {
     setLoadingMessages(true);
     try {
-      const response = await api.get(`/api/admin/whatsapp/conversations/${phone}`);
+      const response = await api.get(`/admin/whatsapp/conversations/${phone}`);
       setMessages(response.data.messages || []);
       setSelectedConversation({
         phone,
@@ -101,7 +101,7 @@ export default function WhatsAppInbox() {
     
     setSending(true);
     try {
-      await api.post('/api/admin/whatsapp/send', {
+      await api.post('/admin/whatsapp/send', {
         phone: selectedConversation.phone,
         message: newMessage
       });
@@ -131,7 +131,7 @@ export default function WhatsAppInbox() {
     
     setSendingBroadcast(true);
     try {
-      const response = await api.post('/api/admin/whatsapp/broadcast', {
+      const response = await api.post('/admin/whatsapp/broadcast', {
         phone_numbers: numbers,
         message: broadcastMessage
       });
