@@ -1963,6 +1963,142 @@ async def logout(request: Request, response: Response):
     response.delete_cookie("session_token", path="/")
     return {"message": "Logged out successfully"}
 
+# ============== MAGIC LINK (WhatsApp Auto-Login) ==============
+
+# Magic link tokens are stored in MongoDB for persistence across instances
+
+@api_router.post("/auth/magic-link/generate")
+async def generate_magic_link(phone: str):
+    """Generate a magic link token for WhatsApp users (internal use only)"""
+    # Normalize phone
+    phone_normalized = phone.replace("+", "").replace(" ", "").replace("-", "")
+    phone_10digit = phone_normalized[-10:] if len(phone_normalized) >= 10 else phone_normalized
+    
+    # Find vendor by phone
+    vendor = await db.vendors.find_one(
+        {"phone": {"$regex": phone_10digit}},
+        {"_id": 0, "user_id": 1, "vendor_id": 1}
+    )
+    
+    if not vendor:
+        return {"success": False, "error": "Vendor not found"}
+    
+    user = await db.users.find_one({"user_id": vendor["user_id"]}, {"_id": 0})
+    if not user:
+        return {"success": False, "error": "User not found"}
+    
+    # Generate secure token
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)  # 15 min expiry
+    
+    # Store token in MongoDB
+    await db.magic_link_tokens.insert_one({
+        "token": token,
+        "user_id": user["user_id"],
+        "phone": phone_normalized,
+        "expires_at": expires_at.isoformat(),
+        "used": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Clean up expired tokens periodically
+    await db.magic_link_tokens.delete_many({
+        "expires_at": {"$lt": datetime.now(timezone.utc).isoformat()}
+    })
+    
+    return {
+        "success": True,
+        "token": token,
+        "expires_in_minutes": 15
+    }
+
+
+@api_router.get("/auth/magic-link/verify/{token}")
+async def verify_magic_link(token: str, response: Response):
+    """Verify magic link token and create session"""
+    # Find token in MongoDB
+    token_doc = await db.magic_link_tokens.find_one({"token": token}, {"_id": 0})
+    
+    if not token_doc:
+        raise HTTPException(status_code=400, detail="Invalid or expired link")
+    
+    # Check expiry
+    expires_at = datetime.fromisoformat(token_doc["expires_at"])
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    
+    if datetime.now(timezone.utc) > expires_at:
+        await db.magic_link_tokens.delete_one({"token": token})
+        raise HTTPException(status_code=400, detail="Link has expired. Please request a new one via WhatsApp.")
+    
+    # Check if already used
+    if token_doc.get("used"):
+        raise HTTPException(status_code=400, detail="Link has already been used. Please request a new one via WhatsApp.")
+    
+    # Mark as used atomically
+    result = await db.magic_link_tokens.update_one(
+        {"token": token, "used": False},
+        {"$set": {"used": True, "used_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Link has already been used. Please request a new one via WhatsApp.")
+    
+    # Get user
+    user = await db.users.find_one({"user_id": token_doc["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Create JWT token
+    jwt_token = create_jwt_token(user["user_id"], user["email"], user["role"])
+    
+    # Create session
+    session_token = secrets.token_urlsafe(32)
+    await db.user_sessions.insert_one({
+        "user_id": user["user_id"],
+        "session_token": session_token,
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "login_method": "magic_link"
+    })
+    
+    # Set cookie
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7*24*60*60
+    )
+    
+    # Update last login
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"last_login": datetime.now(timezone.utc).isoformat()}, "$inc": {"login_count": 1}}
+    )
+    
+    # Delete used token
+    await db.magic_link_tokens.delete_one({"token": token})
+    
+    return {
+        "success": True,
+        "access_token": jwt_token,
+        "token_type": "bearer",
+        "user": {
+            "user_id": user["user_id"],
+            "email": user["email"],
+            "name": user["name"],
+            "role": user["role"],
+            "picture": user.get("picture"),
+            "company_name": user.get("company_name"),
+            "email_verified": user.get("email_verified", False),
+            "phone_login": user.get("phone_login", False)
+        },
+        "redirect_url": f"/{user['role']}/dashboard"
+    }
+
 # ============== PASSWORD SECURITY ENDPOINTS ==============
 
 class PasswordChangeRequest(BaseModel):
@@ -2800,7 +2936,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://oemlinker-preview.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -5280,7 +5416,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://oemlinker-preview.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -5421,7 +5557,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://oemlinker-preview.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -5673,7 +5809,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://oemlinker-preview.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://mfg-hub-5.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -5955,7 +6091,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://oemlinker-preview.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -6086,7 +6222,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://oemlinker-preview.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(
@@ -12975,6 +13111,7 @@ async def process_whatsapp_command(
 *machines* - View machines & set availability
 *profile* - View your vendor profile
 *email* - Add/update your email address
+*login* - Get instant login link for web dashboard 🔗
 *help* - Show this menu{help_regional}
 
 📷 *Add Machine:* Send a photo of your machine!
@@ -13379,6 +13516,52 @@ Example: yourname@company.com
 _{messages.get('why_needed', 'Required for RFQ match and quotation updates')}_
 
 ⏱️ _You have 10 minutes to respond_"""
+    
+    # Login command - Magic link for web dashboard auto-login
+    login_variants = ["login", "web login", "dashboard", "open dashboard", "website", "web", 
+                      "login link", "auto login", "sign in", "signin", "लॉगिन", "वेबसाइट",
+                      "open web", "get link", "quick login", "magic link"]
+    if matches_command(text_normalized, login_variants):
+        if not vendor:
+            return f"""🔗 *Web Login*
+
+You're not registered yet. To access the web dashboard:
+
+1️⃣ Register by sending your *GST Certificate* photo
+2️⃣ Then type *login* to get your instant login link
+
+Or register directly: {BASE_URL}/register"""
+        
+        # Generate magic link token
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+        
+        # Store in MongoDB for persistence across instances
+        await db.magic_link_tokens.insert_one({
+            "token": token,
+            "user_id": user.get("user_id") if user else vendor.get("user_id"),
+            "phone": sender,
+            "expires_at": expires_at.isoformat(),
+            "used": False,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        login_url = f"{BASE_URL}/magic-login?token={token}"
+        
+        return f"""🔗 *Instant Web Login*
+
+Click below to login to your dashboard instantly:
+
+👉 {login_url}
+
+⏱️ _Link expires in 15 minutes_
+🔒 _One-time use only_
+
+📱 Once logged in, you can:
+• View & respond to RFQs
+• Submit quotes
+• Manage your machines
+• Track orders"""
     
     # Machine Availability status update commands (handles "1 busy", "machine 1 busy", "all free" etc.)
     # MUST be checked BEFORE machines command to handle "machine 1 busy" pattern
