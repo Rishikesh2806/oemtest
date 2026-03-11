@@ -13055,48 +13055,59 @@ Send a photo of your *GST Certificate* to register instantly!
 
 Or visit: {BASE_URL}/register"""
         
-        # Get matched RFQs for this vendor
-        rfqs = await db.rfqs.find(
-            {
-                "status": {"$in": ["submitted", "matching", "quoted"]},
-                "matched_vendors.vendor_id": vendor.get("vendor_id")
-            },
-            {"_id": 0, "rfq_id": 1, "title": 1, "material_type": 1, "quantity": 1, "urgency": 1, "matched_vendors": 1, "drawing_ids": 1, "ai_analysis": 1}
-        ).sort("created_at", -1).limit(5).to_list(length=5)
-        
-        if not rfqs:
-            return f"📭 No matching RFQs found at the moment.\n\n🔗 View all RFQs: {BASE_URL}/vendor/dashboard"
-        
-        response = "📋 *Your Matched RFQs:*\n_Reply with 'rfq <ID>' to see details & drawings_\n\n"
-        for rfq in rfqs:
-            rfq_id = rfq.get('rfq_id', '')
-            short_id = rfq_id.replace("rfq_", "")[:8] if rfq_id else ""
-            urgency_emoji = {"urgent": "🔴", "high": "🟠", "normal": "🟢", "low": "🔵"}.get(rfq.get("urgency", "normal"), "🟢")
+        try:
+            # Get matched RFQs for this vendor
+            vendor_id = vendor.get("vendor_id")
+            logger.info(f"RFQs command: Looking for RFQs matched to vendor_id={vendor_id}")
             
-            # Find match score for this vendor
-            match_score = 0
-            for m in rfq.get("matched_vendors", []):
-                if m.get("vendor_id") == vendor.get("vendor_id"):
-                    match_score = m.get("match_score", 0)
-                    break
+            rfqs = await db.rfqs.find(
+                {
+                    "status": {"$in": ["submitted", "matching", "quoted"]},
+                    "matched_vendors.vendor_id": vendor_id
+                },
+                {"_id": 0, "rfq_id": 1, "title": 1, "material_type": 1, "quantity": 1, "urgency": 1, "matched_vendors": 1, "drawing_ids": 1, "ai_analysis": 1}
+            ).sort("created_at", -1).limit(5).to_list(length=5)
             
-            # Check for drawings
-            has_drawings = len(rfq.get("drawing_ids", [])) > 0
-            drawing_indicator = "📎" if has_drawings else ""
+            logger.info(f"RFQs command: Found {len(rfqs)} RFQs")
             
-            # Get recommended processes from AI analysis
-            ai_analysis = rfq.get("ai_analysis", {})
-            processes = ai_analysis.get("recommended_processes", [])[:2]
-            process_str = f"({', '.join(processes)})" if processes else ""
+            if not rfqs:
+                return f"📭 No matching RFQs found at the moment.\n\n🔗 View all RFQs: {BASE_URL}/vendor/dashboard"
             
-            response += f"{urgency_emoji} *{rfq.get('title', 'Untitled')[:30]}* {drawing_indicator}\n"
-            response += f"   {rfq.get('material_type', 'N/A')} | Qty: {rfq.get('quantity', 'N/A')} | Match: {match_score}%\n"
-            if process_str:
-                response += f"   🔧 {process_str}\n"
-            response += f"   ➡️ Reply: *rfq {short_id}*\n\n"
-        
-        response += f"📱 _Full details on dashboard:_ {BASE_URL}/vendor/dashboard"
-        return response
+            response = "📋 *Your Matched RFQs:*\n_Reply with 'rfq <ID>' to see details & drawings_\n\n"
+            for rfq in rfqs:
+                rfq_id = rfq.get('rfq_id', '')
+                short_id = rfq_id.replace("rfq_", "")[:8] if rfq_id else ""
+                urgency_emoji = {"urgent": "🔴", "high": "🟠", "normal": "🟢", "low": "🔵"}.get(rfq.get("urgency", "normal"), "🟢")
+                
+                # Find match score for this vendor
+                match_score = 0
+                matched_vendors = rfq.get("matched_vendors") or []
+                for m in matched_vendors:
+                    if m and m.get("vendor_id") == vendor_id:
+                        match_score = m.get("match_score", 0)
+                        break
+                
+                # Check for drawings
+                drawing_ids = rfq.get("drawing_ids") or []
+                has_drawings = len(drawing_ids) > 0
+                drawing_indicator = "📎" if has_drawings else ""
+                
+                # Get recommended processes from AI analysis
+                ai_analysis = rfq.get("ai_analysis") or {}
+                processes = (ai_analysis.get("recommended_processes") or [])[:2]
+                process_str = f"({', '.join(processes)})" if processes else ""
+                
+                response += f"{urgency_emoji} *{rfq.get('title', 'Untitled')[:30]}* {drawing_indicator}\n"
+                response += f"   {rfq.get('material_type', 'N/A')} | Qty: {rfq.get('quantity', 'N/A')} | Match: {match_score}%\n"
+                if process_str:
+                    response += f"   🔧 {process_str}\n"
+                response += f"   ➡️ Reply: *rfq {short_id}*\n\n"
+            
+            response += f"📱 _Full details on dashboard:_ {BASE_URL}/vendor/dashboard"
+            return response
+        except Exception as e:
+            logger.error(f"RFQs command error: {str(e)}", exc_info=True)
+            return f"⚠️ Error loading RFQs. Please try again or visit: {BASE_URL}/vendor/dashboard"
     
     # RFQ Details command - shows details and sends drawing if available
     if text.startswith("details ") or text.startswith("rfq ") or text.startswith("drawing "):
