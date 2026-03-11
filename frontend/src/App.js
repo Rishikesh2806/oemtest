@@ -33,6 +33,8 @@ import DisputesPage from "./pages/DisputesPage";
 import DisputeDetailPage from "./pages/DisputeDetailPage";
 import TermsOfService from "./pages/TermsOfService";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
+import DataDeletion from "./pages/DataDeletion";
+import DataDeletionStatus from "./pages/DataDeletionStatus";
 
 // Use window.location.origin for API calls - this ensures requests go to the same domain
 // This fixes issues where REACT_APP_BACKEND_URL might point to a different host
@@ -374,12 +376,14 @@ const AppRouter = () => {
         </ProtectedRoute>
       } />
       
-      {/* Catch all */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-      
       {/* Legal Pages */}
       <Route path="/terms-of-service" element={<TermsOfService />} />
       <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+      <Route path="/data-deletion" element={<DataDeletion />} />
+      <Route path="/data-deletion-status" element={<DataDeletionStatus />} />
+      
+      {/* Catch all - must be last */}
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 };

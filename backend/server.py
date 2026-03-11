@@ -2755,7 +2755,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://smart-matching-2.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://oemlinker-preview.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -5231,7 +5231,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://smart-matching-2.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://oemlinker-preview.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -5372,7 +5372,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://smart-matching-2.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://oemlinker-preview.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -5624,7 +5624,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://smart-matching-2.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://oemlinker-preview.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -5906,7 +5906,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://smart-matching-2.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://oemlinker-preview.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -6037,7 +6037,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://smart-matching-2.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://oemlinker-preview.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(
@@ -8532,6 +8532,289 @@ async def admin_get_whatsapp_users(user: dict = Depends(get_current_user)):
     ).to_list(100)
     
     return users
+
+# ============== META/WHATSAPP DATA DELETION COMPLIANCE ==============
+
+class DataDeletionRequest(BaseModel):
+    """Model for user data deletion request"""
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    reason: Optional[str] = None
+
+class DataDeletionCallback(BaseModel):
+    """Model for Meta's data deletion callback"""
+    signed_request: str
+
+import hmac
+import hashlib
+import base64
+
+def parse_signed_request(signed_request: str, app_secret: str) -> Optional[dict]:
+    """Parse and verify Meta's signed request"""
+    try:
+        encoded_sig, payload = signed_request.split('.', 1)
+        
+        # Decode signature
+        sig = base64.urlsafe_b64decode(encoded_sig + '==')
+        
+        # Decode payload
+        data = base64.urlsafe_b64decode(payload + '==')
+        data = json.loads(data)
+        
+        # Verify signature
+        expected_sig = hmac.new(
+            app_secret.encode('utf-8'),
+            payload.encode('utf-8'),
+            hashlib.sha256
+        ).digest()
+        
+        if hmac.compare_digest(sig, expected_sig):
+            return data
+        return None
+    except Exception as e:
+        logger.error(f"Error parsing signed request: {e}")
+        return None
+
+@api_router.post("/meta/data-deletion-callback")
+async def meta_data_deletion_callback(request: Request):
+    """
+    Meta/WhatsApp Data Deletion Callback URL
+    This endpoint is called by Meta when a user requests data deletion from Facebook/WhatsApp
+    
+    Required for WhatsApp Business API compliance
+    """
+    try:
+        form_data = await request.form()
+        signed_request = form_data.get("signed_request", "")
+        
+        # Get app secret from environment (you need to set this)
+        app_secret = os.environ.get("META_APP_SECRET", "")
+        
+        if not app_secret:
+            logger.warning("META_APP_SECRET not configured")
+            # Still process the request but log warning
+        
+        # Parse the signed request
+        user_data = None
+        if app_secret and signed_request:
+            user_data = parse_signed_request(signed_request, app_secret)
+        
+        user_id = user_data.get("user_id") if user_data else None
+        
+        # Generate a confirmation code
+        confirmation_code = f"DEL_{uuid.uuid4().hex[:12].upper()}"
+        
+        # Store the deletion request
+        deletion_record = {
+            "confirmation_code": confirmation_code,
+            "meta_user_id": user_id,
+            "status": "pending",
+            "requested_at": datetime.now(timezone.utc).isoformat(),
+            "source": "meta_callback"
+        }
+        await db.data_deletion_requests.insert_one(deletion_record)
+        
+        # Log the deletion request
+        logger.info(f"Meta data deletion callback received. Confirmation: {confirmation_code}")
+        
+        # Return the required response format
+        # Meta expects a URL where the user can check the status and a confirmation code
+        base_url = os.environ.get("FRONTEND_URL", "https://oemlinker.com")
+        status_url = f"{base_url}/data-deletion-status?code={confirmation_code}"
+        
+        return {
+            "url": status_url,
+            "confirmation_code": confirmation_code
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing Meta data deletion callback: {e}")
+        raise HTTPException(status_code=500, detail="Error processing deletion request")
+
+@api_router.get("/data-deletion/status/{confirmation_code}")
+async def get_data_deletion_status(confirmation_code: str):
+    """Get the status of a data deletion request"""
+    record = await db.data_deletion_requests.find_one(
+        {"confirmation_code": confirmation_code},
+        {"_id": 0}
+    )
+    
+    if not record:
+        raise HTTPException(status_code=404, detail="Deletion request not found")
+    
+    return {
+        "confirmation_code": record.get("confirmation_code"),
+        "status": record.get("status"),
+        "requested_at": record.get("requested_at"),
+        "completed_at": record.get("completed_at"),
+        "message": get_deletion_status_message(record.get("status"))
+    }
+
+def get_deletion_status_message(status: str) -> str:
+    """Get human-readable status message"""
+    messages = {
+        "pending": "Your data deletion request has been received and is being processed.",
+        "in_progress": "Your data is currently being deleted from our systems.",
+        "completed": "Your data has been successfully deleted from our systems.",
+        "failed": "There was an error processing your request. Please contact support."
+    }
+    return messages.get(status, "Unknown status")
+
+@api_router.post("/data-deletion/request")
+async def request_data_deletion(request_data: DataDeletionRequest):
+    """
+    User-initiated data deletion request
+    Users can request deletion of their data via phone number or email
+    """
+    if not request_data.phone and not request_data.email:
+        raise HTTPException(status_code=400, detail="Please provide phone number or email")
+    
+    # Find the user
+    user = None
+    if request_data.email:
+        user = await db.users.find_one({"email": request_data.email}, {"_id": 0})
+    if not user and request_data.phone:
+        phone_normalized = request_data.phone.replace("+", "").replace(" ", "").replace("-", "")[-10:]
+        user = await db.users.find_one(
+            {"$or": [
+                {"email": phone_normalized},
+                {"phone": {"$regex": phone_normalized}},
+                {"contact_email": request_data.email} if request_data.email else {"_id": None}
+            ]},
+            {"_id": 0}
+        )
+    
+    # Generate confirmation code
+    confirmation_code = f"DEL_{uuid.uuid4().hex[:12].upper()}"
+    
+    # Store the deletion request
+    deletion_record = {
+        "confirmation_code": confirmation_code,
+        "phone": request_data.phone,
+        "email": request_data.email,
+        "user_id": user.get("user_id") if user else None,
+        "reason": request_data.reason,
+        "status": "pending",
+        "requested_at": datetime.now(timezone.utc).isoformat(),
+        "source": "user_request"
+    }
+    await db.data_deletion_requests.insert_one(deletion_record)
+    
+    logger.info(f"User data deletion request received. Confirmation: {confirmation_code}")
+    
+    return {
+        "success": True,
+        "confirmation_code": confirmation_code,
+        "message": "Your data deletion request has been received. You will receive confirmation once the deletion is complete.",
+        "status_url": f"/data-deletion-status?code={confirmation_code}"
+    }
+
+@api_router.post("/admin/data-deletion/process/{confirmation_code}")
+async def process_data_deletion(confirmation_code: str, user: dict = Depends(get_current_user)):
+    """
+    Admin endpoint to process a data deletion request
+    This actually deletes the user's data from the database
+    """
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Find the deletion request
+    record = await db.data_deletion_requests.find_one({"confirmation_code": confirmation_code})
+    if not record:
+        raise HTTPException(status_code=404, detail="Deletion request not found")
+    
+    if record.get("status") == "completed":
+        return {"message": "This deletion request has already been processed"}
+    
+    # Update status to in_progress
+    await db.data_deletion_requests.update_one(
+        {"confirmation_code": confirmation_code},
+        {"$set": {"status": "in_progress"}}
+    )
+    
+    deleted_data = {
+        "users": 0,
+        "vendors": 0,
+        "machines": 0,
+        "whatsapp_messages": 0,
+        "quotes": 0
+    }
+    
+    try:
+        user_id = record.get("user_id")
+        phone = record.get("phone")
+        email = record.get("email")
+        
+        if user_id:
+            # Delete user data
+            result = await db.users.delete_one({"user_id": user_id})
+            deleted_data["users"] = result.deleted_count
+            
+            # Delete vendor profile
+            vendor = await db.vendors.find_one({"user_id": user_id})
+            if vendor:
+                vendor_id = vendor.get("vendor_id")
+                await db.vendors.delete_one({"vendor_id": vendor_id})
+                deleted_data["vendors"] = 1
+                
+                # Delete machines
+                result = await db.machines.delete_many({"vendor_id": vendor_id})
+                deleted_data["machines"] = result.deleted_count
+                
+                # Delete quotes
+                result = await db.quotes.delete_many({"vendor_id": vendor_id})
+                deleted_data["quotes"] = result.deleted_count
+        
+        # Delete WhatsApp messages by phone
+        if phone:
+            phone_normalized = phone.replace("+", "").replace(" ", "").replace("-", "")[-10:]
+            result = await db.whatsapp_messages.delete_many({"phone_normalized": phone_normalized})
+            deleted_data["whatsapp_messages"] = result.deleted_count
+        
+        # Update deletion request status
+        await db.data_deletion_requests.update_one(
+            {"confirmation_code": confirmation_code},
+            {
+                "$set": {
+                    "status": "completed",
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "deleted_data": deleted_data,
+                    "processed_by": user["user_id"]
+                }
+            }
+        )
+        
+        logger.info(f"Data deletion completed for {confirmation_code}. Deleted: {deleted_data}")
+        
+        return {
+            "success": True,
+            "message": "Data deletion completed successfully",
+            "deleted_data": deleted_data
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing data deletion: {e}")
+        await db.data_deletion_requests.update_one(
+            {"confirmation_code": confirmation_code},
+            {"$set": {"status": "failed", "error": str(e)}}
+        )
+        raise HTTPException(status_code=500, detail=f"Error processing deletion: {str(e)}")
+
+@api_router.get("/admin/data-deletion/requests")
+async def get_data_deletion_requests(
+    user: dict = Depends(get_current_user),
+    status: Optional[str] = None
+):
+    """Get all data deletion requests (admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    query = {}
+    if status:
+        query["status"] = status
+    
+    requests = await db.data_deletion_requests.find(query, {"_id": 0}).sort("requested_at", -1).to_list(100)
+    return requests
 
 # ============== DISPUTE RESOLUTION SYSTEM ==============
 

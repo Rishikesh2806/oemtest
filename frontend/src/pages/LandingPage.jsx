@@ -264,6 +264,9 @@ const LandingPage = () => {
                 <Link to="/privacy-policy" className="hover:text-orange-400 transition-colors">
                   Privacy Policy
                 </Link>
+                <Link to="/data-deletion" className="hover:text-orange-400 transition-colors">
+                  Data Deletion
+                </Link>
                 <a href="mailto:support@oemlinker.com" className="hover:text-orange-400 transition-colors">
                   Contact
                 </a>
