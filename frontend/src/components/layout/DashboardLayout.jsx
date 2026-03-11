@@ -238,8 +238,8 @@ const DashboardLayout = ({ children }) => {
 
         {/* Page Content */}
         <div className="p-6 lg:p-8 pt-20 lg:pt-8">
-          {/* Email Verification Banner */}
-          {user && user.email_verified === false && (
+          {/* Email Verification Banner - Only show for non-WhatsApp users with unverified email */}
+          {user && user.email_verified === false && !user.phone_login && (
             <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between" data-testid="email-verification-banner">
               <div className="flex items-center gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0" />
@@ -261,6 +261,28 @@ const DashboardLayout = ({ children }) => {
                   <Mail className="w-4 h-4 mr-2" />
                 )}
                 Resend Email
+              </Button>
+            </div>
+          )}
+          
+          {/* WhatsApp User - Prompt to add email for notifications */}
+          {user && user.phone_login && !user.contact_email && (
+            <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between" data-testid="add-email-banner">
+              <div className="flex items-center gap-3">
+                <Mail className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                <div>
+                  <p className="text-blue-800 font-medium">Add your email for notifications</p>
+                  <p className="text-blue-700 text-sm">Get RFQ matches, quote updates, and important alerts via email.</p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.location.href = user.role === 'vendor' ? '/vendor/profile' : '/buyer/profile'}
+                className="border-blue-400 text-blue-700 hover:bg-blue-100 flex-shrink-0"
+              >
+                <Mail className="w-4 h-4 mr-2" />
+                Add Email
               </Button>
             </div>
           )}

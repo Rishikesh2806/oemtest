@@ -662,6 +662,8 @@ class UserResponse(BaseModel):
     picture: Optional[str] = None
     company_name: Optional[str] = None
     email_verified: bool = False
+    phone_login: bool = False  # True if user registered via WhatsApp
+    contact_email: Optional[str] = None  # Email for notifications (for WhatsApp users)
     created_at: str
 
 class LoginRequest(BaseModel):
@@ -1383,6 +1385,8 @@ async def register(user_data: UserCreate, request: Request):
             picture=None,
             company_name=vendor_company_name,
             email_verified=False,
+            phone_login=False,
+            contact_email=None,
             created_at=user_doc["created_at"]
         )
     )
@@ -1676,6 +1680,8 @@ async def login(login_data: LoginRequest, request: Request):
             picture=user.get("picture"),
             company_name=user.get("company_name"),
             email_verified=user.get("email_verified", False),
+            phone_login=user.get("phone_login", False),
+            contact_email=user.get("contact_email"),
             created_at=user.get("created_at", datetime.now(timezone.utc).isoformat())
         )
     )
@@ -1737,6 +1743,8 @@ async def verify_otp_endpoint(otp_data: OTPVerifyRequest, request: Request):
             picture=user.get("picture"),
             company_name=user.get("company_name"),
             email_verified=user.get("email_verified", False),
+            phone_login=user.get("phone_login", False),
+            contact_email=user.get("contact_email"),
             created_at=user["created_at"]
         )
     )
@@ -1923,6 +1931,8 @@ async def get_me(user: dict = Depends(get_current_user)):
         "picture": user.get("picture"),
         "company_name": user.get("company_name"),
         "email_verified": user.get("email_verified", False),
+        "phone_login": user.get("phone_login", False),
+        "contact_email": user.get("contact_email"),
         "created_at": user["created_at"]
     }
 
