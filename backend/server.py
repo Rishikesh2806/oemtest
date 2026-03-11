@@ -1555,7 +1555,7 @@ async def login(login_data: LoginRequest, request: Request):
         # Get last 10 digits for lookup
         phone_10digit = normalized_phone[-10:] if len(normalized_phone) >= 10 else normalized_phone
         
-        # Try finding by 10-digit phone (primary method)
+        # Try finding by 10-digit phone (primary method for WhatsApp users)
         user = await db.users.find_one({"email": phone_10digit}, {"_id": 0})
         
         # Also try with 91 prefix for backward compatibility
@@ -1566,14 +1566,30 @@ async def login(login_data: LoginRequest, request: Request):
         if not user and normalized_phone != phone_10digit:
             user = await db.users.find_one({"email": normalized_phone}, {"_id": 0})
         
-        # For users who updated their email, check the 'phone' field
-        # These are phone_login users whose email was changed to a real email
+        # For WhatsApp users who updated their email, check the 'phone' field
         if not user:
-            # Try finding by phone field with various formats
+            # Try finding by phone field with various formats (WhatsApp users)
             user = await db.users.find_one({
                 "phone": {"$in": [phone_10digit, f"91{phone_10digit}", f"+91{phone_10digit}", normalized_phone]},
                 "phone_login": True
             }, {"_id": 0})
+        
+        # For any user with phone field (web-registered users who added phone)
+        if not user:
+            user = await db.users.find_one({
+                "phone": {"$in": [phone_10digit, f"91{phone_10digit}", f"+91{phone_10digit}", normalized_phone]}
+            }, {"_id": 0})
+        
+        # For web-registered users, check vendor profile phone field
+        if not user:
+            # Find vendor by phone number
+            vendor = await db.vendors.find_one({
+                "phone": {"$in": [phone_10digit, f"91{phone_10digit}", f"+91{phone_10digit}", normalized_phone, f"+91 {phone_10digit[:5]} {phone_10digit[5:]}"]}
+            }, {"_id": 0, "user_id": 1})
+            
+            if vendor:
+                # Get the associated user
+                user = await db.users.find_one({"user_id": vendor["user_id"]}, {"_id": 0})
     
     if not user:
         # Record failed attempt (use login_id even if not found to prevent enumeration)
