@@ -649,8 +649,66 @@ Admin dashboard to view WhatsApp conversations and send messages/broadcasts to v
 }
 ```
 
+## Meta Data Deletion Policy Compliance (NEW - Mar 11, 2026)
+
+### Feature Overview
+Meta (WhatsApp Business API) compliant data deletion system. Required for WhatsApp Business Platform compliance.
+
+### Implementation Details:
+
+**Frontend Pages:**
+- `/privacy-policy` - Comprehensive privacy policy with WhatsApp data handling info
+- `/data-deletion` - Data deletion request form + status check
+- `/data-deletion-status` - Status check page (accessed via URL with code param)
+
+**Backend Endpoints:**
+- `POST /api/data-deletion/request` - Submit deletion request (phone or email)
+- `GET /api/data-deletion/status/{code}` - Check deletion status
+- `POST /api/meta/data-deletion-callback` - Meta callback endpoint (returns URL + confirmation_code)
+- `POST /api/admin/data-deletion/process/{code}` - Admin endpoint to process deletion
+- `GET /api/admin/data-deletion/requests` - Admin endpoint to list all requests
+
+**Footer Links (LandingPage.jsx):**
+- Terms of Service
+- Privacy Policy
+- Data Deletion
+- Contact
+
+**Data Deletion Flow:**
+1. User submits request with phone number or email
+2. System generates confirmation code (DEL_XXXXXXXXXXXX)
+3. Request stored in `data_deletion_requests` collection with status "pending"
+4. User receives confirmation code to track status
+5. Admin can process deletion via admin endpoint
+6. Status updates to "in_progress" then "completed"
+
+**Meta Callback Format:**
+```json
+{
+  "url": "https://oemlinker.com/data-deletion-status?code=DEL_xxx",
+  "confirmation_code": "DEL_xxx"
+}
+```
+
+**Database Collection (data_deletion_requests):**
+```json
+{
+  "confirmation_code": "DEL_xxx",
+  "phone": "9876543210",
+  "email": "user@example.com",
+  "reason": "User provided reason",
+  "status": "pending|in_progress|completed|failed",
+  "requested_at": "ISO timestamp",
+  "processed_at": "ISO timestamp",
+  "completed_at": "ISO timestamp"
+}
+```
+
+### Test Report: /app/test_reports/iteration_20.json (100% pass - 28 tests)
+
 ## Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders
 - payment_transactions, messages, conversations
 - notifications, ratings
+- data_deletion_requests (NEW)
