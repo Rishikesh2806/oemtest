@@ -468,3 +468,151 @@ async def download_audio_from_url(audio_url: str) -> Optional[bytes]:
     except Exception as e:
         logger.error(f"Failed to download audio: {str(e)}")
     return None
+
+
+async def send_document_message(
+    to_number: str,
+    document_url: str,
+    filename: str,
+    caption: str = ""
+) -> Dict[str, Any]:
+    """
+    Send a document/file via WhatsApp using URL
+    
+    Args:
+        to_number: Recipient phone number
+        document_url: Public URL of the document
+        filename: Display filename
+        caption: Optional caption
+        
+    Returns:
+        API response dict
+    """
+    if not whatsapp_service.is_configured():
+        return {"success": False, "error": "WhatsApp not configured"}
+    
+    to_number = to_number.replace("+", "").replace(" ", "").replace("-", "")
+    
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "apikey": whatsapp_service.api_key
+    }
+    
+    import json
+    message_payload = json.dumps({
+        "type": "file",
+        "url": document_url,
+        "filename": filename,
+        "caption": caption
+    })
+    
+    payload = {
+        "channel": "whatsapp",
+        "source": whatsapp_service.source_number,
+        "destination": to_number,
+        "message": message_payload,
+        "src.name": whatsapp_service.app_name
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                whatsapp_service.api_url,
+                headers=headers,
+                data=payload,
+                timeout=60.0
+            )
+            
+            result = response.json() if response.text else {}
+            
+            if response.status_code in [200, 201, 202]:
+                logger.info(f"Document sent to {to_number[:6]}***: {filename}")
+                return {
+                    "success": True,
+                    "message_id": result.get("messageId"),
+                    "response": result
+                }
+            else:
+                logger.error(f"Document send failed: {result}")
+                return {
+                    "success": False,
+                    "error": result.get("message", "Send failed"),
+                    "response": result
+                }
+                
+    except Exception as e:
+        logger.error(f"Document send API error: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+async def send_image_message(
+    to_number: str,
+    image_url: str,
+    caption: str = ""
+) -> Dict[str, Any]:
+    """
+    Send an image via WhatsApp using URL
+    
+    Args:
+        to_number: Recipient phone number
+        image_url: Public URL of the image
+        caption: Optional caption
+        
+    Returns:
+        API response dict
+    """
+    if not whatsapp_service.is_configured():
+        return {"success": False, "error": "WhatsApp not configured"}
+    
+    to_number = to_number.replace("+", "").replace(" ", "").replace("-", "")
+    
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "apikey": whatsapp_service.api_key
+    }
+    
+    import json
+    message_payload = json.dumps({
+        "type": "image",
+        "originalUrl": image_url,
+        "previewUrl": image_url,
+        "caption": caption
+    })
+    
+    payload = {
+        "channel": "whatsapp",
+        "source": whatsapp_service.source_number,
+        "destination": to_number,
+        "message": message_payload,
+        "src.name": whatsapp_service.app_name
+    }
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                whatsapp_service.api_url,
+                headers=headers,
+                data=payload,
+                timeout=60.0
+            )
+            
+            result = response.json() if response.text else {}
+            
+            if response.status_code in [200, 201, 202]:
+                logger.info(f"Image sent to {to_number[:6]}***")
+                return {
+                    "success": True,
+                    "message_id": result.get("messageId"),
+                    "response": result
+                }
+            else:
+                logger.error(f"Image send failed: {result}")
+                return {
+                    "success": False,
+                    "error": result.get("message", "Send failed"),
+                    "response": result
+                }
+                
+    except Exception as e:
+        logger.error(f"Image send API error: {str(e)}")
+        return {"success": False, "error": str(e)}
