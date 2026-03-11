@@ -13044,6 +13044,17 @@ Send a photo of your *GST Certificate* to register instantly!{send_gst_regional}
                     *hindi_rfq, *tamil_rfq, *telugu_rfq, *marathi_rfq, *bengali_rfq, 
                     *gujarati_rfq, *kannada_rfq, *punjabi_rfq]
     if intent == "rfqs" or matches_command(text_normalized, rfq_variants):
+        # Check if user is a registered vendor
+        if not vendor:
+            return f"""📭 *You're not registered as a vendor yet!*
+
+To view RFQ opportunities, you need to register first.
+
+📸 *How to Register:*
+Send a photo of your *GST Certificate* to register instantly!
+
+Or visit: {BASE_URL}/register"""
+        
         # Get matched RFQs for this vendor
         rfqs = await db.rfqs.find(
             {
@@ -13204,6 +13215,15 @@ Send a photo of your *GST Certificate* to register instantly!{send_gst_regional}
                        *hindi_quotes, *tamil_quotes, *telugu_quotes, *marathi_quotes, 
                        *bengali_quotes, *gujarati_quotes, *kannada_quotes, *punjabi_quotes]
     if intent == "quotes" or matches_command(text_normalized, quotes_variants):
+        if not vendor:
+            return f"""📭 *You're not registered as a vendor yet!*
+
+To submit quotes, you need to register first.
+
+📸 Send a photo of your *GST Certificate* to register!
+
+Or visit: {BASE_URL}/register"""
+        
         quotes = await db.quotes.find(
             {"vendor_id": vendor.get("vendor_id")},
             {"_id": 0}
@@ -13235,6 +13255,15 @@ Send a photo of your *GST Certificate* to register instantly!{send_gst_regional}
                        *hindi_orders, *tamil_orders, *telugu_orders, *marathi_orders,
                        *bengali_orders, *gujarati_orders, *kannada_orders, *punjabi_orders]
     if intent == "orders" or matches_command(text_normalized, orders_variants):
+        if not vendor:
+            return f"""📭 *You're not registered as a vendor yet!*
+
+To receive orders, you need to register first.
+
+📸 Send a photo of your *GST Certificate* to register!
+
+Or visit: {BASE_URL}/register"""
+        
         orders = await db.orders.find(
             {"vendor_id": vendor.get("vendor_id"), "status": {"$nin": ["cancelled", "completed"]}},
             {"_id": 0}
@@ -13269,6 +13298,15 @@ Send a photo of your *GST Certificate* to register instantly!{send_gst_regional}
                         *hindi_profile, *tamil_profile, *telugu_profile, *marathi_profile,
                         *bengali_profile, *gujarati_profile, *kannada_profile, *punjabi_profile]
     if intent == "profile" or matches_command(text_normalized, profile_variants):
+        if not vendor:
+            return f"""👤 *You're not registered as a vendor yet!*
+
+To view your profile, you need to register first.
+
+📸 Send a photo of your *GST Certificate* to register!
+
+Or visit: {BASE_URL}/register"""
+        
         profile_regional = get_bilingual_message("profile", vendor)
         company_regional = get_bilingual_message("company_name", vendor)
         
@@ -13337,6 +13375,15 @@ _{messages.get('why_needed', 'Required for RFQ match and quotation updates')}_
     all_status_pattern = re.match(r'(?:all|sab|sabhi|सभी|सब)\s*(busy|available|free|maintenance|offline)', text_normalized)
     
     if availability_set_pattern or all_status_pattern:
+        if not vendor:
+            return f"""⚙️ *You're not registered as a vendor yet!*
+
+To manage machines, you need to register first.
+
+📸 Send a photo of your *GST Certificate* to register!
+
+Or visit: {BASE_URL}/register"""
+        
         machines = await db.machines.find(
             {"vendor_id": vendor.get("vendor_id"), "is_active": True},
             {"_id": 0, "machine_id": 1, "name": 1, "machine_type": 1, "availability_status": 1}
@@ -13403,6 +13450,15 @@ Type *machines* to see all machines."""
                          *hindi_machines, *tamil_machines, *telugu_machines, *marathi_machines,
                          *bengali_machines, *gujarati_machines, *kannada_machines, *punjabi_machines]
     if matches_command(text_normalized, machines_variants):
+        if not vendor:
+            return f"""🔧 *You're not registered as a vendor yet!*
+
+To add machines, you need to register first.
+
+📸 Send a photo of your *GST Certificate* to register!
+
+Or visit: {BASE_URL}/register"""
+        
         machines = await db.machines.find(
             {"vendor_id": vendor.get("vendor_id"), "is_active": True},
             {"_id": 0, "machine_id": 1, "name": 1, "machine_type": 1, "machine_category": 1, "brand": 1, "model": 1, "images": 1, "availability_status": 1}
