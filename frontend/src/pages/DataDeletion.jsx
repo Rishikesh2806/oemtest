@@ -369,6 +369,9 @@ export default function DataDeletion() {
             <h3 className="font-semibold text-slate-800 mb-3">Data Deletion Information</h3>
             <div className="space-y-3 text-sm text-slate-600">
               <p>
+                <strong>Business Entity:</strong> Simpson & Munro (I) Pvt Ltd (operating as OEMLinker)
+              </p>
+              <p>
                 <strong>Processing Time:</strong> Data deletion requests are typically processed within 30 days.
               </p>
               <p>

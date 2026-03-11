@@ -38,7 +38,7 @@ export default function PrivacyPolicy() {
                 <div>
                   <h2 className="text-xl font-semibold text-slate-800 mb-3">Introduction</h2>
                   <p className="text-slate-600 leading-relaxed">
-                    OEMLinker ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our on-demand manufacturing marketplace platform, including our website and WhatsApp Business integration.
+                    OEMLinker, operated by <strong>Simpson & Munro (I) Pvt Ltd</strong> ("we," "our," or "us"), is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our on-demand manufacturing marketplace platform, including our website and WhatsApp Business integration.
                   </p>
                 </div>
               </div>
@@ -195,9 +195,10 @@ export default function PrivacyPolicy() {
                     For privacy-related inquiries or to exercise your rights, contact us at:
                   </p>
                   <div className="space-y-2 text-slate-600">
+                    <p><strong>Business Entity:</strong> Simpson & Munro (I) Pvt Ltd</p>
                     <p><strong>Email:</strong> privacy@oemlinker.com</p>
                     <p><strong>WhatsApp:</strong> +91 98315 09919</p>
-                    <p><strong>Address:</strong> OEMLinker, India</p>
+                    <p><strong>Address:</strong> Kolkata, West Bengal, India</p>
                   </div>
                 </div>
               </div>

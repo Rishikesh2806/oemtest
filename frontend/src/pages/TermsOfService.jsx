@@ -43,7 +43,7 @@ const TermsOfService = () => {
               1. Introduction
             </h2>
             <p className="text-slate-600 leading-relaxed">
-              Welcome to OEMLinker ("Platform", "we", "us", or "our"). These Terms of Service ("Terms") govern your access to and use of our AI-powered on-demand manufacturing marketplace platform, including our website, mobile applications, and related services (collectively, the "Services").
+              Welcome to OEMLinker, operated by <strong>Simpson & Munro (I) Pvt Ltd</strong> ("Platform", "we", "us", or "our"). These Terms of Service ("Terms") govern your access to and use of our AI-powered on-demand manufacturing marketplace platform, including our website, mobile applications, and related services (collectively, the "Services").
             </p>
             <p className="text-slate-600 leading-relaxed mt-4">
               By accessing or using our Services, you agree to be bound by these Terms. If you do not agree to these Terms, please do not use our Services. These Terms constitute a legally binding agreement between you and OEMLinker.
@@ -199,8 +199,9 @@ const TermsOfService = () => {
               If you have any questions about these Terms of Service, please contact us:
             </p>
             <div className="mt-4 space-y-2 text-slate-600">
+              <p><strong>Business Entity:</strong> Simpson & Munro (I) Pvt Ltd</p>
               <p><strong>Email:</strong> legal@oemlinker.com</p>
-              <p><strong>Address:</strong> OEMLinker, Kolkata, West Bengal, India</p>
+              <p><strong>Address:</strong> Kolkata, West Bengal, India</p>
               <p><strong>Support:</strong> support@oemlinker.com</p>
             </div>
           </section>

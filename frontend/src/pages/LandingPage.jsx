@@ -271,7 +271,7 @@ const LandingPage = () => {
                   Contact
                 </a>
               </div>
-              <p className="text-sm">© 2026 OEMLinker. All rights reserved.</p>
+              <p className="text-sm">© 2026 Simpson & Munro (I) Pvt Ltd. All rights reserved.</p>
             </div>
           </div>
         </div>
