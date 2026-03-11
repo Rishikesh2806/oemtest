@@ -1,26 +1,47 @@
-# Models Package
-from app.models.user import (
-    UserRole, UserBase, UserCreate, UserResponse, LoginRequest, 
-    TokenResponse, UserProfileUpdate, PasswordChangeRequest,
-    PasswordResetRequest, PasswordResetConfirm, EmailVerificationRequest,
-    OTPVerifyRequest, TwoFactorToggle
+"""
+Models module - Pydantic models for API requests/responses
+"""
+from app.models.base import (
+    UserRole,
+    UserBase,
+    UserResponse,
+    LoginRequest,
+    TokenResponse,
+    RFQStatus,
+    SupplyType,
+    UrgencyLevel,
+    PaymentTerms,
+    Incoterms,
+    NotificationType,
+    OrderStatus,
+    DisputeStatus,
+    DisputeType,
 )
+
 from app.models.vendor import (
-    VendorProfile, PastExperience, VendorProfileCreate
+    VendorProfile,
+    VendorProfileCreate,
+    PastExperience,
 )
-from app.models.machine import (
-    Machine, MachineCreate, MachineAvailabilityUpdate, MACHINE_CATEGORIES
-)
-from app.models.rfq import (
-    RFQStatus, SupplyType, UrgencyLevel, PaymentTerms, Incoterms,
-    RFQ, RFQCreate, Drawing
-)
-from app.models.quote import (
-    Quote, QuoteCreate, NegotiationRequest
-)
-from app.models.order import (
-    OrderStatus, Order
-)
-from app.models.notification import (
-    NotificationType
-)
+
+__all__ = [
+    # Base models
+    "UserRole",
+    "UserBase",
+    "UserResponse",
+    "LoginRequest",
+    "TokenResponse",
+    "RFQStatus",
+    "SupplyType",
+    "UrgencyLevel",
+    "PaymentTerms",
+    "Incoterms",
+    "NotificationType",
+    "OrderStatus",
+    "DisputeStatus",
+    "DisputeType",
+    # Vendor models
+    "VendorProfile",
+    "VendorProfileCreate",
+    "PastExperience",
+]

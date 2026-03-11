@@ -33,16 +33,27 @@ from emergentintegrations.llm.openai import OpenAISpeechToText, OpenAITextToSpee
 
 # ============== MODULAR IMPORTS (NEW) ==============
 # Import from new modular structure for reusability
-# Note: server.py maintains backward compatibility while modules are being refactored
+# The application is being gradually refactored into modules
+# See ARCHITECTURE.md for details on the refactoring plan
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
 
-# These imports will gradually replace inline definitions
-# from app.config import *
-# from app.database import db
-# from app.services.security import *
-# from app.services.email_service import *
-# from app.models import *
+# Core utilities - Security, Auth, Validation
+from app.core import (
+    hash_token, generate_secure_token, sanitize_input,
+    validate_password_strength, generate_otp, store_otp, verify_otp,
+    is_account_locked, get_lockout_remaining,
+    record_login_attempt, check_registration_rate_limit, record_registration_attempt
+)
+
+# Models are still defined in server.py but can also be imported from:
+# from app.models import UserRole, UserResponse, VendorProfile, etc.
+
+# Services provide business logic (use these for new code):
+# from app.services import get_user_by_id, create_vendor_profile, etc.
+
+# Dependencies for route handlers:
+# from app.dependencies import get_current_user, require_admin, etc.
 # ===================================================
 
 ROOT_DIR = Path(__file__).parent

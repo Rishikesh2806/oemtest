@@ -19,21 +19,33 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - **Payments**: Stripe (test mode) - planned
 - **Email**: Resend API
 
-### Backend Structure (Refactored Mar 6, 2026)
+### Backend Structure (Refactored Mar 11, 2026)
 ```
 /app/backend/
 ├── app/                    # Modular package
 │   ├── config.py           # Settings, constants
 │   ├── database.py         # MongoDB connection
-│   ├── dependencies.py     # Auth helpers (get_current_user)
+│   ├── dependencies.py     # Auth helpers (get_current_user, require_admin)
 │   ├── main.py             # FastAPI app factory
-│   ├── models/             # Pydantic models (7 files)
-│   ├── services/           # security.py, email_service.py
-│   └── routes/             # auth.py (15 endpoints), users.py (2 endpoints)
-├── server.py               # Main entry (~7500 lines)
+│   ├── core/               # Core utilities
+│   │   ├── auth.py         # JWT, password hashing
+│   │   └── security.py     # Rate limiting, OTP, validation
+│   ├── models/             # Pydantic models
+│   │   ├── base.py         # UserRole, Status enums
+│   │   └── vendor.py       # Vendor models
+│   ├── services/           # Business logic
+│   │   ├── user_service.py
+│   │   ├── vendor_service.py
+│   │   ├── notification_service.py
+│   │   ├── email_service.py
+│   │   └── whatsapp_service.py
+│   └── routes/             # API routes (being extracted)
+├── server.py               # Main entry (~13,400 lines) - being gradually refactored
+├── ARCHITECTURE.md         # Refactoring documentation
 └── .env
 ```
-Migration: Phase 1-2 done (models, services, auth routes). Phase 3 next (vendor/RFQ routes).
+Migration: Phase 1 complete (core, models, services). Phase 2 next (route extraction).
+See ARCHITECTURE.md for detailed refactoring plan.
 
 ## AI Drawing Analysis - Supported Formats
 

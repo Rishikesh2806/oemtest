@@ -1,86 +1,81 @@
 """
-Shared Dependencies - Authentication and authorization helpers
+FastAPI Dependencies - Authentication, Database access
 """
-from fastapi import HTTPException, Request
+from datetime import datetime, timezone
+from typing import Optional
+from fastapi import HTTPException, Request, Depends
 import jwt
-import logging
 
 from app.database import db
-from app.config import JWT_SECRET, JWT_ALGORITHM
-
-logger = logging.getLogger(__name__)
+from app.core.auth import JWT_SECRET, JWT_ALGORITHM
 
 
 async def get_current_user(request: Request) -> dict:
-    """
-    Extract and validate user from JWT token or session cookie.
-    This is the main authentication dependency used across all routes.
-    """
-    auth_header = request.headers.get("Authorization", "")
-    session_token = request.cookies.get("session_token")
+    """Get the current authenticated user from session or JWT token"""
+    # Check cookie first
+    token = request.cookies.get("session_token")
     
-    token = None
-    
-    # Check Bearer token first
-    if auth_header.startswith("Bearer "):
-        token = auth_header[7:]
-    # Fallback to session cookie
-    elif session_token:
-        session = await db.user_sessions.find_one({"session_token": session_token}, {"_id": 0})
-        if session:
-            user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
-            if user:
-                return user
+    # Then check Authorization header
+    if not token:
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:]
     
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
+    # Try session token from Emergent Auth first
+    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if session:
+        expires_at = session.get("expires_at")
+        if isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at)
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < datetime.now(timezone.utc):
+            raise HTTPException(status_code=401, detail="Session expired")
+        
+        user = await db.users.find_one({"user_id": session["user_id"]}, {"_id": 0})
+        if user:
+            return user
+    
+    # Try JWT token
     try:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = payload.get("user_id")
-        
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        
-        user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+        user = await db.users.find_one({"user_id": payload["user_id"]}, {"_id": 0})
         if not user:
             raise HTTPException(status_code=401, detail="User not found")
-        
         return user
-        
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-async def get_current_user_optional(request: Request) -> dict | None:
-    """
-    Optional authentication - returns None if not authenticated instead of raising error.
-    Useful for endpoints that work differently for authenticated vs anonymous users.
-    """
+async def get_current_user_optional(request: Request) -> Optional[dict]:
+    """Get current user or return None if not authenticated"""
     try:
         return await get_current_user(request)
     except HTTPException:
         return None
 
 
-async def require_admin(user: dict) -> dict:
-    """Check if user is admin, raise HTTPException if not"""
+async def require_admin(user: dict = Depends(get_current_user)) -> dict:
+    """Require the current user to be an admin"""
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
 
 
-async def require_vendor(user: dict) -> dict:
-    """Check if user is vendor, raise HTTPException if not"""
+async def require_vendor(user: dict = Depends(get_current_user)) -> dict:
+    """Require the current user to be a vendor"""
     if user.get("role") != "vendor":
         raise HTTPException(status_code=403, detail="Vendor access required")
     return user
 
 
-async def require_buyer(user: dict) -> dict:
-    """Check if user is buyer, raise HTTPException if not"""
+async def require_buyer(user: dict = Depends(get_current_user)) -> dict:
+    """Require the current user to be a buyer"""
     if user.get("role") != "buyer":
         raise HTTPException(status_code=403, detail="Buyer access required")
     return user
