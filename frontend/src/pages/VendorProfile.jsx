@@ -8,7 +8,7 @@ import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Save, Building2, Globe, Phone, MapPin, Award, X, Mail } from "lucide-react";
+import { Loader2, Save, Building2, Globe, Phone, MapPin, Award, X, Mail, BadgeCheck, FileText } from "lucide-react";
 
 const INDUSTRIES = [
   "Aerospace", "Automotive", "Medical", "Electronics", 
@@ -72,6 +72,18 @@ const VendorProfile = () => {
     materials_handled: []
   });
 
+  // GST Information (read-only, auto-filled from WhatsApp registration)
+  const [gstInfo, setGstInfo] = useState({
+    gstin: "",
+    gst_verified: false,
+    gst_status: "",
+    legal_name: "",
+    trade_name: "",
+    taxpayer_type: "",
+    constitution: "",
+    gst_registration_date: ""
+  });
+
   useEffect(() => {
     fetchProfile();
     fetchExperiences();
@@ -95,6 +107,18 @@ const VendorProfile = () => {
         certifications: response.data.certifications || [],
         industries: response.data.industries || [],
         materials_handled: response.data.materials_handled || []
+      });
+      
+      // Set GST info if available
+      setGstInfo({
+        gstin: response.data.gstin || "",
+        gst_verified: response.data.gst_verified || false,
+        gst_status: response.data.gst_status || "",
+        legal_name: response.data.legal_name || "",
+        trade_name: response.data.trade_name || "",
+        taxpayer_type: response.data.taxpayer_type || "",
+        constitution: response.data.constitution || "",
+        gst_registration_date: response.data.gst_registration_date || ""
       });
     } catch (error) {
       if (error.response?.status === 404) {
@@ -402,6 +426,97 @@ const VendorProfile = () => {
               </div>
             </CardContent>
           </Card>
+
+          {/* GST Information Card - Read-only, auto-filled from WhatsApp registration */}
+          {gstInfo.gstin && (
+            <Card className="border-slate-200 mb-6 bg-gradient-to-r from-green-50 to-emerald-50" data-testid="gst-info-card">
+              <CardHeader>
+                <CardTitle className="font-heading text-lg flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-green-600" /> GST Information
+                  {gstInfo.gst_verified && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-1 rounded-full">
+                      <BadgeCheck className="w-3 h-3" /> Verified
+                    </span>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      GSTIN
+                    </Label>
+                    <p className="mt-1 text-slate-800 font-mono text-sm bg-white px-3 py-2 rounded border" data-testid="gstin-display">
+                      {gstInfo.gstin}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      GST Status
+                    </Label>
+                    <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">
+                      <span className={`inline-flex items-center gap-1 ${gstInfo.gst_status === 'Active' ? 'text-green-600' : 'text-amber-600'}`}>
+                        {gstInfo.gst_status || 'N/A'}
+                      </span>
+                    </p>
+                  </div>
+                  {gstInfo.legal_name && (
+                    <div>
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Legal Name
+                      </Label>
+                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">
+                        {gstInfo.legal_name}
+                      </p>
+                    </div>
+                  )}
+                  {gstInfo.trade_name && (
+                    <div>
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Trade Name
+                      </Label>
+                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">
+                        {gstInfo.trade_name}
+                      </p>
+                    </div>
+                  )}
+                  {gstInfo.taxpayer_type && (
+                    <div>
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Taxpayer Type
+                      </Label>
+                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">
+                        {gstInfo.taxpayer_type}
+                      </p>
+                    </div>
+                  )}
+                  {gstInfo.constitution && (
+                    <div>
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Constitution
+                      </Label>
+                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">
+                        {gstInfo.constitution}
+                      </p>
+                    </div>
+                  )}
+                  {gstInfo.gst_registration_date && (
+                    <div className="col-span-2">
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        GST Registration Date
+                      </Label>
+                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">
+                        {gstInfo.gst_registration_date}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <p className="mt-4 text-xs text-slate-500 italic">
+                  * GST information is auto-filled from government records and cannot be edited. Contact support if there's an error.
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="border-slate-200 mb-6">
             <CardHeader>

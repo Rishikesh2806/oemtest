@@ -680,7 +680,15 @@ class VendorProfile(BaseModel):
     vendor_id: str
     user_id: str
     company_name: str
+    legal_name: Optional[str] = None
+    trade_name: Optional[str] = None
     description: Optional[str] = None
+    gstin: Optional[str] = None
+    gst_verified: bool = False
+    gst_status: Optional[str] = None
+    taxpayer_type: Optional[str] = None
+    constitution: Optional[str] = None
+    gst_registration_date: Optional[str] = None
     address: Optional[str] = None
     city: Optional[str] = None
     state: Optional[str] = None
@@ -12612,13 +12620,32 @@ You can also register manually at https://oemlinker.com/register"""
 
         # Extract company details from GST data
         company_name = gst_data.get("tradeNam") or gst_data.get("lgnm", "Unknown Company")
-        state_code = gst_data.get("stcd", "")
+        legal_name = gst_data.get("lgnm", "")
+        trade_name = gst_data.get("tradeNam", "")
+        gst_status = gst_data.get("sts", "")
+        taxpayer_type = gst_data.get("dty", "")
+        constitution = gst_data.get("ctb", "")
+        registration_date = gst_data.get("rgdt", "")
+        
+        # Extract address details
+        pradr = gst_data.get("pradr", {})
         address_parts = []
-        if gst_data.get("pradr", {}).get("adr"):
-            address_parts.append(gst_data["pradr"]["adr"])
-        city = gst_data.get("pradr", {}).get("loc", "")
-        state = gst_data.get("pradr", {}).get("stcd", "")
-        pincode = gst_data.get("pradr", {}).get("pncd", "")
+        if pradr.get("adr"):
+            address_parts.append(pradr["adr"])
+        
+        # More detailed address parsing
+        addr_obj = pradr.get("addr", {})
+        building = addr_obj.get("bnm", "") or addr_obj.get("bno", "")
+        street = addr_obj.get("st", "")
+        locality = addr_obj.get("loc", "") or addr_obj.get("dst", "")
+        city = pradr.get("loc", "") or addr_obj.get("dst", "")
+        state = pradr.get("stcd", "")
+        pincode = pradr.get("pncd", "") or addr_obj.get("pncd", "")
+        
+        # Build full address if not available from adr field
+        if not address_parts:
+            full_address_parts = [building, street, locality]
+            address_parts = [", ".join(filter(None, full_address_parts))]
         
         # Use 10-digit phone number as login ID (remove country code 91)
         phone_normalized = sender.replace("+", "").replace(" ", "").replace("-", "")
@@ -12650,15 +12677,21 @@ You can also register manually at https://oemlinker.com/register"""
         
         await db.users.insert_one(user_doc)
         
-        # Create vendor profile
+        # Create vendor profile with all GST data
         vendor_id = f"vendor_{uuid.uuid4().hex[:12]}"
         vendor_doc = {
             "vendor_id": vendor_id,
             "user_id": user_id,
             "company_name": company_name,
+            "legal_name": legal_name,
+            "trade_name": trade_name,
             "gstin": gst_number,
             "gst_verified": True,
-            "gst_data": gst_data,
+            "gst_status": gst_status,
+            "gst_data": gst_data,  # Store raw GST data for reference
+            "taxpayer_type": taxpayer_type,
+            "constitution": constitution,
+            "gst_registration_date": registration_date,
             "address": ", ".join(filter(None, address_parts)),
             "city": city,
             "state": state,
@@ -12670,6 +12703,8 @@ You can also register manually at https://oemlinker.com/register"""
             "total_jobs": 0,
             "machines": [],
             "certifications": [],
+            "industries": [],
+            "materials_handled": [],
             "past_experiences": [],
             "created_at": datetime.now(timezone.utc).isoformat(),
             "registered_via": "whatsapp"
