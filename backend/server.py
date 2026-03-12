@@ -5465,22 +5465,46 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 }
             )
             
-            # Send WhatsApp notification
-            vendor_profile = await db.vendors.find_one({"user_id": matched.get("user_id")}, {"_id": 0, "phone": 1})
+            # Send WhatsApp notification using approved template
+            vendor_profile = await db.vendors.find_one({"user_id": matched.get("user_id")}, {"_id": 0, "phone": 1, "company_name": 1})
             if vendor_profile and vendor_profile.get("phone") and whatsapp_service.is_configured():
-                urgency_label = URGENCY_LABELS.get(rfq.get("urgency", "normal"), "🟢 Normal")
-                wa_message = f"""🔔 *New RFQ Match on OEMLinker!*
-
-📋 *{rfq.get('title', 'New RFQ')}*
-{urgency_label}
-
-📦 Material: {rfq.get('material_type', 'N/A')}
-📏 Quantity: {rfq.get('quantity', 'N/A')} units
-🎯 Match Score: {matched.get('suitability_score', 0)}%
-
-🔗 View & Submit Quote:
-https://oemlinker.com/vendor/rfq/{rfq_id}"""
-                asyncio.create_task(whatsapp_service.send_text_message(vendor_profile["phone"], wa_message))
+                # Use approved Gupshup template for RFQ notifications
+                RFQ_TEMPLATE_ID = "0dadf401-2d20-4bea-8110-e06193062cf2"
+                
+                company_name = vendor_profile.get("company_name", "Partner")
+                part_name = rfq.get("title", "New Part")[:50]
+                
+                # Get process from AI analysis
+                ai_analysis = rfq.get("ai_analysis") or {}
+                processes = ai_analysis.get("recommended_processes") or []
+                process_str = processes[0] if processes else rfq.get("material_type", "Manufacturing")
+                
+                quantity_str = str(rfq.get("quantity", "As Required"))
+                
+                # Calculate deadline
+                deadline_date = rfq.get("deadline")
+                if deadline_date:
+                    try:
+                        if isinstance(deadline_date, str):
+                            deadline_dt = datetime.fromisoformat(deadline_date.replace('Z', '+00:00'))
+                        else:
+                            deadline_dt = deadline_date
+                        deadline_str = deadline_dt.strftime("%d %b %Y")
+                    except:
+                        deadline_str = "As per RFQ"
+                else:
+                    deadline_str = "As per RFQ"
+                
+                rfq_link = f"https://oemlinker.com/vendor/rfq/{rfq_id}"
+                
+                # Template params: {{1}}=name, {{2}}=part, {{3}}=process, {{4}}=qty, {{5}}=deadline, {{6}}=link
+                template_params = [company_name, part_name, process_str, quantity_str, deadline_str, rfq_link]
+                
+                asyncio.create_task(whatsapp_service.send_gupshup_template(
+                    vendor_profile["phone"], 
+                    RFQ_TEMPLATE_ID, 
+                    template_params
+                ))
     
     return {
         "matched_vendors": matched_vendors, 
@@ -11005,7 +11029,7 @@ async def notify_vendors_new_rfq(
 ):
     """
     Send WhatsApp notifications to matched vendors about a new RFQ
-    Called after RFQ matching is complete
+    Uses approved Gupshup template for reliable delivery
     """
     if user.get("role") not in ["admin", "buyer"]:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -11017,6 +11041,10 @@ async def notify_vendors_new_rfq(
     rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
     if not rfq:
         raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # RFQ Update Template ID from Gupshup
+    RFQ_TEMPLATE_ID = "0dadf401-2d20-4bea-8110-e06193062cf2"
+    BASE_URL = "https://oemlinker.com"
     
     # Get matched vendors with their phone numbers
     notified_count = 0
@@ -11035,33 +11063,74 @@ async def notify_vendors_new_rfq(
         if not phone:
             continue
         
-        # Prepare message
-        urgency_label = URGENCY_LABELS.get(rfq.get("urgency", "normal"), "Normal")
-        message = f"""🔔 *New RFQ Match on OEMLinker!*
-
-📋 *{rfq.get('title', 'New RFQ')}*
-{urgency_label}
-
-📦 Material: {rfq.get('material_type', 'N/A')}
-📏 Quantity: {rfq.get('quantity', 'N/A')} units
-🎯 Match Score: {match.get('match_score', 0)}%
-
-💡 Reply with *"details {rfq_id[:8]}"* to learn more or login to OEMLinker to submit your quote.
-
-Type *"help"* for more commands."""
-
-        result = await whatsapp_service.send_text_message(phone, message)
+        # Prepare template parameters for rfq_update template
+        # Template format: {{1}}=name, {{2}}=part, {{3}}=process, {{4}}=qty, {{5}}=deadline, {{6}}=link
+        company_name = vendor.get("company_name", "Partner")
+        part_name = rfq.get("title", "New Part")[:50]
+        
+        # Get recommended process from AI analysis
+        ai_analysis = rfq.get("ai_analysis") or {}
+        processes = ai_analysis.get("recommended_processes") or []
+        process_str = processes[0] if processes else rfq.get("material_type", "Manufacturing")
+        
+        quantity = str(rfq.get("quantity", "As Required"))
+        
+        # Calculate deadline
+        deadline_date = rfq.get("deadline")
+        if deadline_date:
+            try:
+                if isinstance(deadline_date, str):
+                    deadline_dt = datetime.fromisoformat(deadline_date.replace('Z', '+00:00'))
+                else:
+                    deadline_dt = deadline_date
+                deadline_str = deadline_dt.strftime("%d %b %Y")
+            except:
+                deadline_str = "As per RFQ"
+        else:
+            deadline_str = "As per RFQ"
+        
+        rfq_link = f"{BASE_URL}/vendor/rfq/{rfq_id}"
+        
+        # Template parameters in order
+        template_params = [
+            company_name,    # {{1}} - Name
+            part_name,       # {{2}} - Part name
+            process_str,     # {{3}} - Process
+            quantity,        # {{4}} - Quantity
+            deadline_str,    # {{5}} - Deadline
+            rfq_link         # {{6}} - Link
+        ]
+        
+        # Send using Gupshup template
+        result = await whatsapp_service.send_gupshup_template(
+            phone, 
+            RFQ_TEMPLATE_ID, 
+            template_params
+        )
         
         if result.get("success"):
             notified_count += 1
-            logger.info(f"WhatsApp notification sent to vendor {vendor_id}")
+            logger.info(f"RFQ template notification sent to vendor {vendor_id}")
+            
+            # Store the notification
+            await store_whatsapp_message(
+                phone=phone,
+                direction="outgoing",
+                message_type="template",
+                content=f"RFQ Alert: {part_name} - {process_str} - Qty: {quantity}",
+                vendor_id=vendor_id,
+                vendor_name=company_name,
+                template_name="rfq_update"
+            )
         else:
             errors.append({"vendor_id": vendor_id, "error": result.get("error")})
+            logger.warning(f"Failed to send RFQ notification to {vendor_id}: {result.get('error')}")
     
     return {
         "success": True,
         "notified_count": notified_count,
         "total_matched": len(rfq.get("matched_vendors", [])),
+        "template_used": "rfq_update",
         "errors": errors if errors else None
     }
 
