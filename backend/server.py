@@ -5468,8 +5468,8 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             # Send WhatsApp notification using approved template
             vendor_profile = await db.vendors.find_one({"user_id": matched.get("user_id")}, {"_id": 0, "phone": 1, "company_name": 1})
             if vendor_profile and vendor_profile.get("phone") and whatsapp_service.is_configured():
-                # Use approved Gupshup template for RFQ notifications
-                RFQ_TEMPLATE_ID = "0dadf401-2d20-4bea-8110-e06193062cf2"
+                # Use rfq_update template - has URL in message body
+                RFQ_TEMPLATE_ID = "5899cca8-d376-4600-acff-5ebfca21f961"
                 
                 company_name = vendor_profile.get("company_name", "Partner")
                 part_name = rfq.get("title", "New Part")[:50]
@@ -11042,8 +11042,8 @@ async def notify_vendors_new_rfq(
     if not rfq:
         raise HTTPException(status_code=404, detail="RFQ not found")
     
-    # RFQ Update Template ID from Gupshup
-    RFQ_TEMPLATE_ID = "0dadf401-2d20-4bea-8110-e06193062cf2"
+    # RFQ Update Template ID from Gupshup (has URL in message body)
+    RFQ_TEMPLATE_ID = "5899cca8-d376-4600-acff-5ebfca21f961"
     BASE_URL = "https://oemlinker.com"
     
     # Get matched vendors with their phone numbers
