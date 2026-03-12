@@ -13314,7 +13314,7 @@ Or visit: {BASE_URL}/register"""
             if not rfqs:
                 return f"📭 No matching RFQs found at the moment.\n\n🔗 View all RFQs: {BASE_URL}/vendor/dashboard"
             
-            response = "📋 *Your Matched RFQs:*\n_Reply with 'rfq <ID>' to see details & drawings_\n\n"
+            response = "📋 *Your Matched RFQs:*\n\n"
             for rfq in rfqs:
                 rfq_id = rfq.get('rfq_id', '')
                 short_id = rfq_id.replace("rfq_", "")[:8] if rfq_id else ""
@@ -13336,15 +13336,17 @@ Or visit: {BASE_URL}/register"""
                 # Get recommended processes from AI analysis
                 ai_analysis = rfq.get("ai_analysis") or {}
                 processes = (ai_analysis.get("recommended_processes") or [])[:2]
-                process_str = f"({', '.join(processes)})" if processes else ""
+                process_str = f"🔧 {', '.join(processes)}" if processes else ""
                 
-                response += f"{urgency_emoji} *{rfq.get('title', 'Untitled')[:30]}* {drawing_indicator}\n"
-                response += f"   {rfq.get('material_type', 'N/A')} | Qty: {rfq.get('quantity', 'N/A')} | Match: {match_score}%\n"
+                response += f"{urgency_emoji} *{rfq.get('title', 'Untitled')[:35]}* {drawing_indicator}\n"
+                response += f"   Material: {rfq.get('material_type', 'N/A')} | Qty: {rfq.get('quantity', 'N/A')}\n"
+                response += f"   Match Score: {match_score}%"
                 if process_str:
-                    response += f"   🔧 {process_str}\n"
-                response += f"   ➡️ Reply: *rfq {short_id}*\n\n"
+                    response += f" | {process_str}"
+                response += f"\n   🔗 *View & Quote:* {BASE_URL}/vendor/rfq/{rfq_id}\n"
+                response += f"   📄 _Details:_ Reply *rfq {short_id}*\n\n"
             
-            response += f"📱 _Full details on dashboard:_ {BASE_URL}/vendor/dashboard"
+            response += f"━━━━━━━━━━━━━━━\n📱 *Dashboard:* {BASE_URL}/vendor/dashboard"
             return response
         except Exception as e:
             logger.error(f"RFQs command error: {str(e)}", exc_info=True)
