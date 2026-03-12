@@ -5,6 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import json
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr, ConfigDict, field_validator
 from typing import List, Optional, Dict, Any
@@ -10821,6 +10822,147 @@ async def whatsapp_status():
         "configured": is_configured,
         "app_name": os.environ.get("GUPSHUP_APP_NAME", "OEMLinker"),
         "source_number": os.environ.get("GUPSHUP_SOURCE_NUMBER", "Not configured")[:6] + "****" if os.environ.get("GUPSHUP_SOURCE_NUMBER") else "Not configured"
+    }
+
+# WhatsApp Message Templates
+WHATSAPP_TEMPLATES = {
+    "machine_upload_reminder": {
+        "name": "machine_upload_reminder",
+        "description": "Remind vendors to upload their machine photos",
+        "content": """Hello Team {0},
+📷Send photos of your machines to receive RFQs based on the machines you have.
+Or
+✏️ Edit details at https://oemlinker.com/vendor/machines
+Thanks Team OEMLinker""",
+        "parameters": ["company_name"],
+        "status": "approved",
+        "category": "utility"
+    },
+    "rfq_notification": {
+        "name": "rfq_notification",
+        "description": "Notify vendors about new RFQ matches",
+        "content": """Hello {0},
+🔔 New RFQ matching your capabilities is available!
+Check OEMLinker to view details and submit your quote.
+Team OEMLinker""",
+        "parameters": ["company_name"],
+        "status": "approved",
+        "category": "utility"
+    },
+    "quote_reminder": {
+        "name": "quote_reminder",
+        "description": "Remind vendors about pending quotes",
+        "content": """Hello {0},
+⏰ Reminder: You have pending RFQs waiting for your quote.
+Submit your quotes at https://oemlinker.com
+Team OEMLinker""",
+        "parameters": ["company_name"],
+        "status": "approved",
+        "category": "utility"
+    },
+    "welcome_vendor": {
+        "name": "welcome_vendor",
+        "description": "Welcome message for newly registered vendors",
+        "content": """Welcome to OEMLinker, {0}! 🎉
+
+You're now part of India's AI-powered manufacturing marketplace.
+
+Quick commands:
+• *rfqs* - View matched RFQs
+• *machines* - Manage your machines
+• *profile* - View your profile
+• *help* - See all commands
+
+Start by adding your machines to get matched with relevant RFQs!
+
+Team OEMLinker""",
+        "parameters": ["company_name"],
+        "status": "approved",
+        "category": "marketing"
+    },
+    "order_update": {
+        "name": "order_update",
+        "description": "Notify about order status changes",
+        "content": """Hello {0},
+
+📦 Order Update: #{1}
+Status: {2}
+
+View details at https://oemlinker.com/vendor/orders
+
+Team OEMLinker""",
+        "parameters": ["company_name", "order_id", "status"],
+        "status": "approved",
+        "category": "utility"
+    }
+}
+
+@api_router.get("/whatsapp/templates")
+async def get_whatsapp_templates(
+    user: dict = Depends(get_current_user)
+):
+    """Get available WhatsApp message templates"""
+    if user["role"] != UserRole.ADMIN and not user.get("whatsapp_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    return {
+        "templates": list(WHATSAPP_TEMPLATES.values()),
+        "total": len(WHATSAPP_TEMPLATES)
+    }
+
+@api_router.post("/whatsapp/send-template")
+async def send_whatsapp_template(
+    to_number: str,
+    template_name: str,
+    params: List[str] = [],
+    user: dict = Depends(get_current_user)
+):
+    """Send a WhatsApp template message"""
+    if user["role"] != UserRole.ADMIN and not user.get("whatsapp_admin"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    if not whatsapp_service.is_configured():
+        raise HTTPException(status_code=503, detail="WhatsApp service not configured")
+    
+    if template_name not in WHATSAPP_TEMPLATES:
+        raise HTTPException(status_code=400, detail=f"Template '{template_name}' not found")
+    
+    template = WHATSAPP_TEMPLATES[template_name]
+    content = template["content"]
+    
+    # Format the template with parameters
+    try:
+        formatted_content = content.format(*params) if params else content
+    except (IndexError, KeyError):
+        formatted_content = content
+    
+    # Normalize phone number
+    phone = to_number.replace("+", "").replace(" ", "").replace("-", "")
+    if not phone.startswith("91") and len(phone) == 10:
+        phone = "91" + phone
+    
+    # Send the message
+    result = await whatsapp_service.send_text_message(phone, formatted_content)
+    
+    if result.get("success"):
+        # Store the outgoing message
+        vendor = await db.vendors.find_one({"phone": {"$regex": phone[-10:]}}, {"_id": 0})
+        await store_whatsapp_message(
+            phone=phone,
+            direction="outgoing",
+            message_type="template",
+            content=formatted_content,
+            vendor_id=vendor.get("vendor_id") if vendor else None,
+            vendor_name=vendor.get("company_name") if vendor else None,
+            template_name=template_name,
+            sent_by=user["user_id"]
+        )
+    
+    return {
+        "success": result.get("success", False),
+        "message_id": result.get("message_id"),
+        "template_name": template_name,
+        "formatted_content": formatted_content
     }
 
 @api_router.post("/whatsapp/send")

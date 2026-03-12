@@ -6,21 +6,25 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
-import { MessageSquare, Send, CheckCircle, XCircle, Phone, RefreshCw, Bell, Inbox } from 'lucide-react';
+import { MessageSquare, Send, CheckCircle, XCircle, Phone, RefreshCw, Bell, Inbox, FileText, Copy } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 export default function WhatsAppAdmin() {
   const [status, setStatus] = useState(null);
+  const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [sendingVoice, setSendingVoice] = useState(false);
+  const [sendingTemplate, setSendingTemplate] = useState(null);
   const [testNumber, setTestNumber] = useState('');
   const [testMessage, setTestMessage] = useState('Hello from OEMLinker! This is a test message.');
   const [sendResult, setSendResult] = useState(null);
+  const [templateParams, setTemplateParams] = useState({});
 
   useEffect(() => {
     fetchStatus();
+    fetchTemplates();
   }, []);
 
   const fetchStatus = async () => {
@@ -34,6 +38,66 @@ export default function WhatsAppAdmin() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchTemplates = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/api/whatsapp/templates`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setTemplates(data.templates || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch templates:', error);
+    }
+  };
+
+  const sendTemplateMessage = async (template) => {
+    if (!testNumber) {
+      toast.error('Please enter a phone number first');
+      return;
+    }
+
+    setSendingTemplate(template.name);
+    setSendResult(null);
+
+    try {
+      const token = localStorage.getItem('token');
+      const params = templateParams[template.name] || [];
+      
+      const response = await fetch(`${API_URL}/api/whatsapp/send-template?to_number=${encodeURIComponent(testNumber)}&template_name=${encodeURIComponent(template.name)}&params=${encodeURIComponent(JSON.stringify(params))}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setSendResult({ success: true, messageId: data.message_id, template: template.name });
+        toast.success(`Template "${template.name}" sent successfully!`);
+      } else {
+        setSendResult({ success: false, error: data.detail || 'Failed to send template' });
+        toast.error(data.detail || 'Failed to send template');
+      }
+    } catch (error) {
+      setSendResult({ success: false, error: error.message });
+      toast.error(error.message);
+    } finally {
+      setSendingTemplate(null);
+    }
+  };
+
+  const copyTemplateContent = (content) => {
+    navigator.clipboard.writeText(content);
+    toast.success('Template content copied to clipboard');
   };
 
   const sendTestMessage = async () => {
@@ -300,6 +364,100 @@ export default function WhatsAppAdmin() {
                 <p className="text-sm text-red-600 mt-1">Error: {sendResult.error}</p>
               )}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Approved Templates Section */}
+      <Card data-testid="templates-card">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-purple-500" />
+            Approved Templates
+          </CardTitle>
+          <CardDescription>Pre-approved WhatsApp message templates for vendor communication</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {templates.length === 0 ? (
+            <p className="text-slate-500 text-center py-4">No templates available</p>
+          ) : (
+            <div className="space-y-4">
+              {templates.map((template) => (
+                <div key={template.name} className="border rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <h4 className="font-medium text-slate-800">{template.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h4>
+                      <p className="text-sm text-slate-500">{template.description}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Badge className={template.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}>
+                        {template.status}
+                      </Badge>
+                      <Badge variant="outline" className="text-slate-500">
+                        {template.category}
+                      </Badge>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-slate-900 rounded-lg p-3 mb-3 relative">
+                    <pre className="text-green-400 text-xs whitespace-pre-wrap font-mono">{template.content}</pre>
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      className="absolute top-2 right-2 text-slate-400 hover:text-white"
+                      onClick={() => copyTemplateContent(template.content)}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  
+                  {template.parameters && template.parameters.length > 0 && (
+                    <div className="mb-3">
+                      <p className="text-xs text-slate-500 mb-1">Parameters: {template.parameters.join(', ')}</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {template.parameters.map((param, idx) => (
+                          <Input
+                            key={idx}
+                            placeholder={param}
+                            className="w-32 h-8 text-xs"
+                            onChange={(e) => {
+                              const newParams = [...(templateParams[template.name] || [])];
+                              newParams[idx] = e.target.value;
+                              setTemplateParams({...templateParams, [template.name]: newParams});
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <Button 
+                    size="sm"
+                    onClick={() => sendTemplateMessage(template)}
+                    disabled={!testNumber || sendingTemplate === template.name || !status?.configured}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    {sendingTemplate === template.name ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="w-3 h-3 mr-1" />
+                        Send Template
+                      </>
+                    )}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {!testNumber && templates.length > 0 && (
+            <p className="text-sm text-amber-600 mt-4 p-2 bg-amber-50 rounded">
+              ⚠️ Enter a phone number above to send templates
+            </p>
           )}
         </CardContent>
       </Card>

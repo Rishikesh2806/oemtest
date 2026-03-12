@@ -718,9 +718,76 @@ Meta (WhatsApp Business API) compliant data deletion system. Required for WhatsA
 
 ### Test Report: /app/test_reports/iteration_20.json (100% pass - 28 tests)
 
+## Magic Link Login Feature (Fixed - Dec 2025)
+
+### Feature Overview
+WhatsApp-registered vendors can log into the web app without a password using a magic link sent via WhatsApp.
+
+### Implementation Details:
+
+**Flow:**
+1. Vendor sends "login" command to WhatsApp bot
+2. Backend generates a single-use token (15-minute expiry)
+3. Magic link URL sent to vendor via WhatsApp
+4. Vendor clicks link → redirected to `/magic-login?token=xxx`
+5. Frontend verifies token via API
+6. On success, JWT token stored and user redirected to dashboard
+
+**Bug Fix Applied:**
+- Issue: React StrictMode double `useEffect` invocation was invalidating the single-use token
+- Solution: Used `useRef` to track verification state that persists across re-renders
+- Changed from `login()` (makes POST request) to `updateUser()` (state update only)
+- Added `isMounted` ref to prevent state updates on unmounted component
+
+**Backend Endpoints:**
+- `POST /api/auth/magic-link/generate?phone=xxx` - Generate token for a phone number
+- `GET /api/auth/magic-link/verify/{token}` - Verify token and return JWT
+
+**Frontend:**
+- `/app/frontend/src/pages/MagicLogin.jsx` - Magic login page component
+
+### Test Report: /app/backend/tests/test_magic_link.py (12 tests passed)
+
+## WhatsApp Approved Templates Display (NEW - Dec 2025)
+
+### Feature Overview
+Admin can view and send pre-approved WhatsApp message templates from the admin dashboard.
+
+### Implementation Details:
+
+**Backend:**
+- `WHATSAPP_TEMPLATES` dictionary with 5 approved templates:
+  - `machine_upload_reminder` - Remind vendors to upload machine photos
+  - `rfq_notification` - Notify about new RFQ matches
+  - `quote_reminder` - Remind about pending quotes
+  - `welcome_vendor` - Welcome message for new vendors
+  - `order_update` - Order status change notifications
+- `GET /api/whatsapp/templates` - Fetch all available templates
+- `POST /api/whatsapp/send-template` - Send a template with parameters
+
+**Frontend (`/app/frontend/src/pages/WhatsAppAdmin.jsx`):**
+- "Approved Templates" card section showing all templates
+- Template details: name, description, status badge, category badge
+- Code block displaying template content with copy button
+- Parameter input fields for each template
+- "Send Template" button to send directly
+
+**Template Structure:**
+```json
+{
+  "name": "template_name",
+  "description": "Template description",
+  "content": "Hello {0}, ...",
+  "parameters": ["company_name"],
+  "status": "approved",
+  "category": "utility|marketing"
+}
+```
+
 ## Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders
 - payment_transactions, messages, conversations
 - notifications, ratings
-- data_deletion_requests (NEW)
+- data_deletion_requests
+- magic_link_tokens (for magic link auth)
