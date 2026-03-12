@@ -4406,6 +4406,47 @@ async def update_rfq_dimensions(
     }
 
 
+# ============== HELPER: Send RFQ Drawings to Vendor ==============
+
+async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list, rfq_title: str):
+    """
+    Send RFQ drawing files to a vendor via WhatsApp
+    Called after RFQ match notification
+    """
+    from app.services.whatsapp_service import send_document_message, send_image_message
+    
+    BASE_URL = "https://oemlinker.com"
+    
+    # Small delay to let template message send first
+    await asyncio.sleep(2)
+    
+    for i, drawing_id in enumerate(drawing_ids[:3]):  # Limit to 3 drawings
+        try:
+            drawing = await db.drawings.find_one({"drawing_id": drawing_id}, {"_id": 0})
+            if not drawing:
+                continue
+                
+            filename = drawing.get("filename", f"drawing_{i+1}.pdf")
+            file_type = drawing.get("file_type", "application/pdf")
+            
+            # Create a public URL for the drawing
+            drawing_url = f"{BASE_URL}/api/drawings/{drawing_id}/view?token=wa_temp"
+            
+            caption = f"📐 Drawing: {filename}\nRFQ: {rfq_title[:40]}"
+            
+            # Check if it's an image or document
+            if file_type.startswith("image/"):
+                await send_image_message(phone, drawing_url, caption)
+            else:
+                await send_document_message(phone, drawing_url, filename, caption)
+            
+            # Small delay between files
+            await asyncio.sleep(1)
+            
+        except Exception as e:
+            logger.error(f"Error sending drawing {drawing_id} to {phone[:6]}***: {str(e)}")
+
+
 # ============== VENDOR MATCHING ==============
 
 @api_router.post("/rfqs/{rfq_id}/match")
@@ -5500,11 +5541,22 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 # Template params: {{1}}=name, {{2}}=part, {{3}}=process, {{4}}=qty, {{5}}=deadline, {{6}}=link
                 template_params = [company_name, part_name, process_str, quantity_str, deadline_str, rfq_link]
                 
+                # Send template notification
                 asyncio.create_task(whatsapp_service.send_gupshup_template(
                     vendor_profile["phone"], 
                     RFQ_TEMPLATE_ID, 
                     template_params
                 ))
+                
+                # Send drawing files if available (async task)
+                drawing_ids = rfq.get("drawing_ids", [])
+                if drawing_ids:
+                    asyncio.create_task(send_rfq_drawings_to_vendor(
+                        vendor_profile["phone"],
+                        rfq_id,
+                        drawing_ids,
+                        part_name
+                    ))
     
     return {
         "matched_vendors": matched_vendors, 
@@ -11122,6 +11174,16 @@ async def notify_vendors_new_rfq(
                 vendor_name=company_name,
                 template_name="rfq_update"
             )
+            
+            # Send drawing files if available
+            drawing_ids = rfq.get("drawing_ids", [])
+            if drawing_ids:
+                asyncio.create_task(send_rfq_drawings_to_vendor(
+                    phone,
+                    rfq_id,
+                    drawing_ids,
+                    part_name
+                ))
         else:
             errors.append({"vendor_id": vendor_id, "error": result.get("error")})
             logger.warning(f"Failed to send RFQ notification to {vendor_id}: {result.get('error')}")
