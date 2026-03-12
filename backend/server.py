@@ -4413,8 +4413,9 @@ async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list
     """
     Send RFQ drawing files to a vendor via WhatsApp
     Called after RFQ match notification
+    Uses preview images to avoid Meta content moderation issues with PDFs
     """
-    from app.services.whatsapp_service import send_document_message, send_image_message
+    from app.services.whatsapp_service import send_image_message
     
     # Use the actual deployed URL
     BASE_URL = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
@@ -4430,22 +4431,24 @@ async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list
                 continue
                 
             filename = drawing.get("filename", f"drawing_{i+1}.pdf")
-            file_type = drawing.get("file_type", "application/pdf")
             
-            # Create a public URL for the drawing with temp token
-            drawing_url = f"{BASE_URL}/api/drawings/{drawing_id}/view?token=wa_temp"
+            # Check if preview image exists (converted from PDF)
+            preview_url = drawing.get("preview_url")
             
-            caption = f"📐 Drawing: {filename}\nRFQ: {rfq_title[:40]}"
-            
-            logger.info(f"Sending drawing {drawing_id} to {phone[:6]}***: {drawing_url}")
-            
-            # Check if it's an image or document
-            if file_type.startswith("image/"):
-                result = await send_image_message(phone, drawing_url, caption)
+            if preview_url:
+                # Use the stored preview image URL
+                image_url = preview_url
             else:
-                result = await send_document_message(phone, drawing_url, filename, caption)
+                # Use the preview endpoint which returns a PNG
+                image_url = f"{BASE_URL}/api/drawings/{drawing_id}/preview?token=wa_temp"
             
-            logger.info(f"Drawing send result: {result}")
+            caption = f"📐 *{filename}*\n📋 RFQ: {rfq_title[:40]}\n\n🔗 Full drawing: {BASE_URL}/vendor/rfq/{rfq_id}"
+            
+            logger.info(f"Sending drawing preview {drawing_id} to {phone[:6]}***: {image_url}")
+            
+            result = await send_image_message(phone, image_url, caption)
+            
+            logger.info(f"Drawing preview send result: {result}")
             
             # Small delay between files
             await asyncio.sleep(1)
