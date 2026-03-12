@@ -12978,6 +12978,24 @@ You can also register manually at https://oemlinker.com/register"""
         
         logger.info(f"New vendor registered via WhatsApp: {company_name} (GST: {gst_number}, Phone: {phone_login})")
         
+        # Generate magic link for instant login
+        magic_token = secrets.token_urlsafe(32)
+        magic_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)  # 24 hour expiry for new registration
+        
+        await db.magic_link_tokens.insert_one({
+            "token": magic_token,
+            "user_id": user_id,
+            "phone": sender,
+            "expires_at": magic_expires_at.isoformat(),
+            "used": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "type": "registration"
+        })
+        
+        # Build magic login URL
+        BASE_URL = "https://oemlinker.com"
+        magic_login_url = f"{BASE_URL}/magic-login?token={magic_token}"
+        
         # Get bilingual messages
         new_vendor = {"state": state}
         success_regional = get_bilingual_message("registration_success", new_vendor)
@@ -12992,22 +13010,21 @@ Welcome to *OEMLinker*, {company_name}!{welcome_regional}
 📋 GST: {gst_number}
 📍 Location: {city}, {state}
 
-🔐 *Login Credentials:*
+🔗 *Quick Login (Tap to open):*
+{magic_login_url}
+
+_Link valid for 24 hours_
+
+🔐 *Manual Login:*
 📱 Login ID: *{phone_login}*
 🔑 Password: *{numeric_password}*
 
-⚠️ Please save your password securely!
-
 💡 *Next Steps:*
-• Login at https://oemlinker.com/login
 • Add your machines to receive RFQ matches
-• Type *email* to add your email for notifications
-• Type *help* to see WhatsApp commands
+• Type *email* to add notifications
+• Type *help* for commands
 
-📧 *Important:* Add your email to receive RFQ match alerts!
-Type *email* to add now.
-
-📷 *Quick Tip:* Send machine photos to add them instantly!"""
+📷 *Quick Tip:* Send machine photos to add them!"""
 
     except Exception as e:
         logger.error(f"WhatsApp registration error: {str(e)}")
