@@ -618,6 +618,18 @@ def parse_webhook_message(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
             elif msg_type == "button_reply":
                 parsed["button_id"] = message_payload.get("payload", {}).get("id", "")
                 parsed["button_title"] = message_payload.get("payload", {}).get("title", "")
+                # Treat as text command for processing
+                parsed["text"] = message_payload.get("payload", {}).get("title", "")
+                parsed["type"] = "text"
+            elif msg_type == "quick_reply":
+                # Quick reply button clicked from template
+                quick_payload = message_payload.get("payload", {})
+                parsed["button_text"] = quick_payload.get("text", "")
+                parsed["postback_text"] = quick_payload.get("postbackText", "")
+                # Treat as text command for processing  
+                parsed["text"] = quick_payload.get("postbackText", "") or quick_payload.get("text", "")
+                parsed["type"] = "text"
+                parsed["is_quick_reply"] = True
             elif msg_type == "image":
                 parsed["image_url"] = message_payload.get("payload", {}).get("url", "")
                 parsed["caption"] = message_payload.get("payload", {}).get("caption", "")
