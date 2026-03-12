@@ -3706,6 +3706,7 @@ async def get_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
     return drawing
 
 @api_router.get("/drawings/{drawing_id}/view")
+@api_router.head("/drawings/{drawing_id}/view")
 async def view_drawing(drawing_id: str, token: Optional[str] = None, request: Request = None):
     """View/download the actual drawing file - supports both Authorization header and query token"""
     # Try to authenticate via query token or header
@@ -4415,7 +4416,8 @@ async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list
     """
     from app.services.whatsapp_service import send_document_message, send_image_message
     
-    BASE_URL = "https://oemlinker.com"
+    # Use the actual deployed URL
+    BASE_URL = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
     
     # Small delay to let template message send first
     await asyncio.sleep(2)
@@ -4424,21 +4426,26 @@ async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list
         try:
             drawing = await db.drawings.find_one({"drawing_id": drawing_id}, {"_id": 0})
             if not drawing:
+                logger.warning(f"Drawing {drawing_id} not found in database")
                 continue
                 
             filename = drawing.get("filename", f"drawing_{i+1}.pdf")
             file_type = drawing.get("file_type", "application/pdf")
             
-            # Create a public URL for the drawing
+            # Create a public URL for the drawing with temp token
             drawing_url = f"{BASE_URL}/api/drawings/{drawing_id}/view?token=wa_temp"
             
             caption = f"📐 Drawing: {filename}\nRFQ: {rfq_title[:40]}"
             
+            logger.info(f"Sending drawing {drawing_id} to {phone[:6]}***: {drawing_url}")
+            
             # Check if it's an image or document
             if file_type.startswith("image/"):
-                await send_image_message(phone, drawing_url, caption)
+                result = await send_image_message(phone, drawing_url, caption)
             else:
-                await send_document_message(phone, drawing_url, filename, caption)
+                result = await send_document_message(phone, drawing_url, filename, caption)
+            
+            logger.info(f"Drawing send result: {result}")
             
             # Small delay between files
             await asyncio.sleep(1)
