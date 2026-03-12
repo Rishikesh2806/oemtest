@@ -748,39 +748,56 @@ WhatsApp-registered vendors can log into the web app without a password using a 
 
 ### Test Report: /app/backend/tests/test_magic_link.py (12 tests passed)
 
-## WhatsApp Approved Templates Display (NEW - Dec 2025)
+## WhatsApp Approved Templates Display (Updated - Dec 2025)
 
 ### Feature Overview
-Admin can view and send pre-approved WhatsApp message templates from the admin dashboard.
+Admin can view and send pre-approved WhatsApp message templates from the admin dashboard. Templates are now fetched **live from Gupshup API** instead of hardcoded.
 
 ### Implementation Details:
 
-**Backend:**
-- `WHATSAPP_TEMPLATES` dictionary with 5 approved templates:
-  - `machine_upload_reminder` - Remind vendors to upload machine photos
-  - `rfq_notification` - Notify about new RFQ matches
-  - `quote_reminder` - Remind about pending quotes
-  - `welcome_vendor` - Welcome message for new vendors
-  - `order_update` - Order status change notifications
-- `GET /api/whatsapp/templates` - Fetch all available templates
-- `POST /api/whatsapp/send-template` - Send a template with parameters
+**Backend (`/app/backend/app/services/whatsapp_service.py`):**
+- `get_templates()` method tries multiple Gupshup API endpoints to fetch templates
+- Supports Partner API, WA App Template API, and fallback endpoints
+- Normalizes template format from different API responses
+- Filters for APPROVED/ACTIVE/ENABLED templates
+
+**Backend Endpoints:**
+- `GET /api/whatsapp/templates` - Fetch all approved templates from Gupshup
+- `POST /api/whatsapp/send-template` - Send a template via Gupshup Template API
 
 **Frontend (`/app/frontend/src/pages/WhatsAppAdmin.jsx`):**
-- "Approved Templates" card section showing all templates
-- Template details: name, description, status badge, category badge
-- Code block displaying template content with copy button
-- Parameter input fields for each template
-- "Send Template" button to send directly
+- "Approved WhatsApp Templates" section with live/fallback indicator
+- Displays: template name, ID, status badge, category, language
+- Template content in code block with copy button
+- Parameter input field for template variables
+- Send button to dispatch template to entered phone number
 
-**Template Structure:**
+**Environment Variables Required:**
+```
+GUPSHUP_APP_NAME=OEMLinker
+GUPSHUP_API_KEY=sk_xxx
+GUPSHUP_SOURCE_NUMBER=919831509919
+GUPSHUP_APP_ID=fffe3fb4-a50b-4dbb-a634-52782833855a  # Required for live templates
+```
+
+**Template Response Format:**
 ```json
 {
-  "name": "template_name",
-  "description": "Template description",
-  "content": "Hello {0}, ...",
-  "parameters": ["company_name"],
-  "status": "approved",
-  "category": "utility|marketing"
+  "templates": [
+    {
+      "id": "uuid",
+      "name": "template_name",
+      "status": "APPROVED",
+      "category": "UTILITY|MARKETING|AUTHENTICATION",
+      "language": "en",
+      "content": "Template body with {{1}} placeholders",
+      "header": null,
+      "footer": null,
+      "buttons": []
+    }
+  ],
+  "total": 3,
+  "source": "gupshup_wa_app_template"
 }
 ```
 

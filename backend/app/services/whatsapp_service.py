@@ -39,7 +39,7 @@ class WhatsAppService:
     
     async def get_templates(self) -> Dict[str, Any]:
         """
-        Fetch approved WhatsApp templates from Gupshup Partner API
+        Fetch approved WhatsApp templates from Gupshup API
         
         Returns:
             Dict with templates list or error
@@ -47,114 +47,104 @@ class WhatsAppService:
         if not self.is_configured():
             return {"success": False, "error": "WhatsApp not configured", "templates": []}
         
-        # Try Partner API first if app_id is available
+        # Try multiple API endpoints to fetch templates
+        endpoints_to_try = []
+        
+        # Add Partner API endpoint if app_id is available
         if self.app_id:
+            endpoints_to_try.append({
+                "url": f"{self.partner_url}/{self.app_id}/templates",
+                "headers": {"apikey": self.api_key, "Content-Type": "application/json"},
+                "name": "partner_templates"
+            })
+        
+        # Standard Gupshup template list endpoints
+        endpoints_to_try.extend([
+            {
+                "url": f"https://api.gupshup.io/wa/app/{self.app_id}/template",
+                "headers": {"apikey": self.api_key, "Content-Type": "application/json"},
+                "name": "wa_app_template"
+            },
+            {
+                "url": f"https://api.gupshup.io/sm/api/v2/template/list/{self.app_name}",
+                "headers": {"apikey": self.api_key, "Content-Type": "application/json"},
+                "name": "sm_template_list"
+            },
+            {
+                "url": "https://api.gupshup.io/wa/api/v1/template/list",
+                "headers": {"apikey": self.api_key, "Content-Type": "application/x-www-form-urlencoded"},
+                "name": "wa_template_list"
+            }
+        ])
+        
+        for endpoint in endpoints_to_try:
             try:
-                headers = {
-                    "apikey": self.api_key,
-                    "Content-Type": "application/json"
-                }
-                
-                # Gupshup Partner API endpoint for templates
-                url = f"{self.partner_url}/{self.app_id}/templates"
-                
                 async with httpx.AsyncClient() as client:
                     response = await client.get(
-                        url,
-                        headers=headers,
+                        endpoint["url"],
+                        headers=endpoint["headers"],
                         timeout=30.0
                     )
                     
+                    logger.info(f"Template API {endpoint['name']}: {response.status_code}")
+                    
                     if response.status_code == 200:
                         data = response.json()
-                        templates = data.get("templates", data.get("data", []))
                         
-                        # Normalize template format
-                        normalized = []
-                        for t in templates:
-                            normalized.append({
-                                "id": t.get("id") or t.get("elementName") or t.get("name"),
-                                "name": t.get("elementName") or t.get("name", ""),
-                                "status": t.get("status", "UNKNOWN"),
-                                "category": t.get("category", t.get("templateType", "UNKNOWN")),
-                                "language": t.get("languageCode", t.get("language", "en")),
-                                "content": t.get("data", t.get("content", t.get("body", ""))),
-                                "header": t.get("header"),
-                                "footer": t.get("footer"),
-                                "buttons": t.get("buttons", []),
-                                "created_at": t.get("createdOn", t.get("created_at")),
-                                "modified_at": t.get("modifiedOn", t.get("modified_at"))
-                            })
+                        # Handle different response formats
+                        templates = (
+                            data.get("templates") or 
+                            data.get("data") or 
+                            data.get("template") or
+                            (data if isinstance(data, list) else [])
+                        )
                         
-                        # Filter only approved templates
-                        approved = [t for t in normalized if t["status"].upper() in ["APPROVED", "ACTIVE", "ENABLED"]]
-                        
-                        logger.info(f"Fetched {len(approved)} approved templates from Gupshup")
-                        return {
-                            "success": True,
-                            "templates": approved,
-                            "total": len(approved),
-                            "source": "gupshup_partner_api"
-                        }
+                        if templates:
+                            normalized = []
+                            for t in templates:
+                                normalized.append({
+                                    "id": t.get("id") or t.get("elementName") or t.get("name") or t.get("templateId"),
+                                    "name": t.get("elementName") or t.get("name") or t.get("templateName", ""),
+                                    "status": t.get("status", "UNKNOWN"),
+                                    "category": t.get("category") or t.get("templateType", "UNKNOWN"),
+                                    "language": t.get("languageCode") or t.get("language", "en"),
+                                    "content": t.get("data") or t.get("content") or t.get("body") or t.get("containerMeta", ""),
+                                    "header": t.get("header"),
+                                    "footer": t.get("footer"),
+                                    "buttons": t.get("buttons", []),
+                                    "created_at": t.get("createdOn") or t.get("created_at"),
+                                    "modified_at": t.get("modifiedOn") or t.get("modified_at")
+                                })
+                            
+                            # Filter approved templates
+                            approved = [t for t in normalized if t["status"].upper() in ["APPROVED", "ACTIVE", "ENABLED", "LIVE"]]
+                            
+                            if approved:
+                                logger.info(f"Found {len(approved)} approved templates via {endpoint['name']}")
+                                return {
+                                    "success": True,
+                                    "templates": approved,
+                                    "total": len(approved),
+                                    "source": f"gupshup_{endpoint['name']}"
+                                }
+                            else:
+                                # Return all templates if none are explicitly "approved"
+                                logger.info(f"Found {len(normalized)} templates (no explicit approved status) via {endpoint['name']}")
+                                return {
+                                    "success": True,
+                                    "templates": normalized,
+                                    "total": len(normalized),
+                                    "source": f"gupshup_{endpoint['name']}"
+                                }
                     else:
-                        logger.warning(f"Partner API returned {response.status_code}: {response.text}")
+                        logger.warning(f"{endpoint['name']} returned {response.status_code}: {response.text[:200]}")
                         
             except Exception as e:
-                logger.error(f"Partner API error: {str(e)}")
-        
-        # Fallback: Try the regular API endpoint
-        try:
-            headers = {
-                "apikey": self.api_key,
-                "Content-Type": "application/json"
-            }
-            
-            # Alternative endpoint - fetch template list
-            url = f"https://api.gupshup.io/wa/app/{self.source_number}/template/list"
-            
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    url,
-                    headers=headers,
-                    timeout=30.0
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    templates = data.get("templates", data.get("data", []))
-                    
-                    normalized = []
-                    for t in templates:
-                        normalized.append({
-                            "id": t.get("id") or t.get("elementName"),
-                            "name": t.get("elementName") or t.get("name", ""),
-                            "status": t.get("status", "UNKNOWN"),
-                            "category": t.get("category", "UNKNOWN"),
-                            "language": t.get("languageCode", "en"),
-                            "content": t.get("data", t.get("body", "")),
-                            "header": t.get("header"),
-                            "footer": t.get("footer"),
-                            "buttons": t.get("buttons", [])
-                        })
-                    
-                    approved = [t for t in normalized if t["status"].upper() in ["APPROVED", "ACTIVE", "ENABLED"]]
-                    
-                    logger.info(f"Fetched {len(approved)} approved templates from Gupshup API")
-                    return {
-                        "success": True,
-                        "templates": approved,
-                        "total": len(approved),
-                        "source": "gupshup_api"
-                    }
-                else:
-                    logger.warning(f"Template list API returned {response.status_code}")
-                    
-        except Exception as e:
-            logger.error(f"Template list API error: {str(e)}")
+                logger.error(f"{endpoint['name']} error: {str(e)}")
         
         return {
             "success": False,
-            "error": "Could not fetch templates from Gupshup. Check API credentials.",
+            "error": "Could not fetch templates from Gupshup. Templates may need to be created in Gupshup dashboard first.",
             "templates": [],
             "source": "error"
         }
