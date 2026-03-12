@@ -13,6 +13,8 @@ const API_URL = process.env.REACT_APP_BACKEND_URL;
 export default function WhatsAppAdmin() {
   const [status, setStatus] = useState(null);
   const [templates, setTemplates] = useState([]);
+  const [templateSource, setTemplateSource] = useState(null);
+  const [templateWarning, setTemplateWarning] = useState(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [sendingVoice, setSendingVoice] = useState(false);
@@ -51,6 +53,8 @@ export default function WhatsAppAdmin() {
       if (response.ok) {
         const data = await response.json();
         setTemplates(data.templates || []);
+        setTemplateSource(data.source || 'unknown');
+        setTemplateWarning(data.warning || null);
       }
     } catch (error) {
       console.error('Failed to fetch templates:', error);
@@ -63,14 +67,15 @@ export default function WhatsAppAdmin() {
       return;
     }
 
-    setSendingTemplate(template.name);
+    setSendingTemplate(template.id || template.name);
     setSendResult(null);
 
     try {
       const token = localStorage.getItem('token');
-      const params = templateParams[template.name] || [];
+      const params = templateParams[template.id || template.name] || [];
+      const templateId = template.id || template.name;
       
-      const response = await fetch(`${API_URL}/api/whatsapp/send-template?to_number=${encodeURIComponent(testNumber)}&template_name=${encodeURIComponent(template.name)}&params=${encodeURIComponent(JSON.stringify(params))}`, {
+      const response = await fetch(`${API_URL}/api/whatsapp/send-template?to_number=${encodeURIComponent(testNumber)}&template_id=${encodeURIComponent(templateId)}&params=${encodeURIComponent(JSON.stringify(params))}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -373,82 +378,127 @@ export default function WhatsAppAdmin() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-purple-500" />
-            Approved Templates
+            Approved WhatsApp Templates
+            {templateSource && (
+              <Badge variant="outline" className={
+                templateSource === 'gupshup_partner_api' || templateSource === 'gupshup_api' 
+                  ? 'bg-green-50 text-green-600' 
+                  : 'bg-amber-50 text-amber-600'
+              }>
+                {templateSource === 'gupshup_partner_api' ? 'Live from Gupshup' : 
+                 templateSource === 'gupshup_api' ? 'Gupshup API' : 
+                 templateSource === 'fallback' ? 'Fallback Mode' : templateSource}
+              </Badge>
+            )}
           </CardTitle>
-          <CardDescription>Pre-approved WhatsApp message templates for vendor communication</CardDescription>
+          <CardDescription>
+            {templateSource === 'fallback' 
+              ? 'Showing sample templates - Configure GUPSHUP_APP_ID in backend to fetch live templates'
+              : 'Templates fetched from Gupshup - Ready to send to vendors'}
+          </CardDescription>
+          {templateWarning && (
+            <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-700">
+              ⚠️ {templateWarning}
+              <p className="mt-1 text-amber-600">
+                To fetch live templates, add <code className="bg-amber-100 px-1 rounded">GUPSHUP_APP_ID</code> to your backend .env file.
+                Find your App ID in the Gupshup dashboard under Settings.
+              </p>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {templates.length === 0 ? (
-            <p className="text-slate-500 text-center py-4">No templates available</p>
+            <div className="text-center py-8">
+              <FileText className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+              <p className="text-slate-500">No approved templates found</p>
+              <p className="text-xs text-slate-400 mt-1">Create templates in Gupshup dashboard and get them approved by Meta</p>
+            </div>
           ) : (
             <div className="space-y-4">
               {templates.map((template) => (
-                <div key={template.name} className="border rounded-lg p-4 hover:bg-slate-50 transition-colors">
+                <div key={template.id || template.name} className="border rounded-lg p-4 hover:bg-slate-50 transition-colors">
                   <div className="flex items-start justify-between mb-2">
                     <div>
-                      <h4 className="font-medium text-slate-800">{template.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</h4>
-                      <p className="text-sm text-slate-500">{template.description}</p>
+                      <h4 className="font-medium text-slate-800">
+                        {(template.name || '').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </h4>
+                      {template.id && template.id !== template.name && (
+                        <p className="text-xs text-slate-400 font-mono">ID: {template.id}</p>
+                      )}
                     </div>
-                    <div className="flex gap-2">
-                      <Badge className={template.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}>
-                        {template.status}
+                    <div className="flex gap-2 flex-wrap justify-end">
+                      <Badge className={
+                        ['APPROVED', 'ACTIVE', 'ENABLED'].includes((template.status || '').toUpperCase()) 
+                          ? 'bg-green-100 text-green-700' 
+                          : template.status === 'FALLBACK'
+                          ? 'bg-amber-100 text-amber-700'
+                          : 'bg-yellow-100 text-yellow-700'
+                      }>
+                        {template.status || 'UNKNOWN'}
                       </Badge>
                       <Badge variant="outline" className="text-slate-500">
-                        {template.category}
+                        {template.category || 'N/A'}
                       </Badge>
+                      {template.language && (
+                        <Badge variant="outline" className="text-blue-500">
+                          {template.language}
+                        </Badge>
+                      )}
                     </div>
                   </div>
                   
-                  <div className="bg-slate-900 rounded-lg p-3 mb-3 relative">
-                    <pre className="text-green-400 text-xs whitespace-pre-wrap font-mono">{template.content}</pre>
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      className="absolute top-2 right-2 text-slate-400 hover:text-white"
-                      onClick={() => copyTemplateContent(template.content)}
-                    >
-                      <Copy className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  
-                  {template.parameters && template.parameters.length > 0 && (
-                    <div className="mb-3">
-                      <p className="text-xs text-slate-500 mb-1">Parameters: {template.parameters.join(', ')}</p>
-                      <div className="flex gap-2 flex-wrap">
-                        {template.parameters.map((param, idx) => (
-                          <Input
-                            key={idx}
-                            placeholder={param}
-                            className="w-32 h-8 text-xs"
-                            onChange={(e) => {
-                              const newParams = [...(templateParams[template.name] || [])];
-                              newParams[idx] = e.target.value;
-                              setTemplateParams({...templateParams, [template.name]: newParams});
-                            }}
-                          />
-                        ))}
-                      </div>
+                  {template.content && (
+                    <div className="bg-slate-900 rounded-lg p-3 mb-3 relative">
+                      <pre className="text-green-400 text-xs whitespace-pre-wrap font-mono">{template.content}</pre>
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        className="absolute top-2 right-2 text-slate-400 hover:text-white"
+                        onClick={() => copyTemplateContent(template.content)}
+                      >
+                        <Copy className="w-4 h-4" />
+                      </Button>
                     </div>
                   )}
                   
-                  <Button 
-                    size="sm"
-                    onClick={() => sendTemplateMessage(template)}
-                    disabled={!testNumber || sendingTemplate === template.name || !status?.configured}
-                    className="bg-purple-600 hover:bg-purple-700"
-                  >
-                    {sendingTemplate === template.name ? (
-                      <>
-                        <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                        Sending...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-3 h-3 mr-1" />
-                        Send Template
-                      </>
-                    )}
-                  </Button>
+                  {template.header && (
+                    <p className="text-xs text-slate-500 mb-1"><strong>Header:</strong> {template.header}</p>
+                  )}
+                  {template.footer && (
+                    <p className="text-xs text-slate-500 mb-1"><strong>Footer:</strong> {template.footer}</p>
+                  )}
+                  {template.buttons && template.buttons.length > 0 && (
+                    <p className="text-xs text-slate-500 mb-1"><strong>Buttons:</strong> {template.buttons.map(b => b.text || b.title || b).join(', ')}</p>
+                  )}
+                  
+                  <div className="flex items-center gap-2 mt-3">
+                    <Input
+                      placeholder="Enter parameter values (comma-separated)"
+                      className="flex-1 h-8 text-xs"
+                      onChange={(e) => {
+                        const params = e.target.value.split(',').map(p => p.trim()).filter(Boolean);
+                        setTemplateParams({...templateParams, [template.id || template.name]: params});
+                      }}
+                    />
+                    <Button 
+                      size="sm"
+                      onClick={() => sendTemplateMessage(template)}
+                      disabled={!testNumber || sendingTemplate === (template.id || template.name) || !status?.configured}
+                      className="bg-purple-600 hover:bg-purple-700"
+                    >
+                      {sendingTemplate === (template.id || template.name) ? (
+                        <>
+                          <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-3 h-3 mr-1" />
+                          Send
+                        </>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>

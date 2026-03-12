@@ -5,17 +5,20 @@ Handles sending and receiving WhatsApp messages for OEMLinker
 import os
 import httpx
 import logging
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
 # Gupshup Configuration
 GUPSHUP_API_URL = "https://api.gupshup.io/wa/api/v1/msg"
+GUPSHUP_TEMPLATE_URL = "https://api.gupshup.io/wa/api/v1/template/msg"
+GUPSHUP_PARTNER_URL = "https://partner.gupshup.io/partner/app"
 GUPSHUP_MEDIA_URL = "https://mediaapi.smsgupshup.com/GatewayAPI/rest"
 GUPSHUP_APP_NAME = os.environ.get("GUPSHUP_APP_NAME", "OEMLinker")
 GUPSHUP_API_KEY = os.environ.get("GUPSHUP_API_KEY", "")
 GUPSHUP_SOURCE_NUMBER = os.environ.get("GUPSHUP_SOURCE_NUMBER", "")  # WhatsApp Business Number
+GUPSHUP_APP_ID = os.environ.get("GUPSHUP_APP_ID", "")  # Gupshup App ID for partner APIs
 
 
 class WhatsAppService:
@@ -23,13 +26,211 @@ class WhatsAppService:
     
     def __init__(self):
         self.api_url = GUPSHUP_API_URL
+        self.template_url = GUPSHUP_TEMPLATE_URL
+        self.partner_url = GUPSHUP_PARTNER_URL
         self.app_name = GUPSHUP_APP_NAME
         self.api_key = GUPSHUP_API_KEY
         self.source_number = GUPSHUP_SOURCE_NUMBER
+        self.app_id = GUPSHUP_APP_ID
     
     def is_configured(self) -> bool:
         """Check if WhatsApp service is properly configured"""
         return bool(self.api_key and self.source_number)
+    
+    async def get_templates(self) -> Dict[str, Any]:
+        """
+        Fetch approved WhatsApp templates from Gupshup Partner API
+        
+        Returns:
+            Dict with templates list or error
+        """
+        if not self.is_configured():
+            return {"success": False, "error": "WhatsApp not configured", "templates": []}
+        
+        # Try Partner API first if app_id is available
+        if self.app_id:
+            try:
+                headers = {
+                    "apikey": self.api_key,
+                    "Content-Type": "application/json"
+                }
+                
+                # Gupshup Partner API endpoint for templates
+                url = f"{self.partner_url}/{self.app_id}/templates"
+                
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        url,
+                        headers=headers,
+                        timeout=30.0
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        templates = data.get("templates", data.get("data", []))
+                        
+                        # Normalize template format
+                        normalized = []
+                        for t in templates:
+                            normalized.append({
+                                "id": t.get("id") or t.get("elementName") or t.get("name"),
+                                "name": t.get("elementName") or t.get("name", ""),
+                                "status": t.get("status", "UNKNOWN"),
+                                "category": t.get("category", t.get("templateType", "UNKNOWN")),
+                                "language": t.get("languageCode", t.get("language", "en")),
+                                "content": t.get("data", t.get("content", t.get("body", ""))),
+                                "header": t.get("header"),
+                                "footer": t.get("footer"),
+                                "buttons": t.get("buttons", []),
+                                "created_at": t.get("createdOn", t.get("created_at")),
+                                "modified_at": t.get("modifiedOn", t.get("modified_at"))
+                            })
+                        
+                        # Filter only approved templates
+                        approved = [t for t in normalized if t["status"].upper() in ["APPROVED", "ACTIVE", "ENABLED"]]
+                        
+                        logger.info(f"Fetched {len(approved)} approved templates from Gupshup")
+                        return {
+                            "success": True,
+                            "templates": approved,
+                            "total": len(approved),
+                            "source": "gupshup_partner_api"
+                        }
+                    else:
+                        logger.warning(f"Partner API returned {response.status_code}: {response.text}")
+                        
+            except Exception as e:
+                logger.error(f"Partner API error: {str(e)}")
+        
+        # Fallback: Try the regular API endpoint
+        try:
+            headers = {
+                "apikey": self.api_key,
+                "Content-Type": "application/json"
+            }
+            
+            # Alternative endpoint - fetch template list
+            url = f"https://api.gupshup.io/wa/app/{self.source_number}/template/list"
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    url,
+                    headers=headers,
+                    timeout=30.0
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    templates = data.get("templates", data.get("data", []))
+                    
+                    normalized = []
+                    for t in templates:
+                        normalized.append({
+                            "id": t.get("id") or t.get("elementName"),
+                            "name": t.get("elementName") or t.get("name", ""),
+                            "status": t.get("status", "UNKNOWN"),
+                            "category": t.get("category", "UNKNOWN"),
+                            "language": t.get("languageCode", "en"),
+                            "content": t.get("data", t.get("body", "")),
+                            "header": t.get("header"),
+                            "footer": t.get("footer"),
+                            "buttons": t.get("buttons", [])
+                        })
+                    
+                    approved = [t for t in normalized if t["status"].upper() in ["APPROVED", "ACTIVE", "ENABLED"]]
+                    
+                    logger.info(f"Fetched {len(approved)} approved templates from Gupshup API")
+                    return {
+                        "success": True,
+                        "templates": approved,
+                        "total": len(approved),
+                        "source": "gupshup_api"
+                    }
+                else:
+                    logger.warning(f"Template list API returned {response.status_code}")
+                    
+        except Exception as e:
+            logger.error(f"Template list API error: {str(e)}")
+        
+        return {
+            "success": False,
+            "error": "Could not fetch templates from Gupshup. Check API credentials.",
+            "templates": [],
+            "source": "error"
+        }
+    
+    async def send_gupshup_template(
+        self,
+        to_number: str,
+        template_id: str,
+        params: List[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Send an approved template message via Gupshup Template API
+        
+        Args:
+            to_number: Recipient phone number
+            template_id: Template ID or element name from Gupshup
+            params: List of parameter values
+            
+        Returns:
+            API response dict
+        """
+        if not self.is_configured():
+            return {"success": False, "error": "WhatsApp not configured"}
+        
+        to_number = to_number.replace("+", "").replace(" ", "").replace("-", "")
+        if not to_number.startswith("91") and len(to_number) == 10:
+            to_number = "91" + to_number
+        
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "apikey": self.api_key
+        }
+        
+        import json
+        template_payload = json.dumps({
+            "id": template_id,
+            "params": params or []
+        })
+        
+        payload = {
+            "channel": "whatsapp",
+            "source": self.source_number,
+            "destination": to_number,
+            "template": template_payload,
+            "src.name": self.app_name
+        }
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    self.template_url,
+                    headers=headers,
+                    data=payload,
+                    timeout=30.0
+                )
+                
+                result = response.json() if response.text else {}
+                
+                if response.status_code in [200, 201, 202]:
+                    logger.info(f"Template {template_id} sent to {to_number[:6]}***")
+                    return {
+                        "success": True,
+                        "message_id": result.get("messageId"),
+                        "response": result
+                    }
+                else:
+                    logger.error(f"Template send failed: {result}")
+                    return {
+                        "success": False,
+                        "error": result.get("message", "Send failed"),
+                        "response": result
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Template send error: {str(e)}")
+            return {"success": False, "error": str(e)}
     
     async def send_text_message(
         self, 
