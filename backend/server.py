@@ -13411,7 +13411,8 @@ Or visit: {BASE_URL}/register"""
                 matched_vendors = rfq.get("matched_vendors") or []
                 for m in matched_vendors:
                     if m and m.get("vendor_id") == vendor_id:
-                        match_score = m.get("match_score", 0)
+                        # Score is stored as "suitability_score" in database
+                        match_score = m.get("suitability_score", m.get("match_score", 0))
                         break
                 
                 # Check for drawings
