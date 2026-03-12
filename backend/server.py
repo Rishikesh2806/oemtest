@@ -3172,7 +3172,9 @@ async def upload_machine_image(
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user)
 ):
-    """Upload an image for a machine"""
+    """Upload an image for a machine - stores in cloud storage"""
+    from app.services.storage_service import upload_file
+    
     vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
     if not vendor:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -3196,20 +3198,26 @@ async def upload_machine_image(
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image size must be less than 5MB")
     
-    # Generate unique filename
-    file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
-    filename = f"machine_{machine_id}_{uuid.uuid4().hex[:8]}.{file_ext}"
-    
-    # Store in uploads directory
-    uploads_dir = "/app/uploads/machines"
-    os.makedirs(uploads_dir, exist_ok=True)
-    file_path = os.path.join(uploads_dir, filename)
-    
-    with open(file_path, "wb") as f:
-        f.write(content)
-    
-    # Generate URL - use the API endpoint to serve the image
-    image_url = f"/api/uploads/machines/{filename}"
+    # Upload to cloud storage
+    try:
+        result = upload_file(
+            data=content,
+            filename=file.filename,
+            folder=f"machines/{vendor['vendor_id']}",
+            content_type=file.content_type
+        )
+        image_url = result["storage_url"]
+    except Exception as e:
+        logger.error(f"Cloud storage upload failed: {e}")
+        # Fallback to local storage
+        file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+        filename = f"machine_{machine_id}_{uuid.uuid4().hex[:8]}.{file_ext}"
+        uploads_dir = "/app/uploads/machines"
+        os.makedirs(uploads_dir, exist_ok=True)
+        file_path = os.path.join(uploads_dir, filename)
+        with open(file_path, "wb") as f:
+            f.write(content)
+        image_url = f"/api/uploads/machines/{filename}"
     
     # Update machine with new image
     current_images = machine.get("images", [])
@@ -3220,7 +3228,7 @@ async def upload_machine_image(
         {"$set": {"images": current_images}}
     )
     
-    logger.info(f"Machine image uploaded: {machine_id} - {filename}")
+    logger.info(f"Machine image uploaded: {machine_id} - {image_url}")
     
     return {"image_url": image_url, "images": current_images}
 
@@ -3282,6 +3290,19 @@ async def serve_machine_image(filename: str):
     content_type = content_types.get(ext, "image/jpeg")
     
     return FileResponse(file_path, media_type=content_type)
+
+
+@api_router.get("/storage/{path:path}")
+async def serve_cloud_storage_file(path: str):
+    """Serve files from cloud storage"""
+    from app.services.storage_service import download_file
+    
+    try:
+        content, content_type = download_file(path)
+        return Response(content=content, media_type=content_type)
+    except Exception as e:
+        logger.error(f"Failed to serve cloud storage file {path}: {e}")
+        raise HTTPException(status_code=404, detail="File not found")
 
 # Machine Availability Update
 class MachineAvailabilityUpdate(BaseModel):
@@ -12569,17 +12590,29 @@ Or add manually at https://oemlinker.com/vendor/machines"""
         if not machine_type:
             machine_type = "CNC Machine"  # Default type
         
-        # Save the image to uploads
-        file_ext = "jpg"
-        filename = f"machine_wa_{vendor['vendor_id']}_{uuid.uuid4().hex[:8]}.{file_ext}"
-        uploads_dir = "/app/uploads/machines"
-        os.makedirs(uploads_dir, exist_ok=True)
-        file_path = os.path.join(uploads_dir, filename)
+        # Upload image to cloud storage
+        from app.services.storage_service import upload_file
         
-        with open(file_path, "wb") as f:
-            f.write(image_data)
-        
-        image_url_stored = f"/api/uploads/machines/{filename}"
+        try:
+            result = upload_file(
+                data=image_data,
+                filename=f"machine_{uuid.uuid4().hex[:8]}.jpg",
+                folder=f"machines/{vendor['vendor_id']}",
+                content_type="image/jpeg"
+            )
+            image_url_stored = result["storage_url"]
+            logger.info(f"Machine image uploaded to cloud storage: {image_url_stored}")
+        except Exception as e:
+            # Fallback to local storage
+            logger.warning(f"Cloud storage failed, using local: {e}")
+            file_ext = "jpg"
+            filename = f"machine_wa_{vendor['vendor_id']}_{uuid.uuid4().hex[:8]}.{file_ext}"
+            uploads_dir = "/app/uploads/machines"
+            os.makedirs(uploads_dir, exist_ok=True)
+            file_path = os.path.join(uploads_dir, filename)
+            with open(file_path, "wb") as f:
+                f.write(image_data)
+            image_url_stored = f"/api/uploads/machines/{filename}"
         
         # Get vendor's language for localized instructions
         lang_info = get_vendor_language(vendor)
@@ -14038,6 +14071,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize services at startup"""
+    # Initialize cloud storage
+    try:
+        from app.services.storage_service import init_storage
+        init_storage()
+        logger.info("Cloud storage service initialized")
+    except Exception as e:
+        logger.warning(f"Cloud storage initialization failed (will use local fallback): {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
