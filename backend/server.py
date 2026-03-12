@@ -13343,8 +13343,7 @@ Or visit: {BASE_URL}/register"""
                 response += f"   Match Score: {match_score}%"
                 if process_str:
                     response += f" | {process_str}"
-                response += f"\n   🔗 *View & Quote:* {BASE_URL}/vendor/rfq/{rfq_id}\n"
-                response += f"   📄 _Details:_ Reply *rfq {short_id}*\n\n"
+                response += f"\n   🔗 *View & Quote:* {BASE_URL}/vendor/rfq/{rfq_id}\n\n"
             
             response += f"━━━━━━━━━━━━━━━\n📱 *Dashboard:* {BASE_URL}/vendor/dashboard"
             return response
