@@ -27,7 +27,7 @@ class TestMagicLinkGenerate:
         assert "token" in data
         assert isinstance(data["token"], str)
         assert len(data["token"]) > 20  # Token should be a secure random string
-        assert data["expires_in_minutes"] == 15
+        assert data["expires_in_minutes"] == 30  # 30 minutes for RFQ magic links
     
     def test_generate_magic_link_nonexistent_phone(self):
         """Test generating magic link with unregistered phone"""

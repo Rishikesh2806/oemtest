@@ -1969,8 +1969,13 @@ async def logout(request: Request, response: Response):
 # Magic link tokens are stored in MongoDB for persistence across instances
 
 @api_router.post("/auth/magic-link/generate")
-async def generate_magic_link(phone: str):
-    """Generate a magic link token for WhatsApp users (internal use only)"""
+async def generate_magic_link(phone: str, redirect_url: Optional[str] = None):
+    """Generate a magic link token for WhatsApp users (internal use only)
+    
+    Args:
+        phone: User's phone number
+        redirect_url: Optional URL to redirect to after successful login (e.g., /vendor/rfq/rfq_123)
+    """
     # Normalize phone
     phone_normalized = phone.replace("+", "").replace(" ", "").replace("-", "")
     phone_10digit = phone_normalized[-10:] if len(phone_normalized) >= 10 else phone_normalized
@@ -1990,13 +1995,26 @@ async def generate_magic_link(phone: str):
     
     # Generate secure token
     token = secrets.token_urlsafe(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)  # 15 min expiry
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)  # 30 min expiry for RFQ links
     
-    # Store token in MongoDB
+    # Validate and sanitize redirect URL - only allow internal paths
+    safe_redirect = None
+    if redirect_url:
+        # Only allow relative paths starting with /
+        if redirect_url.startswith("/") and not redirect_url.startswith("//"):
+            # Whitelist of allowed redirect patterns
+            allowed_patterns = [
+                "/vendor/", "/buyer/", "/admin/", "/dashboard", "/rfq/", "/quotes", "/orders"
+            ]
+            if any(redirect_url.startswith(pattern) or pattern in redirect_url for pattern in allowed_patterns):
+                safe_redirect = redirect_url
+    
+    # Store token in MongoDB with redirect URL
     await db.magic_link_tokens.insert_one({
         "token": token,
         "user_id": user["user_id"],
         "phone": phone_normalized,
+        "redirect_url": safe_redirect,  # Store validated redirect URL
         "expires_at": expires_at.isoformat(),
         "used": False,
         "created_at": datetime.now(timezone.utc).isoformat()
@@ -2010,7 +2028,8 @@ async def generate_magic_link(phone: str):
     return {
         "success": True,
         "token": token,
-        "expires_in_minutes": 15
+        "expires_in_minutes": 30,
+        "redirect_url": safe_redirect
     }
 
 
@@ -2080,6 +2099,9 @@ async def verify_magic_link(token: str, response: Response):
         {"$set": {"last_login": datetime.now(timezone.utc).isoformat()}, "$inc": {"login_count": 1}}
     )
     
+    # Get redirect URL from token (if set)
+    redirect_url = token_doc.get("redirect_url") or f"/{user['role']}/dashboard"
+    
     # Delete used token
     await db.magic_link_tokens.delete_one({"token": token})
     
@@ -2097,7 +2119,7 @@ async def verify_magic_link(token: str, response: Response):
             "email_verified": user.get("email_verified", False),
             "phone_login": user.get("phone_login", False)
         },
-        "redirect_url": f"/{user['role']}/dashboard"
+        "redirect_url": redirect_url
     }
 
 # ============== PASSWORD SECURITY ENDPOINTS ==============
@@ -11300,6 +11322,81 @@ async def send_whatsapp_voice_message(
         logger.error(f"Voice message error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ============== MAGIC LINK WITH REDIRECT HELPER ==============
+
+async def generate_magic_link_for_vendor(phone: str, redirect_url: str = None) -> dict:
+    """
+    Generate a magic link token for a vendor with optional redirect URL.
+    Used internally for WhatsApp RFQ notifications to enable instant login.
+    
+    Args:
+        phone: Vendor's phone number
+        redirect_url: Path to redirect to after login (e.g., /vendor/rfq/rfq_123)
+    
+    Returns:
+        dict with success, token, and redirect_url
+    """
+    try:
+        # Normalize phone
+        phone_normalized = phone.replace("+", "").replace(" ", "").replace("-", "")
+        phone_10digit = phone_normalized[-10:] if len(phone_normalized) >= 10 else phone_normalized
+        
+        # Find vendor by phone
+        vendor = await db.vendors.find_one(
+            {"phone": {"$regex": phone_10digit}},
+            {"_id": 0, "user_id": 1, "vendor_id": 1}
+        )
+        
+        if not vendor:
+            logger.warning(f"Magic link generation failed: Vendor not found for phone {phone_10digit}")
+            return {"success": False, "error": "Vendor not found"}
+        
+        user = await db.users.find_one({"user_id": vendor["user_id"]}, {"_id": 0})
+        if not user:
+            logger.warning(f"Magic link generation failed: User not found for vendor {vendor['vendor_id']}")
+            return {"success": False, "error": "User not found"}
+        
+        # Generate secure token
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)  # 30 min expiry
+        
+        # Validate and sanitize redirect URL - only allow internal paths
+        safe_redirect = None
+        if redirect_url:
+            # Only allow relative paths starting with /
+            if redirect_url.startswith("/") and not redirect_url.startswith("//"):
+                # Whitelist of allowed redirect patterns
+                allowed_patterns = ["/vendor/", "/buyer/", "/admin/", "/dashboard", "/rfq/", "/quotes", "/orders"]
+                if any(pattern in redirect_url for pattern in allowed_patterns):
+                    safe_redirect = redirect_url
+        
+        # Store token in MongoDB with redirect URL
+        await db.magic_link_tokens.insert_one({
+            "token": token,
+            "user_id": user["user_id"],
+            "phone": phone_normalized,
+            "redirect_url": safe_redirect,
+            "expires_at": expires_at.isoformat(),
+            "used": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "purpose": "rfq_notification"  # Track purpose for analytics
+        })
+        
+        logger.info(f"Magic link generated for vendor {vendor['vendor_id']} with redirect to {safe_redirect}")
+        
+        return {
+            "success": True,
+            "token": token,
+            "expires_in_minutes": 30,
+            "redirect_url": safe_redirect
+        }
+    except Exception as e:
+        logger.error(f"Magic link generation error: {str(e)}")
+        return {"success": False, "error": str(e)}
+
+
+
 @api_router.post("/whatsapp/notify-rfq")
 async def notify_vendors_new_rfq(
     rfq_id: str,
@@ -11368,9 +11465,21 @@ async def notify_vendors_new_rfq(
         urgency_emoji = {"urgent": "🔴", "high": "🟠", "normal": "🟢", "low": "🔵"}.get(urgency, "🟢")
         
         match_score = match.get("suitability_score", match.get("match_score", 0))
-        rfq_link = f"{BASE_URL}/vendor/rfq/{rfq_id}"
         
-        # User-friendly notification message
+        # Generate magic link with redirect to RFQ page for instant access
+        redirect_path = f"/vendor/rfq/{rfq_id}"
+        magic_link_result = await generate_magic_link_for_vendor(phone, redirect_path)
+        
+        if magic_link_result.get("success"):
+            # Use magic link for instant authenticated access
+            rfq_link = f"{BASE_URL}/magic-login?token={magic_link_result['token']}"
+            link_note = "🔑 _Click link for instant access (no login needed)_"
+        else:
+            # Fallback to regular link if magic link generation fails
+            rfq_link = f"{BASE_URL}/vendor/rfq/{rfq_id}"
+            link_note = "_Login to view and submit quote_"
+        
+        # User-friendly notification message with magic link
         notification_message = f"""🔔 *New RFQ Match for You!*
 
 Hello *{company_name}*,
@@ -11384,8 +11493,10 @@ Great news! A new RFQ matching your capabilities is available.
 📅 Deadline: {deadline_str}
 🎯 Match Score: {match_score}%
 
-👉 *Submit your quote:*
+👉 *View & Submit Quote:*
 {rfq_link}
+
+{link_note}
 
 Reply *rfqs* to see all opportunities.
 
@@ -13729,14 +13840,28 @@ Or visit: {BASE_URL}/register"""
                 processes = (ai_analysis.get("recommended_processes") or [])[:2]
                 process_str = f"🔧 {', '.join(processes)}" if processes else ""
                 
+                # Generate magic link for instant access to RFQ
+                magic_result = await generate_magic_link_for_vendor(sender, f"/vendor/rfq/{rfq_id}")
+                if magic_result.get("success"):
+                    rfq_link = f"{BASE_URL}/magic-login?token={magic_result['token']}"
+                else:
+                    rfq_link = f"{BASE_URL}/vendor/rfq/{rfq_id}"
+                
                 response += f"{urgency_emoji} *{rfq.get('title', 'Untitled')[:35]}* {drawing_indicator}\n"
                 response += f"   Material: {rfq.get('material_type', 'N/A')} | Qty: {rfq.get('quantity', 'N/A')}\n"
                 response += f"   Match Score: {match_score}%"
                 if process_str:
                     response += f" | {process_str}"
-                response += f"\n   🔗 *View & Quote:* {BASE_URL}/vendor/rfq/{rfq_id}\n\n"
+                response += f"\n   🔗 *View & Quote:* {rfq_link}\n\n"
             
-            response += f"━━━━━━━━━━━━━━━\n📱 *Dashboard:* {BASE_URL}/vendor/dashboard"
+            # Generate magic link for dashboard as well
+            dashboard_magic = await generate_magic_link_for_vendor(sender, "/vendor/dashboard")
+            if dashboard_magic.get("success"):
+                dashboard_link = f"{BASE_URL}/magic-login?token={dashboard_magic['token']}"
+            else:
+                dashboard_link = f"{BASE_URL}/vendor/dashboard"
+            
+            response += f"━━━━━━━━━━━━━━━\n📱 *Dashboard:* {dashboard_link}\n\n🔑 _Click links for instant access_"
             return response
         except Exception as e:
             logger.error(f"RFQs command error: {str(e)}", exc_info=True)
@@ -13813,7 +13938,20 @@ Or visit: {BASE_URL}/register"""
 {rfq.get('description', 'No description')[:200]}
 
 📅 Deadline: {rfq.get('deadline', 'Not specified')}
-🏷️ Status: {rfq.get('status', 'N/A').replace('_', ' ').title()}
+🏷️ Status: {rfq.get('status', 'N/A').replace('_', ' ').title()}"""
+        
+        # Generate magic link for instant access to quote submission
+        magic_result = await generate_magic_link_for_vendor(sender, f"/vendor/rfq/{rfq_id}")
+        if magic_result.get("success"):
+            quote_link = f"{BASE_URL}/magic-login?token={magic_result['token']}"
+            response += f"""
+
+🔗 *View & Submit Quote:*
+{quote_link}
+
+🔑 _Click link for instant access_"""
+        else:
+            response += f"""
 
 🔗 *View & Submit Quote:*
 {BASE_URL}/vendor/rfq/{rfq_id}"""

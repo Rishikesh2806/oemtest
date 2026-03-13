@@ -1,0 +1,96 @@
+{
+  "summary": "Completed backend testing of Magic Link with Redirect URL feature for WhatsApp RFQ integration. All 33 tests passed (21 new redirect tests + 12 existing magic link tests). Feature is working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_magic_link_redirect.py",
+    "/app/backend/tests/test_magic_link.py",
+    "/app/test_reports/pytest/magic_link_redirect_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_magic_link_redirect.py",
+    "/app/backend/tests/test_magic_link.py"
+  ],
+  "success_rate": {
+    "backend": "100% - 33/33 tests passed"
+  },
+  "test_credentials": {
+    "vendor_phone": "9330389049",
+    "vendor_name": "FORMATIC PROJECTS INDIA PRIVATE LIMITED",
+    "admin_email": "admin@offoadex.com",
+    "admin_password": "admin123"
+  },
+  "seed_data_creation": "None - using existing test vendor",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Magic link with redirect URL feature is fully functional. Test phone 9330389049 works for magic link generation. Magic links expire in 30 minutes (updated from 15 min).",
+  "features_tested": {
+    "magic_link_generation_with_redirect": {
+      "status": "PASS",
+      "details": "POST /api/auth/magic-link/generate accepts optional redirect_url parameter and returns it in response"
+    },
+    "redirect_url_security": {
+      "status": "PASS",
+      "details": "Only internal paths starting with /vendor/, /buyer/, /admin/, /dashboard, /rfq/, /quotes, /orders are accepted. External URLs, protocol-relative URLs, and unauthorized paths are rejected (set to null)"
+    },
+    "magic_link_verification_with_redirect": {
+      "status": "PASS",
+      "details": "GET /api/auth/magic-link/verify/{token} returns stored redirect_url or defaults to /{role}/dashboard"
+    },
+    "generate_magic_link_for_vendor_helper": {
+      "status": "PASS",
+      "details": "Internal helper function used by WhatsApp RFQ notifications correctly generates magic links with redirect paths"
+    },
+    "notify_vendors_rfq_endpoint": {
+      "status": "PASS",
+      "details": "POST /api/whatsapp/notify-rfq endpoint accessible and requires authentication"
+    },
+    "single_use_tokens": {
+      "status": "PASS",
+      "details": "Magic link tokens are single-use - second verification attempt returns 400 error"
+    },
+    "token_expiry": {
+      "status": "PASS",
+      "details": "Magic links expire in 30 minutes (configurable for RFQ use case)"
+    },
+    "frontend_magic_login_page": {
+      "status": "PASS",
+      "details": "MagicLogin.jsx correctly handles verification response including redirect_url, stores in localStorage, and redirects user"
+    }
+  },
+  "api_endpoints_tested": [
+    {
+      "endpoint": "POST /api/auth/magic-link/generate",
+      "params": "phone (required), redirect_url (optional)",
+      "response": "{ success, token, expires_in_minutes, redirect_url }"
+    },
+    {
+      "endpoint": "GET /api/auth/magic-link/verify/{token}",
+      "response": "{ success, access_token, token_type, user, redirect_url }"
+    },
+    {
+      "endpoint": "POST /api/whatsapp/notify-rfq",
+      "params": "rfq_id",
+      "auth": "Required (admin/buyer)",
+      "notes": "Generates magic links with redirect to /vendor/rfq/{rfq_id}"
+    }
+  ],
+  "allowed_redirect_paths": [
+    "/vendor/",
+    "/buyer/",
+    "/admin/",
+    "/dashboard",
+    "/rfq/",
+    "/quotes",
+    "/orders"
+  ]
+}
