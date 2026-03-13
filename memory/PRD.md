@@ -116,6 +116,24 @@ See ARCHITECTURE.md for detailed refactoring plan.
   - RFQ match notifications include magic links
 - **Test Report**: /app/test_reports/iteration_22.json (100% pass - 33/33 tests)
 
+### WhatsApp Logging & Analytics Module (NEW - Mar 13, 2026)
+- **Backend Service** (`/app/backend/app/services/whatsapp_logger.py`):
+  - Logs all WhatsApp API calls (send_text_message, send_template, send_document, send_image)
+  - Tracks: message type, direction, status, phone, error codes, estimated costs
+  - MongoDB collection: `whatsapp_logs`
+  - Automatic cost estimation based on Gupshup pricing (text: ₹0.35-0.50, media: ₹0.55-0.70)
+- **Admin API Endpoints**:
+  - `GET /api/whatsapp/logs` - List logs with filters (direction, status, type, phone, date range)
+  - `GET /api/whatsapp/logs/stats` - Comprehensive statistics (totals, success rates, costs, breakdowns)
+  - `GET /api/whatsapp/logs/errors` - Error summary for last N days
+- **Admin Dashboard** (`/admin/whatsapp/logs`):
+  - Overview tab: Stats cards, message type breakdown, context breakdown, daily activity
+  - Message Logs tab: Filterable log table with pagination
+  - Errors tab: Grouped error summary with counts and details
+- **Test Report**: /app/test_reports/iteration_23.json (100% pass - 17/17 backend tests)
+
+
+
 
 ## What's Been Implemented
 
