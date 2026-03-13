@@ -2937,7 +2937,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://escrow-payments-2.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -3172,8 +3172,8 @@ async def upload_machine_image(
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user)
 ):
-    """Upload an image for a machine - stores in cloud storage"""
-    from app.services.storage_service import upload_file
+    """Upload an image for a machine - stores in AWS S3"""
+    from app.services.s3_storage_service import upload_file
     
     vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
     if not vendor:
@@ -3198,7 +3198,7 @@ async def upload_machine_image(
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image size must be less than 5MB")
     
-    # Upload to cloud storage
+    # Upload to AWS S3 (no local fallback - S3 is required)
     try:
         result = upload_file(
             data=content,
@@ -3206,18 +3206,10 @@ async def upload_machine_image(
             folder=f"machines/{vendor['vendor_id']}",
             content_type=file.content_type
         )
-        image_url = result["storage_url"]
+        image_url = result["url"]  # Use S3 public URL
     except Exception as e:
-        logger.error(f"Cloud storage upload failed: {e}")
-        # Fallback to local storage
-        file_ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
-        filename = f"machine_{machine_id}_{uuid.uuid4().hex[:8]}.{file_ext}"
-        uploads_dir = "/app/uploads/machines"
-        os.makedirs(uploads_dir, exist_ok=True)
-        file_path = os.path.join(uploads_dir, filename)
-        with open(file_path, "wb") as f:
-            f.write(content)
-        image_url = f"/api/uploads/machines/{filename}"
+        logger.error(f"S3 upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload image to storage: {str(e)}")
     
     # Update machine with new image
     current_images = machine.get("images", [])
@@ -3228,7 +3220,7 @@ async def upload_machine_image(
         {"$set": {"images": current_images}}
     )
     
-    logger.info(f"Machine image uploaded: {machine_id} - {image_url}")
+    logger.info(f"Machine image uploaded to S3: {machine_id} - {image_url}")
     
     return {"image_url": image_url, "images": current_images}
 
@@ -3239,6 +3231,8 @@ async def delete_machine_image(
     user: dict = Depends(get_current_user)
 ):
     """Delete an image from a machine"""
+    from app.services.s3_storage_service import delete_file as s3_delete_file
+    
     vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
     if not vendor:
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -3262,22 +3256,34 @@ async def delete_machine_image(
         {"$set": {"images": current_images}}
     )
     
-    # Optionally delete file from disk
-    if image_url.startswith("/api/uploads/machines/"):
+    # Delete file from S3 if it's an S3 URL
+    bucket_name = os.environ.get("AWS_S3_BUCKET_NAME", "oemlinker-storage")
+    if f"{bucket_name}.s3." in image_url:
+        # Extract S3 key from URL: https://bucket.s3.region.amazonaws.com/path/to/file.jpg
+        try:
+            s3_key = image_url.split(".amazonaws.com/")[1]
+            s3_delete_file(s3_key)
+            logger.info(f"Deleted S3 file: {s3_key}")
+        except Exception as e:
+            logger.warning(f"Failed to delete S3 file {image_url}: {e}")
+    # Handle legacy local files
+    elif image_url.startswith("/api/uploads/machines/"):
         filename = image_url.split("/")[-1]
         file_path = f"/app/uploads/machines/{filename}"
         if os.path.exists(file_path):
             os.remove(file_path)
+            logger.info(f"Deleted local file: {file_path}")
     
     return {"message": "Image deleted", "images": current_images}
 
-# Serve uploaded machine images
+# Serve uploaded machine images (legacy support for local files)
 @api_router.get("/uploads/machines/{filename}")
 async def serve_machine_image(filename: str):
-    """Serve uploaded machine images"""
+    """Serve uploaded machine images - legacy endpoint for local files.
+    New images are served directly from S3 URLs."""
     file_path = f"/app/uploads/machines/{filename}"
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Image not found")
+        raise HTTPException(status_code=404, detail="Image not found. Note: New images are stored in S3 and served directly via their S3 URL.")
     
     # Determine content type
     ext = filename.split(".")[-1].lower()
@@ -3294,14 +3300,14 @@ async def serve_machine_image(filename: str):
 
 @api_router.get("/storage/{path:path}")
 async def serve_cloud_storage_file(path: str):
-    """Serve files from cloud storage"""
-    from app.services.storage_service import download_file
+    """Serve files from AWS S3 storage"""
+    from app.services.s3_storage_service import download_file
     
     try:
         content, content_type = download_file(path)
         return Response(content=content, media_type=content_type)
     except Exception as e:
-        logger.error(f"Failed to serve cloud storage file {path}: {e}")
+        logger.error(f"Failed to serve S3 file {path}: {e}")
         raise HTTPException(status_code=404, detail="File not found")
 
 
@@ -3312,14 +3318,14 @@ async def list_storage_files(
     prefix: Optional[str] = None,
     user: dict = Depends(get_current_user)
 ):
-    """List files in cloud storage (Admin only)"""
+    """List files in AWS S3 storage (Admin only)"""
     if user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    from app.services.storage_service import list_files
+    from app.services.s3_storage_service import list_files
     
-    # Default to app prefix
-    search_prefix = prefix if prefix else "oemlinker"
+    # Default to machines/drawings prefix
+    search_prefix = prefix if prefix else ""
     result = list_files(search_prefix)
     
     return result
@@ -3330,11 +3336,11 @@ async def delete_storage_file(
     path: str,
     user: dict = Depends(get_current_user)
 ):
-    """Delete a file from cloud storage (Admin only)"""
+    """Delete a file from AWS S3 storage (Admin only)"""
     if user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    from app.services.storage_service import delete_file
+    from app.services.s3_storage_service import delete_file
     
     result = delete_file(path)
     
@@ -3348,15 +3354,15 @@ async def delete_storage_file(
 async def get_storage_stats(
     user: dict = Depends(get_current_user)
 ):
-    """Get storage statistics (Admin only)"""
+    """Get AWS S3 storage statistics (Admin only)"""
     if user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    from app.services.storage_service import list_files
+    from app.services.s3_storage_service import list_files
     
     # Get files by category
-    machines_result = list_files("oemlinker/machines")
-    drawings_result = list_files("oemlinker/drawings")
+    machines_result = list_files("machines")
+    drawings_result = list_files("drawings")
     
     machines_files = machines_result.get("files", [])
     drawings_files = drawings_result.get("files", [])
@@ -3368,7 +3374,9 @@ async def get_storage_stats(
         "machine_images": len(machines_files),
         "drawings": len(drawings_files),
         "total_size_bytes": total_size,
-        "total_size_mb": round(total_size / (1024 * 1024), 2)
+        "total_size_mb": round(total_size / (1024 * 1024), 2),
+        "storage": "AWS S3",
+        "bucket": os.environ.get("AWS_S3_BUCKET_NAME", "oemlinker-storage")
     }
 
 
@@ -3749,22 +3757,46 @@ async def upload_drawing(
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user)
 ):
+    """Upload a drawing file for an RFQ - stores in AWS S3"""
+    from app.services.s3_storage_service import upload_file
+    
     rfq = await db.rfqs.find_one({"rfq_id": rfq_id, "buyer_id": user["user_id"]}, {"_id": 0})
     if not rfq:
         raise HTTPException(status_code=404, detail="RFQ not found")
     
     # Read file content
     content = await file.read()
-    file_base64 = base64.b64encode(content).decode('utf-8')
+    
+    # Check file size (max 25MB for drawings)
+    if len(content) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Drawing file size must be less than 25MB")
     
     drawing_id = f"drawing_{uuid.uuid4().hex[:12]}"
+    
+    # Upload to AWS S3
+    try:
+        result = upload_file(
+            data=content,
+            filename=file.filename,
+            folder=f"drawings/{rfq_id}",
+            content_type=file.content_type or "application/octet-stream"
+        )
+        s3_url = result["url"]
+        s3_path = result["path"]
+        logger.info(f"Drawing uploaded to S3: {s3_path}")
+    except Exception as e:
+        logger.error(f"S3 upload failed for drawing: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload drawing to storage: {str(e)}")
+    
     drawing_doc = {
         "drawing_id": drawing_id,
         "rfq_id": rfq_id,
         "filename": file.filename,
         "file_type": file.content_type or "application/octet-stream",
         "file_size": len(content),
-        "file_data": file_base64,
+        "s3_url": s3_url,  # S3 public URL
+        "s3_path": s3_path,  # S3 key for deletion/retrieval
+        "file_data": None,  # No longer storing base64 in MongoDB
         "ai_analysis": None,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
@@ -3777,7 +3809,7 @@ async def upload_drawing(
         {"$push": {"drawing_ids": drawing_id}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}}
     )
     
-    return {"drawing_id": drawing_id, "filename": file.filename, "file_size": len(content)}
+    return {"drawing_id": drawing_id, "filename": file.filename, "file_size": len(content), "url": s3_url}
 
 @api_router.get("/rfqs/{rfq_id}/drawings")
 async def list_drawings(rfq_id: str, user: dict = Depends(get_current_user)):
@@ -3797,7 +3829,10 @@ async def get_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
 @api_router.get("/drawings/{drawing_id}/view")
 @api_router.head("/drawings/{drawing_id}/view")
 async def view_drawing(drawing_id: str, token: Optional[str] = None, request: Request = None):
-    """View/download the actual drawing file - supports both Authorization header and query token"""
+    """View/download the actual drawing file - supports S3 storage and legacy base64"""
+    from app.services.s3_storage_service import download_file
+    from fastapi.responses import RedirectResponse
+    
     # Try to authenticate via query token or header
     auth_token = token
     if not auth_token and request:
@@ -3823,6 +3858,32 @@ async def view_drawing(drawing_id: str, token: Optional[str] = None, request: Re
     if not drawing:
         raise HTTPException(status_code=404, detail="Drawing not found")
     
+    # Check for S3 storage (new drawings)
+    s3_url = drawing.get("s3_url")
+    s3_path = drawing.get("s3_path")
+    
+    if s3_url:
+        # Redirect to S3 URL or fetch from S3
+        if s3_path:
+            try:
+                file_bytes, content_type = download_file(s3_path)
+                filename = drawing.get("filename", f"drawing.pdf")
+                return StreamingResponse(
+                    iter([file_bytes]),
+                    media_type=content_type,
+                    headers={
+                        "Content-Disposition": f'inline; filename="{filename}"',
+                        "Content-Length": str(len(file_bytes))
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Failed to download drawing from S3: {e}")
+                # Try direct S3 URL redirect as fallback
+                return RedirectResponse(url=s3_url)
+        else:
+            return RedirectResponse(url=s3_url)
+    
+    # Legacy: base64 stored in MongoDB
     file_data = drawing.get("file_data")
     if not file_data:
         raise HTTPException(status_code=404, detail="Drawing file data not found")
@@ -3864,11 +3925,39 @@ async def view_drawing(drawing_id: str, token: Optional[str] = None, request: Re
 
 @api_router.get("/drawings/{drawing_id}/download")
 async def download_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
-    """Download the drawing file as attachment"""
+    """Download the drawing file as attachment - supports S3 storage and legacy base64"""
+    from app.services.s3_storage_service import download_file
+    from fastapi.responses import RedirectResponse
+    
     drawing = await db.drawings.find_one({"drawing_id": drawing_id}, {"_id": 0})
     if not drawing:
         raise HTTPException(status_code=404, detail="Drawing not found")
     
+    filename = drawing.get("filename", "drawing.pdf")
+    
+    # Check for S3 storage (new drawings)
+    s3_url = drawing.get("s3_url")
+    s3_path = drawing.get("s3_path")
+    
+    if s3_url:
+        if s3_path:
+            try:
+                file_bytes, content_type = download_file(s3_path)
+                return StreamingResponse(
+                    iter([file_bytes]),
+                    media_type="application/octet-stream",
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{filename}"',
+                        "Content-Length": str(len(file_bytes))
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Failed to download drawing from S3: {e}")
+                return RedirectResponse(url=s3_url)
+        else:
+            return RedirectResponse(url=s3_url)
+    
+    # Legacy: base64 stored in MongoDB
     file_data = drawing.get("file_data")
     if not file_data:
         raise HTTPException(status_code=404, detail="Drawing file data not found")
@@ -3882,9 +3971,6 @@ async def download_drawing(drawing_id: str, user: dict = Depends(get_current_use
         file_bytes = base64.b64decode(file_data)
     except Exception as e:
         raise HTTPException(status_code=500, detail="Failed to decode file")
-    
-    file_type = drawing.get("file_type", "bin")
-    filename = drawing.get("filename", f"drawing.{file_type}")
     
     return StreamingResponse(
         iter([file_bytes]),
@@ -4010,11 +4096,34 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
         analyzed_files = []
         
         for drawing in analyzable_drawings:
-            file_data = drawing["file_data"]
             file_type = drawing.get("file_type", "").lower()
             filename = drawing.get("filename", "").lower()
             
             try:
+                # Get file data - from S3 or legacy base64
+                s3_path = drawing.get("s3_path")
+                file_data = drawing.get("file_data")
+                
+                if s3_path:
+                    # Fetch from S3
+                    from app.services.s3_storage_service import download_file
+                    try:
+                        file_bytes, _ = download_file(s3_path)
+                        file_data = base64.b64encode(file_bytes).decode('utf-8')
+                        logger.info(f"Fetched drawing from S3 for analysis: {filename}")
+                    except Exception as s3_err:
+                        logger.error(f"Failed to fetch drawing from S3: {s3_err}")
+                        skipped_cad_files.append({
+                            "drawing_id": drawing["drawing_id"],
+                            "filename": drawing.get("filename", "Unknown"),
+                            "reason": f"S3 fetch error: {str(s3_err)}"
+                        })
+                        continue
+                
+                if not file_data:
+                    logger.warning(f"No file data available for drawing: {filename}")
+                    continue
+                
                 # Convert PDF to image if needed
                 if "pdf" in file_type or filename.endswith(".pdf"):
                     logger.info(f"Converting PDF to image for analysis: {filename}")
@@ -4507,7 +4616,7 @@ async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list
     from app.services.whatsapp_service import send_image_message
     
     # Use the actual deployed URL
-    BASE_URL = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
+    BASE_URL = os.environ.get("APP_URL", "https://escrow-payments-2.preview.emergentagent.com")
     
     # Small delay to let template message send first
     await asyncio.sleep(2)
@@ -5557,7 +5666,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://escrow-payments-2.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -5751,7 +5860,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://escrow-payments-2.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -6003,7 +6112,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://mfg-hub-5.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://escrow-payments-2.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -6285,7 +6394,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://escrow-payments-2.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -6416,7 +6525,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://escrow-payments-2.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(
@@ -12682,8 +12791,8 @@ Or add manually at https://oemlinker.com/vendor/machines"""
         if not machine_type:
             machine_type = "CNC Machine"  # Default type
         
-        # Upload image to cloud storage
-        from app.services.storage_service import upload_file
+        # Upload image to AWS S3 (required - no local fallback)
+        from app.services.s3_storage_service import upload_file
         
         try:
             result = upload_file(
@@ -12692,19 +12801,17 @@ Or add manually at https://oemlinker.com/vendor/machines"""
                 folder=f"machines/{vendor['vendor_id']}",
                 content_type="image/jpeg"
             )
-            image_url_stored = result["storage_url"]
-            logger.info(f"Machine image uploaded to cloud storage: {image_url_stored}")
+            image_url_stored = result["url"]  # Use S3 public URL
+            logger.info(f"Machine image uploaded to S3: {image_url_stored}")
         except Exception as e:
-            # Fallback to local storage
-            logger.warning(f"Cloud storage failed, using local: {e}")
-            file_ext = "jpg"
-            filename = f"machine_wa_{vendor['vendor_id']}_{uuid.uuid4().hex[:8]}.{file_ext}"
-            uploads_dir = "/app/uploads/machines"
-            os.makedirs(uploads_dir, exist_ok=True)
-            file_path = os.path.join(uploads_dir, filename)
-            with open(file_path, "wb") as f:
-                f.write(image_data)
-            image_url_stored = f"/api/uploads/machines/{filename}"
+            logger.error(f"S3 upload failed for WhatsApp machine image: {e}")
+            return f"""❌ *Upload Failed*
+
+Sorry, we couldn't save your machine image. Please try again later.
+
+Error: Storage service unavailable
+
+If this problem persists, please contact support."""
         
         # Get vendor's language for localized instructions
         lang_info = get_vendor_language(vendor)
@@ -14167,13 +14274,13 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     """Initialize services at startup"""
-    # Initialize cloud storage
+    # Initialize AWS S3 cloud storage
     try:
-        from app.services.storage_service import init_storage
+        from app.services.s3_storage_service import init_storage
         init_storage()
-        logger.info("Cloud storage service initialized")
+        logger.info("AWS S3 storage service initialized")
     except Exception as e:
-        logger.warning(f"Cloud storage initialization failed (will use local fallback): {e}")
+        logger.warning(f"AWS S3 storage initialization failed (will use local fallback): {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

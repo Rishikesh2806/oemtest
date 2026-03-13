@@ -777,7 +777,7 @@ Admin can view and send pre-approved WhatsApp message templates from the admin d
 GUPSHUP_APP_NAME=OEMLinker
 GUPSHUP_API_KEY=sk_xxx
 GUPSHUP_SOURCE_NUMBER=919831509919
-GUPSHUP_APP_ID=fffe3fb4-a50b-4dbb-a634-52782833855a  # Required for live templates
+GUPSHUP_APP_ID=escrow-payments-2  # Required for live templates
 ```
 
 **Template Response Format:**

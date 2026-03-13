@@ -39,7 +39,7 @@ MAX_OTP_ATTEMPTS = 3
 
 # ============== EMAIL SETTINGS ==============
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
-APP_URL = os.environ.get("APP_URL", "https://mfg-hub-5.preview.emergentagent.com")
+APP_URL = os.environ.get("APP_URL", "https://escrow-payments-2.preview.emergentagent.com")
 ADMIN_EMAIL = "oemlinker@gmail.com"
 FROM_EMAIL = "OEMLinker <notifications@oemlinker.com>"
 

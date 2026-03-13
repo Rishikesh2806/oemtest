@@ -23,7 +23,7 @@ export default function FileManager() {
   const [files, setFiles] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [searchPrefix, setSearchPrefix] = useState('oemlinker');
+  const [searchPrefix, setSearchPrefix] = useState('');
   const [filter, setFilter] = useState('all'); // all, machines, drawings
 
   useEffect(() => {
@@ -113,15 +113,15 @@ export default function FileManager() {
   };
 
   const getFileCategory = (path) => {
-    if (path.includes('/machines/')) return 'machine';
-    if (path.includes('/drawings/')) return 'drawing';
+    if (path?.includes('machines/') || path?.includes('/machines/')) return 'machine';
+    if (path?.includes('drawings/') || path?.includes('/drawings/')) return 'drawing';
     return 'other';
   };
 
   const filteredFiles = files.filter(file => {
     if (filter === 'all') return true;
-    if (filter === 'machines') return file.path?.includes('/machines/');
-    if (filter === 'drawings') return file.path?.includes('/drawings/');
+    if (filter === 'machines') return file.path?.includes('machines/') || file.path?.includes('/machines/');
+    if (filter === 'drawings') return file.path?.includes('drawings/') || file.path?.includes('/drawings/');
     return true;
   });
 
@@ -133,14 +133,14 @@ export default function FileManager() {
   const handleFilterChange = (newFilter) => {
     setFilter(newFilter);
     if (newFilter === 'machines') {
-      setSearchPrefix('oemlinker/machines');
-      fetchFiles('oemlinker/machines');
+      setSearchPrefix('machines');
+      fetchFiles('machines');
     } else if (newFilter === 'drawings') {
-      setSearchPrefix('oemlinker/drawings');
-      fetchFiles('oemlinker/drawings');
+      setSearchPrefix('drawings');
+      fetchFiles('drawings');
     } else {
-      setSearchPrefix('oemlinker');
-      fetchFiles('oemlinker');
+      setSearchPrefix('');
+      fetchFiles('');
     }
   };
 
