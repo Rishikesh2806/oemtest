@@ -100,6 +100,23 @@ See ARCHITECTURE.md for detailed refactoring plan.
 - `POST /api/auth/2fa/toggle` - Enable/disable 2FA
 - `GET /api/auth/2fa/status` - Get current 2FA status
 
+
+### Magic Link with Redirect for WhatsApp RFQ Access (NEW - Mar 13, 2026)
+- **Enhanced Magic Link Generation**: `POST /api/auth/magic-link/generate` now accepts optional `redirect_url` parameter
+- **Instant RFQ Access**: When vendors receive RFQ match notifications via WhatsApp, they get a magic link that:
+  - Automatically logs them in (no password required)
+  - Redirects directly to the specific RFQ page (`/vendor/rfq/{rfq_id}`)
+- **Security**: Only internal paths allowed as redirects:
+  - `/vendor/`, `/buyer/`, `/admin/`, `/dashboard`, `/rfq/`, `/quotes`, `/orders`
+  - External URLs, protocol-relative URLs rejected
+- **Extended Expiry**: Magic links for RFQ notifications expire in 30 minutes (increased from 15)
+- **WhatsApp Integration Updates**:
+  - `rfqs` command now returns magic links for each RFQ and dashboard
+  - Individual RFQ detail command includes magic link for quote submission
+  - RFQ match notifications include magic links
+- **Test Report**: /app/test_reports/iteration_22.json (100% pass - 33/33 tests)
+
+
 ## What's Been Implemented
 
 ### Vendor Location Preference Matching (NEW - Mar 2, 2026)
