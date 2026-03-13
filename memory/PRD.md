@@ -808,3 +808,63 @@ GUPSHUP_APP_ID=escrow-payments-2  # Required for live templates
 - notifications, ratings
 - data_deletion_requests
 - magic_link_tokens (for magic link auth)
+
+
+
+## AWS S3 Cloud Storage (Implemented Mar 13, 2026)
+
+### Overview
+All file uploads (machine images, RFQ drawings) are now stored in AWS S3 for persistent storage across deployments.
+
+### Configuration
+```env
+AWS_ACCESS_KEY_ID=<user-provided>
+AWS_SECRET_ACCESS_KEY=<user-provided>
+AWS_S3_BUCKET_NAME=oemlinker-storage
+AWS_REGION=ap-south-1
+```
+
+### Storage Service
+File: `/app/backend/app/services/s3_storage_service.py`
+
+**Functions:**
+- `upload_file(data, filename, folder, content_type)` - Upload file to S3
+- `download_file(path)` - Download file from S3
+- `delete_file(path)` - Delete file from S3
+- `list_files(prefix)` - List files with optional prefix filter
+- `get_presigned_url(path, expiration)` - Generate temporary access URL
+- `upload_machine_image(image_data, filename, vendor_id)` - Upload machine image
+- `upload_drawing(drawing_data, filename, rfq_id)` - Upload RFQ drawing
+
+### File Storage Structure
+```
+s3://oemlinker-storage/
+├── machines/
+│   └── {vendor_id}/
+│       └── {uuid}.{ext}    # Machine images
+└── drawings/
+    └── {rfq_id}/
+        └── {uuid}.{ext}    # RFQ drawings
+```
+
+### Admin File Manager
+Route: `/admin/files`
+File: `/app/frontend/src/pages/FileManager.jsx`
+
+**Features:**
+- View storage statistics (total files, machine images, drawings, total size)
+- Browse files with search and filter (All/Machines/Drawings)
+- View files directly from S3
+- Delete files from S3 (admin only)
+
+### API Endpoints
+- `GET /api/admin/files?prefix=` - List files (admin only)
+- `GET /api/admin/files/stats` - Get storage statistics (admin only)
+- `DELETE /api/admin/files/{path}` - Delete file (admin only)
+- `GET /api/storage/{path}` - Serve file from S3 (authenticated)
+
+### Migration Notes
+- Machine images uploaded via web or WhatsApp now go directly to S3
+- Drawing uploads store files in S3 with metadata in MongoDB
+- Legacy drawings (stored as base64 in MongoDB) are still supported
+- Local filesystem (`/app/uploads/`) is deprecated but legacy files are still served
