@@ -11438,6 +11438,188 @@ async def get_whatsapp_errors(
 
 
 
+# ============== ROLE-BASED ACCESS CONTROL (RBAC) ENDPOINTS ==============
+
+class CreateRoleRequest(BaseModel):
+    name: str
+    description: str
+    permissions: List[str]
+    color: Optional[str] = "#6b7280"
+
+class UpdateRoleRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    permissions: Optional[List[str]] = None
+    color: Optional[str] = None
+
+class AssignRoleRequest(BaseModel):
+    user_id: str
+    role_id: str
+
+
+@api_router.get("/admin/permissions")
+async def get_all_permissions(user: dict = Depends(get_current_user)):
+    """Get all available permissions grouped by module (Admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.rbac_service import rbac_service
+    
+    return {
+        "permissions": rbac_service.get_all_permissions(),
+        "permissions_list": rbac_service.get_permissions_list()
+    }
+
+
+@api_router.get("/admin/roles")
+async def get_all_roles(
+    include_base_roles: bool = True,
+    user: dict = Depends(get_current_user)
+):
+    """Get all roles (Admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.rbac_service import rbac_service
+    
+    roles = await rbac_service.get_all_roles(include_base_roles=include_base_roles)
+    return {"roles": roles, "total": len(roles)}
+
+
+@api_router.get("/admin/roles/{role_id}")
+async def get_role(role_id: str, user: dict = Depends(get_current_user)):
+    """Get a specific role by ID (Admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.rbac_service import rbac_service
+    
+    role = await rbac_service.get_role(role_id)
+    if not role:
+        raise HTTPException(status_code=404, detail="Role not found")
+    
+    return role
+
+
+@api_router.post("/admin/roles")
+async def create_role(data: CreateRoleRequest, user: dict = Depends(get_current_user)):
+    """Create a new custom role (Admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.rbac_service import rbac_service
+    
+    try:
+        role = await rbac_service.create_role(
+            name=data.name,
+            description=data.description,
+            permissions=data.permissions,
+            color=data.color,
+            created_by=user["user_id"]
+        )
+        return {"success": True, "role": role}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@api_router.put("/admin/roles/{role_id}")
+async def update_role(
+    role_id: str, 
+    data: UpdateRoleRequest, 
+    user: dict = Depends(get_current_user)
+):
+    """Update an existing role (Admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.rbac_service import rbac_service
+    
+    try:
+        role = await rbac_service.update_role(
+            role_id=role_id,
+            name=data.name,
+            description=data.description,
+            permissions=data.permissions,
+            color=data.color,
+            updated_by=user["user_id"]
+        )
+        return {"success": True, "role": role}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@api_router.delete("/admin/roles/{role_id}")
+async def delete_role(role_id: str, user: dict = Depends(get_current_user)):
+    """Delete a custom role (Admin only, system roles cannot be deleted)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.rbac_service import rbac_service
+    
+    try:
+        await rbac_service.delete_role(role_id)
+        return {"success": True, "message": f"Role '{role_id}' deleted"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@api_router.post("/admin/roles/assign")
+async def assign_role_to_user(data: AssignRoleRequest, user: dict = Depends(get_current_user)):
+    """Assign a role to a user (Admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.rbac_service import rbac_service
+    
+    try:
+        await rbac_service.assign_role_to_user(
+            user_id=data.user_id,
+            role_id=data.role_id,
+            assigned_by=user["user_id"]
+        )
+        return {"success": True, "message": f"Role '{data.role_id}' assigned to user"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@api_router.delete("/admin/roles/assign/{user_id}")
+async def remove_role_from_user(user_id: str, user: dict = Depends(get_current_user)):
+    """Remove custom role from a user (Admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.rbac_service import rbac_service
+    
+    try:
+        await rbac_service.remove_role_from_user(user_id)
+        return {"success": True, "message": "Custom role removed from user"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@api_router.get("/admin/roles/{role_id}/users")
+async def get_users_by_role(role_id: str, user: dict = Depends(get_current_user)):
+    """Get all users assigned to a role (Admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.rbac_service import rbac_service
+    
+    users = await rbac_service.get_users_by_role(role_id)
+    return {"users": users, "total": len(users)}
+
+
+@api_router.get("/user/permissions")
+async def get_my_permissions(user: dict = Depends(get_current_user)):
+    """Get current user's permissions"""
+    from app.services.rbac_service import rbac_service
+    
+    permissions = await rbac_service.get_user_permissions(user["user_id"])
+    return {"permissions": permissions, "total": len(permissions)}
+
+
+
+
 # ============== MAGIC LINK WITH REDIRECT HELPER ==============
 
 async def generate_magic_link_for_vendor(phone: str, redirect_url: str = None) -> dict:

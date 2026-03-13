@@ -21,6 +21,7 @@ import AdminAnalytics from "./pages/AdminAnalytics";
 import WhatsAppAdmin from "./pages/WhatsAppAdmin";
 import WhatsAppInbox from "./pages/WhatsAppInbox";
 import WhatsAppLogs from "./pages/WhatsAppLogs";
+import RolesManagement from "./pages/RolesManagement";
 import FileManager from "./pages/FileManager";
 import CreateRFQ from "./pages/CreateRFQ";
 import RFQDetail from "./pages/RFQDetail";
@@ -369,6 +370,11 @@ const AppRouter = () => {
       <Route path="/admin/whatsapp/logs" element={
         <ProtectedRoute allowedRoles={["admin"]}>
           <WhatsAppLogs />
+        </ProtectedRoute>
+      } />
+      <Route path="/admin/roles" element={
+        <ProtectedRoute allowedRoles={["admin"]}>
+          <RolesManagement />
         </ProtectedRoute>
       } />
       <Route path="/admin/files" element={
