@@ -133,6 +133,29 @@ See ARCHITECTURE.md for detailed refactoring plan.
 - **Test Report**: /app/test_reports/iteration_23.json (100% pass - 17/17 backend tests)
 
 
+### User Roles & Permissions Management (NEW - Mar 13, 2026)
+- **47 Granular Permissions** across 11 modules:
+  - User Management (5), Vendor Management (5), Buyer Management (3)
+  - RFQ Management (6), Quote Management (5), Order Management (5)
+  - Payments & Finance (4), WhatsApp (4), Analytics (3)
+  - Disputes (3), System Admin (4)
+- **7 System Roles** (cannot be deleted, but permissions editable):
+  - Super Admin (47 perms), Admin (33), Sales Manager (13)
+  - Support Agent (10), Finance Admin (8), Vendor (7), Buyer (11)
+- **Custom Roles**: Create unlimited custom roles with selected permissions
+- **API Endpoints**:
+  - `GET /api/admin/permissions` - List all available permissions
+  - `GET/POST/PUT/DELETE /api/admin/roles` - Role CRUD operations
+  - `POST /api/admin/roles/assign` - Assign role to user
+  - `GET /api/user/permissions` - Get current user's permissions
+- **Admin UI** (`/admin/roles`):
+  - Role cards with color indicators and permission counts
+  - Create/Edit dialogs with expandable permission modules
+  - User assignment dialog with search
+- **Test Report**: /app/test_reports/iteration_24.json (100% pass - 17/17 backend tests)
+
+
+
 
 
 ## What's Been Implemented
