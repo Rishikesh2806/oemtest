@@ -11323,6 +11323,121 @@ async def send_whatsapp_voice_message(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+# ============== WHATSAPP LOGS ADMIN ENDPOINTS ==============
+
+@api_router.get("/whatsapp/logs")
+async def get_whatsapp_logs(
+    direction: Optional[str] = None,
+    status: Optional[str] = None,
+    message_type: Optional[str] = None,
+    phone: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    context: Optional[str] = None,
+    errors_only: bool = False,
+    limit: int = 50,
+    skip: int = 0,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Get WhatsApp message logs with filtering options (Admin only)
+    
+    Query params:
+    - direction: 'outbound' or 'inbound'
+    - status: 'sent', 'delivered', 'read', 'failed', 'error'
+    - message_type: 'text', 'template', 'image', 'document', 'audio', 'interactive'
+    - phone: Filter by phone number (partial match)
+    - start_date: Filter from date (YYYY-MM-DD)
+    - end_date: Filter to date (YYYY-MM-DD)
+    - context: Filter by context (e.g., 'rfq_notification', 'registration')
+    - errors_only: Only show failed messages
+    - limit: Number of results (max 200)
+    - skip: Pagination offset
+    """
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.whatsapp_logger import whatsapp_logger
+    
+    # Validate and cap limit
+    limit = min(limit, 200)
+    
+    result = await whatsapp_logger.get_logs(
+        direction=direction,
+        status=status,
+        message_type=message_type,
+        phone=phone,
+        start_date=start_date,
+        end_date=end_date,
+        context=context,
+        errors_only=errors_only,
+        limit=limit,
+        skip=skip
+    )
+    
+    return result
+
+
+@api_router.get("/whatsapp/logs/stats")
+async def get_whatsapp_stats(
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Get WhatsApp usage statistics (Admin only)
+    
+    Returns comprehensive statistics including:
+    - Total messages (outbound/inbound)
+    - Success/failure rates
+    - Estimated costs
+    - Breakdown by message type
+    - Breakdown by context
+    - Top errors
+    - Daily and hourly trends
+    """
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.whatsapp_logger import whatsapp_logger
+    
+    stats = await whatsapp_logger.get_statistics(
+        start_date=start_date,
+        end_date=end_date
+    )
+    
+    return stats
+
+
+@api_router.get("/whatsapp/logs/errors")
+async def get_whatsapp_errors(
+    days: int = 7,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Get WhatsApp error summary for the last N days (Admin only)
+    
+    Returns grouped errors with counts and sample details
+    """
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.whatsapp_logger import whatsapp_logger
+    
+    # Cap days to prevent expensive queries
+    days = min(days, 30)
+    
+    errors = await whatsapp_logger.get_error_summary(days=days)
+    
+    return {
+        "errors": errors,
+        "period_days": days,
+        "total_error_types": len(errors)
+    }
+
+
+
 # ============== MAGIC LINK WITH REDIRECT HELPER ==============
 
 async def generate_magic_link_for_vendor(phone: str, redirect_url: str = None) -> dict:

@@ -32,6 +32,14 @@ class WhatsAppService:
         self.api_key = GUPSHUP_API_KEY
         self.source_number = GUPSHUP_SOURCE_NUMBER
         self.app_id = GUPSHUP_APP_ID
+        self._logger = None
+    
+    async def _get_logger(self):
+        """Get WhatsApp logger instance"""
+        if self._logger is None:
+            from app.services.whatsapp_logger import whatsapp_logger
+            self._logger = whatsapp_logger
+        return self._logger
     
     def is_configured(self) -> bool:
         """Check if WhatsApp service is properly configured"""
@@ -153,7 +161,10 @@ class WhatsAppService:
         self,
         to_number: str,
         template_id: str,
-        params: List[str] = None
+        params: List[str] = None,
+        context: str = None,
+        vendor_id: str = None,
+        user_id: str = None
     ) -> Dict[str, Any]:
         """
         Send an approved template message via Gupshup Template API
@@ -162,6 +173,9 @@ class WhatsAppService:
             to_number: Recipient phone number
             template_id: Template ID or element name from Gupshup
             params: List of parameter values
+            context: Context/purpose for logging
+            vendor_id: Associated vendor ID for logging
+            user_id: Associated user ID for logging
             
         Returns:
             API response dict
@@ -192,6 +206,12 @@ class WhatsAppService:
             "src.name": self.app_name
         }
         
+        result = {}
+        success = False
+        message_id = None
+        error_message = None
+        error_code = None
+        
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -205,27 +225,58 @@ class WhatsAppService:
                 
                 if response.status_code in [200, 201, 202]:
                     logger.info(f"Template {template_id} sent to {to_number[:6]}***")
-                    return {
-                        "success": True,
-                        "message_id": result.get("messageId"),
-                        "response": result
-                    }
+                    success = True
+                    message_id = result.get("messageId")
                 else:
                     logger.error(f"Template send failed: {result}")
-                    return {
-                        "success": False,
-                        "error": result.get("message", "Send failed"),
-                        "response": result
-                    }
+                    error_message = result.get("message", "Send failed")
+                    error_code = str(response.status_code)
                     
         except Exception as e:
             logger.error(f"Template send error: {str(e)}")
-            return {"success": False, "error": str(e)}
+            error_message = str(e)
+            error_code = "EXCEPTION"
+        
+        # Log the message
+        try:
+            wa_logger = await self._get_logger()
+            await wa_logger.log_outbound_message(
+                phone=to_number,
+                message_type="template",
+                content=f"Template: {template_id}, Params: {params}",
+                success=success,
+                message_id=message_id,
+                error_message=error_message,
+                error_code=error_code,
+                template_id=template_id,
+                api_response=result,
+                vendor_id=vendor_id,
+                user_id=user_id,
+                context=context or "template_message"
+            )
+        except Exception as log_error:
+            logger.error(f"Failed to log WhatsApp template: {log_error}")
+        
+        if success:
+            return {
+                "success": True,
+                "message_id": message_id,
+                "response": result
+            }
+        else:
+            return {
+                "success": False,
+                "error": error_message,
+                "response": result
+            }
     
     async def send_text_message(
         self, 
         to_number: str, 
-        message: str
+        message: str,
+        context: str = None,
+        vendor_id: str = None,
+        user_id: str = None
     ) -> Dict[str, Any]:
         """
         Send a text message via WhatsApp
@@ -233,6 +284,9 @@ class WhatsAppService:
         Args:
             to_number: Recipient phone number in E.164 format (e.g., 919876543210)
             message: Text message content
+            context: Context/purpose for logging (e.g., "rfq_notification")
+            vendor_id: Associated vendor ID for logging
+            user_id: Associated user ID for logging
             
         Returns:
             API response dict
@@ -264,6 +318,12 @@ class WhatsAppService:
             "src.name": self.app_name
         }
         
+        result = {}
+        success = False
+        message_id = None
+        error_message = None
+        error_code = None
+        
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -277,22 +337,49 @@ class WhatsAppService:
                 
                 if response.status_code in [200, 201, 202]:
                     logger.info(f"WhatsApp message sent to {to_number[:6]}***")
-                    return {
-                        "success": True, 
-                        "message_id": result.get("messageId"),
-                        "response": result
-                    }
+                    success = True
+                    message_id = result.get("messageId")
                 else:
                     logger.error(f"WhatsApp send failed: {result}")
-                    return {
-                        "success": False, 
-                        "error": result.get("message", "Send failed"),
-                        "response": result
-                    }
+                    error_message = result.get("message", "Send failed")
+                    error_code = str(response.status_code)
                     
         except Exception as e:
             logger.error(f"WhatsApp API error: {str(e)}")
-            return {"success": False, "error": str(e)}
+            error_message = str(e)
+            error_code = "EXCEPTION"
+        
+        # Log the message
+        try:
+            wa_logger = await self._get_logger()
+            await wa_logger.log_outbound_message(
+                phone=to_number,
+                message_type="text",
+                content=message,
+                success=success,
+                message_id=message_id,
+                error_message=error_message,
+                error_code=error_code,
+                api_response=result,
+                vendor_id=vendor_id,
+                user_id=user_id,
+                context=context or "text_message"
+            )
+        except Exception as log_error:
+            logger.error(f"Failed to log WhatsApp message: {log_error}")
+        
+        if success:
+            return {
+                "success": True, 
+                "message_id": message_id,
+                "response": result
+            }
+        else:
+            return {
+                "success": False, 
+                "error": error_message,
+                "response": result
+            }
     
     async def upload_media(
         self,
@@ -677,7 +764,10 @@ async def send_document_message(
     to_number: str,
     document_url: str,
     filename: str,
-    caption: str = ""
+    caption: str = "",
+    context: str = None,
+    vendor_id: str = None,
+    user_id: str = None
 ) -> Dict[str, Any]:
     """
     Send a document/file via WhatsApp using URL
@@ -687,6 +777,9 @@ async def send_document_message(
         document_url: Public URL of the document
         filename: Display filename
         caption: Optional caption
+        context: Context/purpose for logging
+        vendor_id: Associated vendor ID for logging
+        user_id: Associated user ID for logging
         
     Returns:
         API response dict
@@ -717,6 +810,12 @@ async def send_document_message(
         "src.name": whatsapp_service.app_name
     }
     
+    result = {}
+    success = False
+    message_id = None
+    error_message = None
+    error_code = None
+    
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -730,28 +829,59 @@ async def send_document_message(
             
             if response.status_code in [200, 201, 202]:
                 logger.info(f"Document sent to {to_number[:6]}***: {filename}")
-                return {
-                    "success": True,
-                    "message_id": result.get("messageId"),
-                    "response": result
-                }
+                success = True
+                message_id = result.get("messageId")
             else:
                 logger.error(f"Document send failed: {result}")
-                return {
-                    "success": False,
-                    "error": result.get("message", "Send failed"),
-                    "response": result
-                }
+                error_message = result.get("message", "Send failed")
+                error_code = str(response.status_code)
                 
     except Exception as e:
         logger.error(f"Document send API error: {str(e)}")
-        return {"success": False, "error": str(e)}
+        error_message = str(e)
+        error_code = "EXCEPTION"
+    
+    # Log the message
+    try:
+        from app.services.whatsapp_logger import whatsapp_logger
+        await whatsapp_logger.log_outbound_message(
+            phone=to_number,
+            message_type="document",
+            content=f"Document: {filename}, URL: {document_url[:100]}..., Caption: {caption}",
+            success=success,
+            message_id=message_id,
+            error_message=error_message,
+            error_code=error_code,
+            api_response=result,
+            vendor_id=vendor_id,
+            user_id=user_id,
+            context=context or "document_message",
+            metadata={"filename": filename, "url": document_url}
+        )
+    except Exception as log_error:
+        logger.error(f"Failed to log WhatsApp document: {log_error}")
+    
+    if success:
+        return {
+            "success": True,
+            "message_id": message_id,
+            "response": result
+        }
+    else:
+        return {
+            "success": False,
+            "error": error_message,
+            "response": result
+        }
 
 
 async def send_image_message(
     to_number: str,
     image_url: str,
-    caption: str = ""
+    caption: str = "",
+    context: str = None,
+    vendor_id: str = None,
+    user_id: str = None
 ) -> Dict[str, Any]:
     """
     Send an image via WhatsApp using URL
@@ -760,6 +890,9 @@ async def send_image_message(
         to_number: Recipient phone number
         image_url: Public URL of the image
         caption: Optional caption
+        context: Context/purpose for logging
+        vendor_id: Associated vendor ID for logging
+        user_id: Associated user ID for logging
         
     Returns:
         API response dict
@@ -790,6 +923,12 @@ async def send_image_message(
         "src.name": whatsapp_service.app_name
     }
     
+    result = {}
+    success = False
+    message_id = None
+    error_message = None
+    error_code = None
+    
     try:
         async with httpx.AsyncClient() as client:
             response = await client.post(
@@ -803,19 +942,47 @@ async def send_image_message(
             
             if response.status_code in [200, 201, 202]:
                 logger.info(f"Image sent to {to_number[:6]}***")
-                return {
-                    "success": True,
-                    "message_id": result.get("messageId"),
-                    "response": result
-                }
+                success = True
+                message_id = result.get("messageId")
             else:
                 logger.error(f"Image send failed: {result}")
-                return {
-                    "success": False,
-                    "error": result.get("message", "Send failed"),
-                    "response": result
-                }
+                error_message = result.get("message", "Send failed")
+                error_code = str(response.status_code)
                 
     except Exception as e:
         logger.error(f"Image send API error: {str(e)}")
-        return {"success": False, "error": str(e)}
+        error_message = str(e)
+        error_code = "EXCEPTION"
+    
+    # Log the message
+    try:
+        from app.services.whatsapp_logger import whatsapp_logger
+        await whatsapp_logger.log_outbound_message(
+            phone=to_number,
+            message_type="image",
+            content=f"Image: {image_url[:100]}..., Caption: {caption}",
+            success=success,
+            message_id=message_id,
+            error_message=error_message,
+            error_code=error_code,
+            api_response=result,
+            vendor_id=vendor_id,
+            user_id=user_id,
+            context=context or "image_message",
+            metadata={"url": image_url, "caption": caption}
+        )
+    except Exception as log_error:
+        logger.error(f"Failed to log WhatsApp image: {log_error}")
+    
+    if success:
+        return {
+            "success": True,
+            "message_id": message_id,
+            "response": result
+        }
+    else:
+        return {
+            "success": False,
+            "error": error_message,
+            "response": result
+        }

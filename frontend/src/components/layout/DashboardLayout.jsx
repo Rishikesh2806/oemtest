@@ -81,6 +81,7 @@ const DashboardLayout = ({ children }) => {
     { path: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { path: "/admin/analytics", label: "Analytics", icon: BarChart3 },
     { path: "/admin/whatsapp", label: "WhatsApp", icon: MessageSquare },
+    { path: "/admin/whatsapp/logs", label: "WA Logs", icon: FileText },
     { path: "/admin/files", label: "File Manager", icon: FolderOpen },
     { path: "/disputes", label: "Disputes", icon: AlertTriangle },
   ];
