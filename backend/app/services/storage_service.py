@@ -76,6 +76,86 @@ def get_content_type(filename: str) -> str:
     return MIME_TYPES.get(ext, "application/octet-stream")
 
 
+def list_files(prefix: str = "") -> dict:
+    """
+    List files in cloud storage with optional prefix filter.
+    
+    Args:
+        prefix: Path prefix to filter (e.g., "oemlinker/machines")
+    
+    Returns:
+        dict with 'files' list
+    """
+    key = get_storage_key()
+    
+    try:
+        params = {}
+        if prefix:
+            params["prefix"] = prefix
+            
+        resp = requests.get(
+            f"{STORAGE_URL}/objects",
+            headers={"X-Storage-Key": key},
+            params=params,
+            timeout=30
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        
+        files = data.get("objects", data.get("files", []))
+        
+        # Normalize file info
+        normalized = []
+        for f in files:
+            if isinstance(f, str):
+                normalized.append({
+                    "path": f,
+                    "name": f.split("/")[-1],
+                    "size": 0,
+                    "storage_url": f"/api/storage/{f}"
+                })
+            else:
+                normalized.append({
+                    "path": f.get("path", f.get("key", "")),
+                    "name": f.get("path", f.get("key", "")).split("/")[-1],
+                    "size": f.get("size", 0),
+                    "content_type": f.get("content_type", ""),
+                    "created_at": f.get("created_at", f.get("last_modified")),
+                    "storage_url": f"/api/storage/{f.get('path', f.get('key', ''))}"
+                })
+        
+        return {"success": True, "files": normalized, "total": len(normalized)}
+    except Exception as e:
+        logger.error(f"Failed to list files: {e}")
+        return {"success": False, "error": str(e), "files": []}
+
+
+def delete_file(path: str) -> dict:
+    """
+    Delete a file from cloud storage.
+    
+    Args:
+        path: Storage path to delete
+    
+    Returns:
+        dict with success status
+    """
+    key = get_storage_key()
+    
+    try:
+        resp = requests.delete(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key},
+            timeout=30
+        )
+        resp.raise_for_status()
+        logger.info(f"File deleted from cloud storage: {path}")
+        return {"success": True, "path": path}
+    except Exception as e:
+        logger.error(f"Failed to delete file: {e}")
+        return {"success": False, "error": str(e)}
+
+
 def upload_file(
     data: bytes,
     filename: str,

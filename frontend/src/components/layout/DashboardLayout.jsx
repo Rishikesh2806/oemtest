@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { 
   Factory, LayoutDashboard, FileText, Package, Settings, 
   LogOut, Menu, X, Wrench, Building2, Users, DollarSign,
-  ChevronDown, Bell, MessageSquare, User, Mail, AlertTriangle, BarChart3
+  ChevronDown, Bell, MessageSquare, User, Mail, AlertTriangle, BarChart3, FolderOpen
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -81,6 +81,7 @@ const DashboardLayout = ({ children }) => {
     { path: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { path: "/admin/analytics", label: "Analytics", icon: BarChart3 },
     { path: "/admin/whatsapp", label: "WhatsApp", icon: MessageSquare },
+    { path: "/admin/files", label: "File Manager", icon: FolderOpen },
     { path: "/disputes", label: "Disputes", icon: AlertTriangle },
   ];
 

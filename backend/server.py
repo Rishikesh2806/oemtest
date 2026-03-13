@@ -3304,6 +3304,74 @@ async def serve_cloud_storage_file(path: str):
         logger.error(f"Failed to serve cloud storage file {path}: {e}")
         raise HTTPException(status_code=404, detail="File not found")
 
+
+# ============== ADMIN FILE MANAGER ==============
+
+@api_router.get("/admin/files")
+async def list_storage_files(
+    prefix: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    """List files in cloud storage (Admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.storage_service import list_files
+    
+    # Default to app prefix
+    search_prefix = prefix if prefix else "oemlinker"
+    result = list_files(search_prefix)
+    
+    return result
+
+
+@api_router.delete("/admin/files/{path:path}")
+async def delete_storage_file(
+    path: str,
+    user: dict = Depends(get_current_user)
+):
+    """Delete a file from cloud storage (Admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.storage_service import delete_file
+    
+    result = delete_file(path)
+    
+    if result.get("success"):
+        return {"success": True, "message": f"File deleted: {path}"}
+    else:
+        raise HTTPException(status_code=400, detail=result.get("error", "Delete failed"))
+
+
+@api_router.get("/admin/files/stats")
+async def get_storage_stats(
+    user: dict = Depends(get_current_user)
+):
+    """Get storage statistics (Admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.storage_service import list_files
+    
+    # Get files by category
+    machines_result = list_files("oemlinker/machines")
+    drawings_result = list_files("oemlinker/drawings")
+    
+    machines_files = machines_result.get("files", [])
+    drawings_files = drawings_result.get("files", [])
+    
+    total_size = sum(f.get("size", 0) for f in machines_files + drawings_files)
+    
+    return {
+        "total_files": len(machines_files) + len(drawings_files),
+        "machine_images": len(machines_files),
+        "drawings": len(drawings_files),
+        "total_size_bytes": total_size,
+        "total_size_mb": round(total_size / (1024 * 1024), 2)
+    }
+
+
 # Machine Availability Update
 class MachineAvailabilityUpdate(BaseModel):
     availability_status: str  # available, engaged, maintenance, offline
