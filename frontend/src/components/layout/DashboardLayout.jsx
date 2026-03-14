@@ -55,8 +55,8 @@ const ROLE_NAV_CONFIGS = {
   buyer: ['buyer_dashboard', 'my_rfqs', 'received_quotes', 'new_rfq', 'disputes', 'buyer_profile', 'messages'],
   vendor: ['vendor_dashboard', 'matched_rfqs', 'vendor_profile', 'machines', 'vendor_quotes', 'disputes', 'messages'],
   admin: ['admin_dashboard', 'analytics', 'whatsapp', 'whatsapp_logs', 'roles', 'file_manager', 'disputes'],
-  // Staff roles - only admin dashboard (no staff_dashboard), filtered by permissions
-  staff: ['admin_dashboard', 'analytics', 'whatsapp', 'whatsapp_logs', 'roles', 'file_manager', 'disputes', 'messages', 'my_rfqs', 'received_quotes', 'new_rfq', 'matched_rfqs', 'vendor_quotes'],
+  // Staff roles - admin-focused menu without buyer/vendor specific items
+  staff: ['admin_dashboard', 'analytics', 'whatsapp', 'whatsapp_logs', 'roles', 'file_manager', 'disputes', 'messages'],
 };
 
 const DashboardLayout = ({ children }) => {
