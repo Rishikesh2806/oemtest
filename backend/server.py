@@ -671,6 +671,7 @@ class UserResponse(BaseModel):
     email: str
     name: str
     role: str
+    custom_role: Optional[str] = None
     picture: Optional[str] = None
     company_name: Optional[str] = None
     email_verified: bool = False
@@ -1402,6 +1403,7 @@ async def register(user_data: UserCreate, request: Request):
             email=email,
             name=name,
             role=user_data.role,
+            custom_role=None,
             picture=None,
             company_name=vendor_company_name,
             email_verified=False,
@@ -1697,6 +1699,7 @@ async def login(login_data: LoginRequest, request: Request):
             email=user["email"],
             name=user["name"],
             role=user["role"],
+            custom_role=user.get("custom_role"),
             picture=user.get("picture"),
             company_name=user.get("company_name"),
             email_verified=user.get("email_verified", False),
@@ -1760,6 +1763,7 @@ async def verify_otp_endpoint(otp_data: OTPVerifyRequest, request: Request):
             email=user["email"],
             name=user["name"],
             role=user["role"],
+            custom_role=user.get("custom_role"),
             picture=user.get("picture"),
             company_name=user.get("company_name"),
             email_verified=user.get("email_verified", False),

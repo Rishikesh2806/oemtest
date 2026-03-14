@@ -180,10 +180,16 @@ const AuthCallback = () => {
         
         // Redirect based on role
         const role = response.data.role;
+        const customRole = response.data.custom_role;
         if (role === "vendor") {
           navigate("/vendor/dashboard", { replace: true });
         } else if (role === "admin") {
           navigate("/admin/dashboard", { replace: true });
+        } else if (role === "buyer") {
+          navigate("/buyer/dashboard", { replace: true });
+        } else if (customRole) {
+          // User has no base role but has a custom role - send to staff dashboard
+          navigate("/staff/dashboard", { replace: true });
         } else {
           navigate("/buyer/dashboard", { replace: true });
         }
@@ -223,12 +229,21 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    // Redirect to appropriate dashboard
+  // Determine effective role for routing
+  // Users with custom_role but no base role are treated as "staff"
+  const effectiveRole = user.role || (user.custom_role ? "staff" : "");
+
+  if (allowedRoles && !allowedRoles.includes(effectiveRole)) {
+    // Redirect to appropriate dashboard based on role or custom_role
     if (user.role === "vendor") {
       return <Navigate to="/vendor/dashboard" replace />;
     } else if (user.role === "admin") {
       return <Navigate to="/admin/dashboard" replace />;
+    } else if (user.role === "buyer") {
+      return <Navigate to="/buyer/dashboard" replace />;
+    } else if (user.custom_role) {
+      // User has no base role but has a custom role - send to staff dashboard
+      return <Navigate to="/staff/dashboard" replace />;
     }
     return <Navigate to="/buyer/dashboard" replace />;
   }
@@ -387,7 +402,7 @@ const AppRouter = () => {
       
       {/* Staff Dashboard (for custom roles) */}
       <Route path="/staff/dashboard" element={
-        <ProtectedRoute allowedRoles={["admin"]}>
+        <ProtectedRoute allowedRoles={["admin", "staff"]}>
           <StaffDashboard />
         </ProtectedRoute>
       } />

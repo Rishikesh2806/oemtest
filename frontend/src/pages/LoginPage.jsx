@@ -24,11 +24,18 @@ const LoginPage = () => {
     updateUser(userData);
     toast.success("Welcome back!");
     
+    // Check for base role first
     if (userData.role === "vendor") {
       navigate("/vendor/dashboard");
     } else if (userData.role === "admin") {
       navigate("/admin/dashboard");
+    } else if (userData.role === "buyer") {
+      navigate("/buyer/dashboard");
+    } else if (userData.custom_role) {
+      // User has no base role but has a custom role - send to staff dashboard
+      navigate("/staff/dashboard");
     } else {
+      // Default fallback
       navigate("/buyer/dashboard");
     }
   };
