@@ -155,6 +155,20 @@ See ARCHITECTURE.md for detailed refactoring plan.
 - **Test Report**: /app/test_reports/iteration_24.json (100% pass - 17/17 backend tests)
 
 
+### Admin User Role Selection in Add/Edit User (NEW - Mar 14, 2026)
+- **Backend Enhancement**:
+  - `AdminUserCreate` model now includes `custom_role: Optional[str]` field
+  - `POST /api/admin/users` endpoint saves `custom_role` when creating users
+  - `PUT /api/admin/users/{user_id}` endpoint now allows updating `custom_role`
+- **Frontend UI** (`/app/frontend/src/pages/AdminDashboard.jsx`):
+  - Add User Dialog: Includes Base Role dropdown (Buyer/Vendor/Admin) and Custom Role dropdown with all system roles
+  - Edit User Dialog: Same role selection with current values pre-populated
+  - Helper text shows "User will have permissions from both X role and Y role"
+  - Custom roles are fetched from `GET /api/admin/roles?include_base_roles=false`
+- **Test Report**: /app/test_reports/iteration_26.json (100% pass - 9/9 backend tests, all frontend features verified)
+
+
+
 ### Permission-Based Dashboard Quick Actions (NEW - Mar 14, 2026)
 - **usePermissions Hook** (`/app/frontend/src/hooks/usePermissions.js`):
   - Fetches user permissions from `/api/user/permissions`
