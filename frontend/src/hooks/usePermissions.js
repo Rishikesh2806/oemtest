@@ -424,6 +424,440 @@ export const DASHBOARD_ACTIONS = {
       permissions: ['disputes.view'],
       color: 'red'
     }
+  ],
+  
+  // Sales Manager Dashboard Actions
+  sales_manager: [
+    {
+      id: 'view_vendors',
+      title: 'Vendor Directory',
+      description: 'Browse and manage vendor profiles',
+      icon: 'Building2',
+      path: '/admin/dashboard',
+      permissions: ['vendors.view'],
+      color: 'green'
+    },
+    {
+      id: 'view_buyers',
+      title: 'Buyer Accounts',
+      description: 'View buyer information',
+      icon: 'Users',
+      path: '/admin/dashboard',
+      permissions: ['buyers.view'],
+      color: 'blue'
+    },
+    {
+      id: 'all_rfqs',
+      title: 'All RFQs',
+      description: 'Browse and manage all RFQs',
+      icon: 'FileText',
+      path: '/admin/dashboard',
+      permissions: ['rfqs.view'],
+      color: 'purple'
+    },
+    {
+      id: 'create_rfq',
+      title: 'Create RFQ',
+      description: 'Submit RFQ on behalf of buyer',
+      icon: 'Plus',
+      path: '/buyer/rfq/new',
+      permissions: ['rfqs.create'],
+      color: 'green'
+    },
+    {
+      id: 'edit_rfqs',
+      title: 'Edit RFQs',
+      description: 'Modify RFQ details',
+      icon: 'Edit',
+      path: '/admin/dashboard',
+      permissions: ['rfqs.edit'],
+      color: 'orange'
+    },
+    {
+      id: 'ai_analysis',
+      title: 'AI Analysis',
+      description: 'Run AI analysis on drawings',
+      icon: 'Sparkles',
+      path: '/admin/dashboard',
+      permissions: ['rfqs.analyze'],
+      color: 'purple'
+    },
+    {
+      id: 'match_vendors',
+      title: 'Match Vendors',
+      description: 'Find matching vendors for RFQs',
+      icon: 'Search',
+      path: '/admin/dashboard',
+      permissions: ['rfqs.match_vendors'],
+      color: 'teal'
+    },
+    {
+      id: 'view_quotes',
+      title: 'Review Quotes',
+      description: 'View all vendor quotes',
+      icon: 'FileText',
+      path: '/admin/dashboard',
+      permissions: ['quotes.view'],
+      color: 'blue'
+    },
+    {
+      id: 'approve_quotes',
+      title: 'Approve Quotes',
+      description: 'Approve or reject quotes',
+      icon: 'CheckCircle',
+      path: '/admin/dashboard',
+      permissions: ['quotes.approve'],
+      color: 'green'
+    },
+    {
+      id: 'negotiate',
+      title: 'Negotiate Deals',
+      description: 'Handle quote negotiations',
+      icon: 'MessageSquare',
+      path: '/admin/dashboard',
+      permissions: ['quotes.negotiate'],
+      color: 'orange'
+    },
+    {
+      id: 'view_orders',
+      title: 'View Orders',
+      description: 'Track all orders',
+      icon: 'Package',
+      path: '/admin/dashboard',
+      permissions: ['orders.view'],
+      color: 'gray'
+    },
+    {
+      id: 'create_orders',
+      title: 'Create Orders',
+      description: 'Create purchase orders',
+      icon: 'ShoppingCart',
+      path: '/admin/dashboard',
+      permissions: ['orders.create'],
+      color: 'green'
+    },
+    {
+      id: 'analytics',
+      title: 'Sales Analytics',
+      description: 'View sales performance',
+      icon: 'BarChart3',
+      path: '/admin/analytics',
+      permissions: ['analytics.view_dashboard'],
+      color: 'blue'
+    }
+  ],
+  
+  // Support Agent Dashboard Actions
+  support_agent: [
+    {
+      id: 'view_users',
+      title: 'User Lookup',
+      description: 'Search and view user accounts',
+      icon: 'Users',
+      path: '/admin/dashboard',
+      permissions: ['users.view'],
+      color: 'blue'
+    },
+    {
+      id: 'view_vendors',
+      title: 'Vendor Profiles',
+      description: 'View vendor information',
+      icon: 'Building2',
+      path: '/admin/dashboard',
+      permissions: ['vendors.view'],
+      color: 'green'
+    },
+    {
+      id: 'view_buyers',
+      title: 'Buyer Profiles',
+      description: 'View buyer information',
+      icon: 'Users',
+      path: '/admin/dashboard',
+      permissions: ['buyers.view'],
+      color: 'teal'
+    },
+    {
+      id: 'view_rfqs',
+      title: 'RFQ History',
+      description: 'View RFQ details',
+      icon: 'FileText',
+      path: '/admin/dashboard',
+      permissions: ['rfqs.view'],
+      color: 'purple'
+    },
+    {
+      id: 'view_quotes',
+      title: 'Quote History',
+      description: 'View quote details',
+      icon: 'FileText',
+      path: '/admin/dashboard',
+      permissions: ['quotes.view'],
+      color: 'orange'
+    },
+    {
+      id: 'view_orders',
+      title: 'Order Tracking',
+      description: 'Track order status',
+      icon: 'Package',
+      path: '/admin/dashboard',
+      permissions: ['orders.view'],
+      color: 'gray'
+    },
+    {
+      id: 'whatsapp_inbox',
+      title: 'WhatsApp Inbox',
+      description: 'View customer messages',
+      icon: 'MessageSquare',
+      path: '/admin/whatsapp/inbox',
+      permissions: ['whatsapp.view_messages'],
+      color: 'green'
+    },
+    {
+      id: 'send_messages',
+      title: 'Send Messages',
+      description: 'Reply to customer queries',
+      icon: 'Send',
+      path: '/admin/whatsapp',
+      permissions: ['whatsapp.send_messages'],
+      color: 'blue'
+    },
+    {
+      id: 'view_disputes',
+      title: 'Dispute Queue',
+      description: 'View open disputes',
+      icon: 'AlertTriangle',
+      path: '/disputes',
+      permissions: ['disputes.view'],
+      color: 'red'
+    },
+    {
+      id: 'manage_disputes',
+      title: 'Resolve Disputes',
+      description: 'Handle and resolve disputes',
+      icon: 'CheckCircle',
+      path: '/disputes',
+      permissions: ['disputes.manage'],
+      color: 'green'
+    }
+  ],
+  
+  // Finance Admin Dashboard Actions
+  finance_admin: [
+    {
+      id: 'view_payments',
+      title: 'Payment Dashboard',
+      description: 'View all payment transactions',
+      icon: 'DollarSign',
+      path: '/admin/dashboard',
+      permissions: ['payments.view'],
+      color: 'green'
+    },
+    {
+      id: 'process_payments',
+      title: 'Process Payments',
+      description: 'Release escrow payments',
+      icon: 'CreditCard',
+      path: '/admin/dashboard',
+      permissions: ['payments.process'],
+      color: 'blue'
+    },
+    {
+      id: 'refunds',
+      title: 'Issue Refunds',
+      description: 'Process refund requests',
+      icon: 'RotateCcw',
+      path: '/admin/dashboard',
+      permissions: ['payments.refund'],
+      color: 'orange'
+    },
+    {
+      id: 'financial_reports',
+      title: 'Financial Reports',
+      description: 'View financial statements',
+      icon: 'FileText',
+      path: '/admin/analytics',
+      permissions: ['payments.reports'],
+      color: 'purple'
+    },
+    {
+      id: 'view_orders',
+      title: 'Order Overview',
+      description: 'Track order payments',
+      icon: 'Package',
+      path: '/admin/dashboard',
+      permissions: ['orders.view'],
+      color: 'gray'
+    },
+    {
+      id: 'analytics',
+      title: 'Revenue Analytics',
+      description: 'View revenue metrics',
+      icon: 'TrendingUp',
+      path: '/admin/analytics',
+      permissions: ['analytics.view_dashboard'],
+      color: 'blue'
+    },
+    {
+      id: 'financial_analytics',
+      title: 'Financial Analytics',
+      description: 'Detailed financial analysis',
+      icon: 'BarChart3',
+      path: '/admin/analytics',
+      permissions: ['analytics.view_financials'],
+      color: 'green'
+    },
+    {
+      id: 'export_reports',
+      title: 'Export Reports',
+      description: 'Download financial data',
+      icon: 'Download',
+      path: '/admin/analytics',
+      permissions: ['analytics.export_reports'],
+      color: 'teal'
+    }
+  ],
+  
+  // Regional Manager Dashboard Actions
+  regional_manager: [
+    {
+      id: 'view_vendors',
+      title: 'Regional Vendors',
+      description: 'View vendors in your region',
+      icon: 'Building2',
+      path: '/admin/dashboard',
+      permissions: ['vendors.view'],
+      color: 'green'
+    },
+    {
+      id: 'edit_vendors',
+      title: 'Edit Vendors',
+      description: 'Update vendor profiles',
+      icon: 'Edit',
+      path: '/admin/dashboard',
+      permissions: ['vendors.edit'],
+      color: 'blue'
+    },
+    {
+      id: 'view_rfqs',
+      title: 'Regional RFQs',
+      description: 'View RFQs in your region',
+      icon: 'FileText',
+      path: '/admin/dashboard',
+      permissions: ['rfqs.view'],
+      color: 'purple'
+    },
+    {
+      id: 'edit_rfqs',
+      title: 'Manage RFQs',
+      description: 'Edit and manage RFQs',
+      icon: 'Edit',
+      path: '/admin/dashboard',
+      permissions: ['rfqs.edit'],
+      color: 'orange'
+    },
+    {
+      id: 'view_quotes',
+      title: 'Regional Quotes',
+      description: 'View quotes in your region',
+      icon: 'FileText',
+      path: '/admin/dashboard',
+      permissions: ['quotes.view'],
+      color: 'teal'
+    },
+    {
+      id: 'approve_quotes',
+      title: 'Approve Quotes',
+      description: 'Approve regional quotes',
+      icon: 'CheckCircle',
+      path: '/admin/dashboard',
+      permissions: ['quotes.approve'],
+      color: 'green'
+    },
+    {
+      id: 'analytics',
+      title: 'Regional Analytics',
+      description: 'View regional performance',
+      icon: 'BarChart3',
+      path: '/admin/analytics',
+      permissions: ['analytics.view_dashboard'],
+      color: 'blue'
+    }
+  ],
+  
+  // Supervisor Dashboard Actions
+  supervisor: [
+    {
+      id: 'view_team',
+      title: 'Team Members',
+      description: 'View your team members',
+      icon: 'Users',
+      path: '/admin/dashboard',
+      permissions: ['users.view'],
+      color: 'blue'
+    },
+    {
+      id: 'view_vendors',
+      title: 'Vendor List',
+      description: 'Browse assigned vendors',
+      icon: 'Building2',
+      path: '/admin/dashboard',
+      permissions: ['vendors.view'],
+      color: 'green'
+    },
+    {
+      id: 'view_rfqs',
+      title: 'RFQ Queue',
+      description: 'View pending RFQs',
+      icon: 'FileText',
+      path: '/admin/dashboard',
+      permissions: ['rfqs.view'],
+      color: 'purple'
+    },
+    {
+      id: 'view_quotes',
+      title: 'Quote Review',
+      description: 'Review submitted quotes',
+      icon: 'FileText',
+      path: '/admin/dashboard',
+      permissions: ['quotes.view'],
+      color: 'orange'
+    },
+    {
+      id: 'view_orders',
+      title: 'Order Status',
+      description: 'Track order progress',
+      icon: 'Package',
+      path: '/admin/dashboard',
+      permissions: ['orders.view'],
+      color: 'gray'
+    },
+    {
+      id: 'whatsapp_messages',
+      title: 'WhatsApp Messages',
+      description: 'View team messages',
+      icon: 'MessageSquare',
+      path: '/admin/whatsapp/inbox',
+      permissions: ['whatsapp.view_messages'],
+      color: 'green'
+    },
+    {
+      id: 'view_disputes',
+      title: 'Team Disputes',
+      description: 'Monitor team disputes',
+      icon: 'AlertTriangle',
+      path: '/disputes',
+      permissions: ['disputes.view'],
+      color: 'red'
+    },
+    {
+      id: 'analytics',
+      title: 'Team Performance',
+      description: 'View team metrics',
+      icon: 'BarChart3',
+      path: '/admin/analytics',
+      permissions: ['analytics.view_dashboard'],
+      color: 'blue'
+    }
   ]
 };
 

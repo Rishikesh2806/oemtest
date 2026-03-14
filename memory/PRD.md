@@ -173,6 +173,19 @@ See ARCHITECTURE.md for detailed refactoring plan.
 
 
 
+### Role-Specific Quick Actions for All User Types (NEW - Mar 14, 2026)
+- **Added Dashboard Action Configurations for**:
+  - **Sales Manager** (13 actions): Vendor Directory, Buyer Accounts, All RFQs, Create RFQ, Edit RFQs, AI Analysis, Match Vendors, View Quotes, Approve Quotes, Negotiate Deals, View Orders, Create Orders, Sales Analytics
+  - **Support Agent** (10 actions): User Lookup, Vendor/Buyer Profiles, RFQ/Quote/Order History, WhatsApp Inbox, Send Messages, Dispute Queue, Resolve Disputes
+  - **Finance Admin** (8 actions): Payment Dashboard, Process Payments, Issue Refunds, Financial Reports, Order Overview, Revenue Analytics, Financial Analytics, Export Reports
+  - **Regional Manager** (7 actions): Regional Vendors, Edit Vendors, Regional RFQs, Manage RFQs, Regional Quotes, Approve Quotes, Regional Analytics
+  - **Supervisor** (8 actions): Team Members, Vendor List, RFQ Queue, Quote Review, Order Status, WhatsApp Messages, Team Disputes, Team Performance
+- **Supervisor Role**: Added new system role with 8 permissions
+- **Staff Dashboard** (`/staff/dashboard`): New dashboard page for staff with custom roles
+- **Additive Permissions**: Users with custom roles get permissions from BOTH their base role AND custom role
+
+
+
 
 
 ## What's Been Implemented

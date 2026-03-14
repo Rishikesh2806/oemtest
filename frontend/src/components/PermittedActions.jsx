@@ -6,7 +6,7 @@ import {
   Users, Building2, FileText, BarChart3, MessageSquare, Shield, 
   FolderOpen, AlertTriangle, DollarSign, TrendingUp, Package,
   Wrench, Send, Plus, Search, CheckCircle, ShoppingCart, Truck,
-  Sparkles
+  Sparkles, Edit, CreditCard, RotateCcw, Download
 } from 'lucide-react';
 import { usePermittedActions } from '../hooks/usePermissions';
 
@@ -30,7 +30,11 @@ const IconMap = {
   CheckCircle,
   ShoppingCart,
   Truck,
-  Sparkles
+  Sparkles,
+  Edit,
+  CreditCard,
+  RotateCcw,
+  Download
 };
 
 // Color mapping for cards

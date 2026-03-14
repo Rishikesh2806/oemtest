@@ -178,6 +178,22 @@ DEFAULT_ROLES = {
         "is_system": True,
         "is_base_role": True,  # Base role for buyer users
         "color": "#0d9488"  # Teal
+    },
+    "supervisor": {
+        "name": "Supervisor",
+        "description": "Oversee team operations and performance",
+        "permissions": [
+            "users.view",
+            "vendors.view",
+            "rfqs.view",
+            "quotes.view",
+            "orders.view",
+            "whatsapp.view_messages",
+            "disputes.view",
+            "analytics.view_dashboard"
+        ],
+        "is_system": True,
+        "color": "#3b82f6"  # Blue
     }
 }
 
