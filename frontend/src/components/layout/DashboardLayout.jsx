@@ -25,28 +25,28 @@ const ALL_NAV_ITEMS = {
   
   // Buyer items
   buyer_dashboard: { path: "/buyer/dashboard", label: "Dashboard", icon: LayoutDashboard, permissions: [] },
-  my_rfqs: { path: "/buyer/rfqs", label: "My RFQs", icon: FileText, permissions: ['rfqs.view'] },
-  received_quotes: { path: "/buyer/quotes", label: "Received Quotes", icon: DollarSign, permissions: ['quotes.view'] },
-  new_rfq: { path: "/buyer/rfq/new", label: "New RFQ", icon: FileText, permissions: ['rfqs.create'] },
+  my_rfqs: { path: "/buyer/rfqs", label: "My RFQs", icon: FileText, permissions: [] },
+  received_quotes: { path: "/buyer/quotes", label: "Received Quotes", icon: DollarSign, permissions: [] },
+  new_rfq: { path: "/buyer/rfq/new", label: "New RFQ", icon: FileText, permissions: [] },
   buyer_profile: { path: "/buyer/profile", label: "My Profile", icon: User, permissions: [] },
   
   // Vendor items
   vendor_dashboard: { path: "/vendor/dashboard", label: "Dashboard", icon: LayoutDashboard, permissions: [] },
-  matched_rfqs: { path: "/vendor/matched-rfqs", label: "Matched RFQs", icon: FileText, permissions: ['rfqs.view'] },
+  matched_rfqs: { path: "/vendor/matched-rfqs", label: "Matched RFQs", icon: FileText, permissions: [] },
   vendor_profile: { path: "/vendor/profile", label: "Company Profile", icon: Building2, permissions: [] },
   machines: { path: "/vendor/machines", label: "Machines", icon: Wrench, permissions: [] },
-  vendor_quotes: { path: "/vendor/quotes", label: "My Quotes", icon: DollarSign, permissions: ['quotes.view'] },
+  vendor_quotes: { path: "/vendor/quotes", label: "My Quotes", icon: DollarSign, permissions: [] },
   
-  // Admin items
-  admin_dashboard: { path: "/admin/dashboard", label: "Admin Panel", icon: LayoutDashboard, permissions: ['users.view', 'vendors.view'] },
-  analytics: { path: "/admin/analytics", label: "Analytics", icon: BarChart3, permissions: ['analytics.view_dashboard'] },
-  whatsapp: { path: "/admin/whatsapp", label: "WhatsApp", icon: MessageSquare, permissions: ['whatsapp.view_messages', 'whatsapp.send_messages'] },
-  whatsapp_logs: { path: "/admin/whatsapp/logs", label: "WA Logs", icon: FileText, permissions: ['whatsapp.view_logs'] },
-  roles: { path: "/admin/roles", label: "Roles", icon: Shield, permissions: ['admin.roles'] },
-  file_manager: { path: "/admin/files", label: "File Manager", icon: FolderOpen, permissions: ['admin.file_manager'] },
+  // Admin items - no permission checks for admin role (full access)
+  admin_dashboard: { path: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, permissions: [] },
+  analytics: { path: "/admin/analytics", label: "Analytics", icon: BarChart3, permissions: [] },
+  whatsapp: { path: "/admin/whatsapp", label: "WhatsApp", icon: MessageSquare, permissions: [] },
+  whatsapp_logs: { path: "/admin/whatsapp/logs", label: "WA Logs", icon: FileText, permissions: [] },
+  roles: { path: "/admin/roles", label: "Roles", icon: Shield, permissions: [] },
+  file_manager: { path: "/admin/files", label: "File Manager", icon: FolderOpen, permissions: [] },
   
   // Common items
-  disputes: { path: "/disputes", label: "Disputes", icon: AlertTriangle, permissions: ['disputes.view'] },
+  disputes: { path: "/disputes", label: "Disputes", icon: AlertTriangle, permissions: [] },
   messages: { path: "/chat", label: "Messages", icon: MessageSquare, permissions: [] },
 };
 
@@ -55,8 +55,8 @@ const ROLE_NAV_CONFIGS = {
   buyer: ['buyer_dashboard', 'my_rfqs', 'received_quotes', 'new_rfq', 'disputes', 'buyer_profile', 'messages'],
   vendor: ['vendor_dashboard', 'matched_rfqs', 'vendor_profile', 'machines', 'vendor_quotes', 'disputes', 'messages'],
   admin: ['admin_dashboard', 'analytics', 'whatsapp', 'whatsapp_logs', 'roles', 'file_manager', 'disputes'],
-  // Staff roles - permission-based (custom roles without base role)
-  staff: ['staff_dashboard', 'admin_dashboard', 'analytics', 'whatsapp', 'whatsapp_logs', 'roles', 'file_manager', 'disputes', 'messages', 'my_rfqs', 'received_quotes', 'new_rfq', 'matched_rfqs', 'vendor_quotes'],
+  // Staff roles - all items available, permission checks done at component/API level
+  staff: ['staff_dashboard', 'admin_dashboard', 'analytics', 'whatsapp', 'whatsapp_logs', 'file_manager', 'disputes', 'messages', 'my_rfqs', 'received_quotes', 'new_rfq', 'matched_rfqs', 'vendor_quotes'],
 };
 
 const DashboardLayout = ({ children }) => {
