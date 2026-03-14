@@ -155,6 +155,23 @@ See ARCHITECTURE.md for detailed refactoring plan.
 - **Test Report**: /app/test_reports/iteration_24.json (100% pass - 17/17 backend tests)
 
 
+### Permission-Based Dashboard Quick Actions (NEW - Mar 14, 2026)
+- **usePermissions Hook** (`/app/frontend/src/hooks/usePermissions.js`):
+  - Fetches user permissions from `/api/user/permissions`
+  - Provides `hasPermission()`, `hasAnyPermission()`, `hasAllPermissions()` helpers
+  - Auto-refreshes permissions after login
+- **PermittedActions Component** (`/app/frontend/src/components/PermittedActions.jsx`):
+  - Displays color-coded action cards filtered by user permissions
+  - Shows badge with count of available actions
+  - Configurable for different dashboard types
+- **Dashboard Integration**:
+  - Admin Dashboard: 10 actions (Users, Vendors, RFQs, Analytics, WhatsApp, Files, etc.)
+  - Buyer Dashboard: 10 actions (Create RFQ, AI Analysis, Find Vendors, Quotes, Orders, etc.)
+  - Vendor Dashboard: 8 actions (Browse RFQs, Quotes, Orders, Machines, Profile, etc.)
+- **Test Report**: /app/test_reports/iteration_25.json (100% pass)
+
+
+
 
 
 
