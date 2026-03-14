@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth, api } from "../../App";
+import { usePermissions } from "../../hooks/usePermissions";
 import { Button } from "../ui/button";
 import NotificationBell from "../NotificationBell";
 import { toast } from "sonner";
@@ -17,8 +18,50 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 
+// Define all possible nav items with their required permissions
+const ALL_NAV_ITEMS = {
+  // Staff dashboard (for custom roles without base role)
+  staff_dashboard: { path: "/staff/dashboard", label: "Dashboard", icon: LayoutDashboard, permissions: [] },
+  
+  // Buyer items
+  buyer_dashboard: { path: "/buyer/dashboard", label: "Dashboard", icon: LayoutDashboard, permissions: [] },
+  my_rfqs: { path: "/buyer/rfqs", label: "My RFQs", icon: FileText, permissions: ['rfqs.view'] },
+  received_quotes: { path: "/buyer/quotes", label: "Received Quotes", icon: DollarSign, permissions: ['quotes.view'] },
+  new_rfq: { path: "/buyer/rfq/new", label: "New RFQ", icon: FileText, permissions: ['rfqs.create'] },
+  buyer_profile: { path: "/buyer/profile", label: "My Profile", icon: User, permissions: [] },
+  
+  // Vendor items
+  vendor_dashboard: { path: "/vendor/dashboard", label: "Dashboard", icon: LayoutDashboard, permissions: [] },
+  matched_rfqs: { path: "/vendor/matched-rfqs", label: "Matched RFQs", icon: FileText, permissions: ['rfqs.view'] },
+  vendor_profile: { path: "/vendor/profile", label: "Company Profile", icon: Building2, permissions: [] },
+  machines: { path: "/vendor/machines", label: "Machines", icon: Wrench, permissions: [] },
+  vendor_quotes: { path: "/vendor/quotes", label: "My Quotes", icon: DollarSign, permissions: ['quotes.view'] },
+  
+  // Admin items
+  admin_dashboard: { path: "/admin/dashboard", label: "Admin Panel", icon: LayoutDashboard, permissions: ['users.view', 'vendors.view'] },
+  analytics: { path: "/admin/analytics", label: "Analytics", icon: BarChart3, permissions: ['analytics.view_dashboard'] },
+  whatsapp: { path: "/admin/whatsapp", label: "WhatsApp", icon: MessageSquare, permissions: ['whatsapp.view_messages', 'whatsapp.send_messages'] },
+  whatsapp_logs: { path: "/admin/whatsapp/logs", label: "WA Logs", icon: FileText, permissions: ['whatsapp.view_logs'] },
+  roles: { path: "/admin/roles", label: "Roles", icon: Shield, permissions: ['admin.roles'] },
+  file_manager: { path: "/admin/files", label: "File Manager", icon: FolderOpen, permissions: ['admin.file_manager'] },
+  
+  // Common items
+  disputes: { path: "/disputes", label: "Disputes", icon: AlertTriangle, permissions: ['disputes.view'] },
+  messages: { path: "/chat", label: "Messages", icon: MessageSquare, permissions: [] },
+};
+
+// Define nav configurations for each role type
+const ROLE_NAV_CONFIGS = {
+  buyer: ['buyer_dashboard', 'my_rfqs', 'received_quotes', 'new_rfq', 'disputes', 'buyer_profile', 'messages'],
+  vendor: ['vendor_dashboard', 'matched_rfqs', 'vendor_profile', 'machines', 'vendor_quotes', 'disputes', 'messages'],
+  admin: ['admin_dashboard', 'analytics', 'whatsapp', 'whatsapp_logs', 'roles', 'file_manager', 'disputes'],
+  // Staff roles - permission-based (custom roles without base role)
+  staff: ['staff_dashboard', 'admin_dashboard', 'analytics', 'whatsapp', 'whatsapp_logs', 'roles', 'file_manager', 'disputes', 'messages', 'my_rfqs', 'received_quotes', 'new_rfq', 'matched_rfqs', 'vendor_quotes'],
+};
+
 const DashboardLayout = ({ children }) => {
   const { user, logout } = useAuth();
+  const { hasAnyPermission, permissions, loading: permissionsLoading } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -57,42 +100,46 @@ const DashboardLayout = ({ children }) => {
     navigate("/");
   };
 
-  const buyerNavItems = [
-    { path: "/buyer/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { path: "/buyer/rfqs", label: "My RFQs", icon: FileText },
-    { path: "/buyer/quotes", label: "Received Quotes", icon: DollarSign },
-    { path: "/buyer/rfq/new", label: "New RFQ", icon: FileText },
-    { path: "/disputes", label: "Disputes", icon: AlertTriangle },
-    { path: "/buyer/profile", label: "My Profile", icon: User },
-    { path: "/chat", label: "Messages", icon: MessageSquare, badge: unreadCount },
-  ];
-
-  const vendorNavItems = [
-    { path: "/vendor/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { path: "/vendor/matched-rfqs", label: "Matched RFQs", icon: FileText },
-    { path: "/vendor/profile", label: "Company Profile", icon: Building2 },
-    { path: "/vendor/machines", label: "Machines", icon: Wrench },
-    { path: "/vendor/quotes", label: "My Quotes", icon: DollarSign },
-    { path: "/disputes", label: "Disputes", icon: AlertTriangle },
-    { path: "/chat", label: "Messages", icon: MessageSquare, badge: unreadCount },
-  ];
-
-  const adminNavItems = [
-    { path: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { path: "/admin/analytics", label: "Analytics", icon: BarChart3 },
-    { path: "/admin/whatsapp", label: "WhatsApp", icon: MessageSquare },
-    { path: "/admin/whatsapp/logs", label: "WA Logs", icon: FileText },
-    { path: "/admin/roles", label: "Roles", icon: Shield },
-    { path: "/admin/files", label: "File Manager", icon: FolderOpen },
-    { path: "/disputes", label: "Disputes", icon: AlertTriangle },
-  ];
-
+  // Get nav items based on user role and permissions
   const getNavItems = () => {
-    switch (user?.role) {
-      case "vendor": return vendorNavItems;
-      case "admin": return adminNavItems;
-      default: return buyerNavItems;
+    // Determine base role type
+    let roleType = user?.role || 'buyer';
+    
+    // If no base role but has custom_role, use staff configuration
+    if (!user?.role && user?.custom_role) {
+      roleType = 'staff';
     }
+    
+    // Get the nav config for this role type
+    const navConfig = ROLE_NAV_CONFIGS[roleType] || ROLE_NAV_CONFIGS.buyer;
+    
+    // Build nav items based on config and permissions
+    const items = [];
+    
+    for (const itemKey of navConfig) {
+      const itemConfig = ALL_NAV_ITEMS[itemKey];
+      if (!itemConfig) continue;
+      
+      // Check if user has required permissions (if any)
+      const hasPermission = itemConfig.permissions.length === 0 || 
+        hasAnyPermission(itemConfig.permissions);
+      
+      if (hasPermission) {
+        items.push({
+          path: itemConfig.path,
+          label: itemConfig.label,
+          icon: itemConfig.icon,
+          badge: itemKey === 'messages' ? unreadCount : undefined
+        });
+      }
+    }
+    
+    // Remove duplicates by path
+    const uniqueItems = items.filter((item, index, self) => 
+      index === self.findIndex(t => t.path === item.path)
+    );
+    
+    return uniqueItems;
   };
 
   const navItems = getNavItems();
@@ -163,7 +210,9 @@ const DashboardLayout = ({ children }) => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-white font-medium truncate">{user?.name}</p>
-                <p className="text-slate-400 text-sm capitalize">{user?.role}</p>
+                <p className="text-slate-400 text-sm capitalize">
+                  {user?.custom_role ? user.custom_role.replace(/_/g, ' ') : user?.role || 'Staff'}
+                </p>
               </div>
             </div>
           </div>
@@ -203,7 +252,11 @@ const DashboardLayout = ({ children }) => {
         <header className="hidden lg:flex items-center justify-between px-8 py-4 bg-white border-b border-slate-200">
           <div>
             <h2 className="text-slate-400 text-sm">
-              {user?.role === "vendor" ? "Vendor Portal" : user?.role === "admin" ? "Admin Panel" : "Buyer Portal"}
+              {user?.role === "vendor" ? "Vendor Portal" : 
+               user?.role === "admin" ? "Admin Panel" : 
+               user?.role === "buyer" ? "Buyer Portal" :
+               user?.custom_role ? `${user.custom_role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} Portal` :
+               "Portal"}
             </h2>
           </div>
 

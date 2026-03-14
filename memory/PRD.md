@@ -168,6 +168,19 @@ See ARCHITECTURE.md for detailed refactoring plan.
 - **Test Report**: /app/test_reports/iteration_26.json (100% pass - 9/9 backend tests, all frontend features verified)
 
 
+### Permission-Based Sidebar Menu (NEW - Mar 14, 2026)
+- **DashboardLayout** (`/app/frontend/src/components/layout/DashboardLayout.jsx`):
+  - Sidebar menu now dynamically shows navigation items based on user's role and permissions
+  - Users with "None" base role but a custom_role see Staff-specific navigation
+  - Admin users see: Admin Panel, Analytics, WhatsApp, WA Logs, Roles, File Manager, Disputes
+  - Vendor users see: Dashboard, Matched RFQs, Company Profile, Machines, My Quotes, Disputes, Messages
+  - Buyer users see: Dashboard, My RFQs, Received Quotes, New RFQ, Disputes, My Profile, Messages
+  - Staff users see permission-filtered items including Admin Panel (if permitted), Analytics, Messages, RFQ-related links
+- **Header Portal Name**: Now shows role-specific portal name (e.g., "Sales Manager Portal" for custom roles)
+- **User Info**: Shows custom_role name in sidebar when available
+
+
+
 
 ### Permission-Based Dashboard Quick Actions (NEW - Mar 14, 2026)
 - **usePermissions Hook** (`/app/frontend/src/hooks/usePermissions.js`):
