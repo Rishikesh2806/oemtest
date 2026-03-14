@@ -81,7 +81,7 @@ const StatusBadge = ({ status }) => {
 };
 
 // ============== OVERVIEW TAB ==============
-const OverviewTab = ({ stats, pendingVendors, onApproveVendor, onRejectVendor, onRefresh }) => (
+const OverviewTab = ({ stats, pendingVendors, onApproveVendor, onRejectVendor, onRefresh, dashboardType = "admin" }) => (
   <div className="space-y-6">
     {/* Stats Cards */}
     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -172,7 +172,7 @@ const OverviewTab = ({ stats, pendingVendors, onApproveVendor, onRejectVendor, o
     
     {/* Permitted Quick Actions */}
     <PermittedActions 
-      dashboardType="admin" 
+      dashboardType={dashboardType} 
       title="Quick Actions"
       description="Available actions based on your permissions"
       columns={4}
@@ -2096,6 +2096,9 @@ const AdminDashboard = () => {
   
   const permittedTabs = getPermittedTabs();
   
+  // Determine dashboard type for actions - use custom_role if available, otherwise "admin"
+  const dashboardType = user?.custom_role || 'admin';
+  
   // Get initial tab from URL query parameter
   const searchParams = new URLSearchParams(location.search);
   const urlTab = searchParams.get('tab') || 'overview';
@@ -2530,6 +2533,7 @@ const AdminDashboard = () => {
             onApproveVendor={approveVendor}
             onRejectVendor={rejectVendor}
             onRefresh={fetchInitialData}
+            dashboardType={dashboardType}
           />
         )}
         {activeTab === "users" && permittedTabs.includes('users') && (

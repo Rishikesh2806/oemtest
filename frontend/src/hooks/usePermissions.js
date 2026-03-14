@@ -869,7 +869,13 @@ export function usePermittedActions(dashboardType) {
   useEffect(() => {
     if (loading) return;
 
-    const actions = DASHBOARD_ACTIONS[dashboardType] || [];
+    // Get actions for the dashboard type, fall back to admin if not found
+    let actions = DASHBOARD_ACTIONS[dashboardType];
+    if (!actions || actions.length === 0) {
+      // Fall back to admin actions for unknown dashboard types
+      actions = DASHBOARD_ACTIONS['admin'] || [];
+    }
+    
     const filtered = actions.filter(action => {
       // If no permissions required, always show
       if (!action.permissions || action.permissions.length === 0) {
