@@ -32,8 +32,8 @@ const LoginPage = () => {
     } else if (userData.role === "buyer") {
       navigate("/buyer/dashboard");
     } else if (userData.custom_role) {
-      // User has no base role but has a custom role - send to staff dashboard
-      navigate("/staff/dashboard");
+      // User has no base role but has a custom role - send to admin dashboard
+      navigate("/admin/dashboard");
     } else {
       // Default fallback
       navigate("/buyer/dashboard");

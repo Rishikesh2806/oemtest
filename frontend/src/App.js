@@ -188,8 +188,8 @@ const AuthCallback = () => {
         } else if (role === "buyer") {
           navigate("/buyer/dashboard", { replace: true });
         } else if (customRole) {
-          // User has no base role but has a custom role - send to staff dashboard
-          navigate("/staff/dashboard", { replace: true });
+          // User has no base role but has a custom role - send to admin dashboard
+          navigate("/admin/dashboard", { replace: true });
         } else {
           navigate("/buyer/dashboard", { replace: true });
         }
@@ -242,8 +242,8 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     } else if (user.role === "buyer") {
       return <Navigate to="/buyer/dashboard" replace />;
     } else if (user.custom_role) {
-      // User has no base role but has a custom role - send to staff dashboard
-      return <Navigate to="/staff/dashboard" replace />;
+      // User has no base role but has a custom role - send to admin dashboard
+      return <Navigate to="/admin/dashboard" replace />;
     }
     return <Navigate to="/buyer/dashboard" replace />;
   }
