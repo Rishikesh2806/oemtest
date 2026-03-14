@@ -1952,6 +1952,7 @@ async def get_me(user: dict = Depends(get_current_user)):
         "email": user["email"],
         "name": user["name"],
         "role": user["role"],
+        "custom_role": user.get("custom_role"),
         "picture": user.get("picture"),
         "company_name": user.get("company_name"),
         "email_verified": user.get("email_verified", False),
