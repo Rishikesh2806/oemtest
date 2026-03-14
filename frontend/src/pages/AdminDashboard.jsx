@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth, api } from "../App";
+import { usePermissions } from "../hooks/usePermissions";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import PermittedActions from "../components/PermittedActions";
 import { Button } from "../components/ui/button";
@@ -16,6 +17,18 @@ import {
   CheckCircle2, XCircle, Loader2, Search, Plus, Edit, Trash2,
   Eye, Send, AlertCircle, RefreshCw, ChevronRight, Clock
 } from "lucide-react";
+
+// Tab configuration with required permissions
+const TAB_CONFIG = {
+  overview: { label: "Overview", icon: Package, permissions: [] },
+  users: { label: "Users", icon: Users, permissions: ['users.view'] },
+  vendors: { label: "Vendors", icon: Building2, permissions: ['vendors.view'] },
+  rfqs: { label: "RFQs", icon: FileText, permissions: ['rfqs.view'] },
+  quotes: { label: "Quotes", icon: DollarSign, permissions: ['quotes.view'] },
+  orders: { label: "Orders", icon: Package, permissions: ['orders.view'] },
+  drawings: { label: "Drawings", icon: Wrench, permissions: ['rfqs.view'] },
+  ndas: { label: "NDAs", icon: FileCheck, permissions: ['rfqs.view'] },
+};
 
 // Tab components
 const TabButton = ({ active, onClick, icon: Icon, label, count }) => (
@@ -2063,12 +2076,31 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
 // ============== MAIN ADMIN DASHBOARD ==============
 const AdminDashboard = () => {
   const { user } = useAuth();
+  const { hasAnyPermission } = usePermissions();
   const location = useLocation();
   const navigate = useNavigate();
   
+  // Check if user is admin (full access) or staff (permission-based)
+  const isAdmin = user?.role === 'admin';
+  
+  // Get permitted tabs based on user permissions
+  const getPermittedTabs = () => {
+    return Object.entries(TAB_CONFIG).filter(([tabId, config]) => {
+      // Admin gets all tabs
+      if (isAdmin) return true;
+      // Staff users need required permissions
+      if (config.permissions.length === 0) return true;
+      return hasAnyPermission(config.permissions);
+    }).map(([tabId]) => tabId);
+  };
+  
+  const permittedTabs = getPermittedTabs();
+  
   // Get initial tab from URL query parameter
   const searchParams = new URLSearchParams(location.search);
-  const initialTab = searchParams.get('tab') || 'overview';
+  const urlTab = searchParams.get('tab') || 'overview';
+  // If URL tab is not permitted, default to first permitted tab
+  const initialTab = permittedTabs.includes(urlTab) ? urlTab : permittedTabs[0] || 'overview';
   
   const [activeTab, setActiveTab] = useState(initialTab);
   const [loading, setLoading] = useState(true);
@@ -2088,13 +2120,14 @@ const AdminDashboard = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tabFromUrl = params.get('tab');
-    if (tabFromUrl && tabFromUrl !== activeTab) {
+    if (tabFromUrl && tabFromUrl !== activeTab && permittedTabs.includes(tabFromUrl)) {
       setActiveTab(tabFromUrl);
     }
-  }, [location.search]);
+  }, [location.search, permittedTabs]);
 
   // Update URL when tab changes
   const handleTabChange = (tab) => {
+    if (!permittedTabs.includes(tab)) return;
     setActiveTab(tab);
     navigate(`/admin/dashboard?tab=${tab}`, { replace: true });
   };
@@ -2413,68 +2446,84 @@ const AdminDashboard = () => {
           <p className="text-slate-500">Platform management and operations</p>
         </div>
 
-        {/* Tabs */}
+        {/* Tabs - Only show permitted tabs */}
         <div className="border-b border-slate-200 overflow-x-auto">
           <div className="flex min-w-max">
-            <TabButton 
-              active={activeTab === "overview"} 
-              onClick={() => handleTabChange("overview")} 
-              icon={Package} 
-              label="Overview" 
-            />
-            <TabButton 
-              active={activeTab === "users"} 
-              onClick={() => handleTabChange("users")} 
-              icon={Users} 
-              label="Users"
-              count={stats?.total_users}
-            />
-            <TabButton 
-              active={activeTab === "vendors"} 
-              onClick={() => handleTabChange("vendors")} 
-              icon={Building2} 
-              label="Vendors"
-              count={stats?.total_vendors}
-            />
-            <TabButton 
-              active={activeTab === "rfqs"} 
-              onClick={() => handleTabChange("rfqs")} 
-              icon={FileText} 
-              label="RFQs"
-              count={stats?.total_rfqs}
-            />
-            <TabButton 
-              active={activeTab === "quotes"} 
-              onClick={() => handleTabChange("quotes")} 
-              icon={DollarSign} 
-              label="Quotes"
-              count={stats?.total_quotes}
-            />
-            <TabButton 
-              active={activeTab === "orders"} 
-              onClick={() => handleTabChange("orders")} 
-              icon={Package} 
-              label="Orders"
-              count={stats?.total_orders}
-            />
-            <TabButton 
-              active={activeTab === "drawings"} 
-              onClick={() => handleTabChange("drawings")} 
-              icon={Wrench} 
-              label="Drawings"
-            />
-            <TabButton 
-              active={activeTab === "ndas"} 
-              onClick={() => handleTabChange("ndas")} 
-              icon={FileCheck} 
-              label="NDAs"
-              count={stats?.total_ndas}
-            />
+            {permittedTabs.includes('overview') && (
+              <TabButton 
+                active={activeTab === "overview"} 
+                onClick={() => handleTabChange("overview")} 
+                icon={Package} 
+                label="Overview" 
+              />
+            )}
+            {permittedTabs.includes('users') && (
+              <TabButton 
+                active={activeTab === "users"} 
+                onClick={() => handleTabChange("users")} 
+                icon={Users} 
+                label="Users"
+                count={stats?.total_users}
+              />
+            )}
+            {permittedTabs.includes('vendors') && (
+              <TabButton 
+                active={activeTab === "vendors"} 
+                onClick={() => handleTabChange("vendors")} 
+                icon={Building2} 
+                label="Vendors"
+                count={stats?.total_vendors}
+              />
+            )}
+            {permittedTabs.includes('rfqs') && (
+              <TabButton 
+                active={activeTab === "rfqs"} 
+                onClick={() => handleTabChange("rfqs")} 
+                icon={FileText} 
+                label="RFQs"
+                count={stats?.total_rfqs}
+              />
+            )}
+            {permittedTabs.includes('quotes') && (
+              <TabButton 
+                active={activeTab === "quotes"} 
+                onClick={() => handleTabChange("quotes")} 
+                icon={DollarSign} 
+                label="Quotes"
+                count={stats?.total_quotes}
+              />
+            )}
+            {permittedTabs.includes('orders') && (
+              <TabButton 
+                active={activeTab === "orders"} 
+                onClick={() => handleTabChange("orders")} 
+                icon={Package} 
+                label="Orders"
+                count={stats?.total_orders}
+              />
+            )}
+            {permittedTabs.includes('drawings') && (
+              <TabButton 
+                active={activeTab === "drawings"} 
+                onClick={() => handleTabChange("drawings")} 
+                icon={Wrench} 
+                label="Drawings"
+              />
+            )}
+            {permittedTabs.includes('ndas') && (
+              <TabButton 
+                active={activeTab === "ndas"} 
+                onClick={() => handleTabChange("ndas")} 
+                icon={FileCheck} 
+                label="NDAs"
+                count={stats?.total_ndas}
+              />
+            )}
           </div>
         </div>
 
-        {/* Tab Content */}
-        {activeTab === "overview" && (
+        {/* Tab Content - Only render if tab is permitted */}
+        {activeTab === "overview" && permittedTabs.includes('overview') && (
           <OverviewTab 
             stats={stats} 
             pendingVendors={pendingVendors}
@@ -2483,7 +2532,7 @@ const AdminDashboard = () => {
             onRefresh={fetchInitialData}
           />
         )}
-        {activeTab === "users" && (
+        {activeTab === "users" && permittedTabs.includes('users') && (
           <UsersTab 
             users={users} 
             loading={loading}
@@ -2493,7 +2542,7 @@ const AdminDashboard = () => {
             onCreateUser={createUser}
           />
         )}
-        {activeTab === "vendors" && (
+        {activeTab === "vendors" && permittedTabs.includes('vendors') && (
           <VendorsTab
             vendors={vendors}
             loading={loading}
@@ -2504,7 +2553,7 @@ const AdminDashboard = () => {
             onCreateVendor={createVendor}
           />
         )}
-        {activeTab === "rfqs" && (
+        {activeTab === "rfqs" && permittedTabs.includes('rfqs') && (
           <RFQsTab 
             rfqs={rfqs} 
             loading={loading}
@@ -2513,7 +2562,7 @@ const AdminDashboard = () => {
             onDeleteRFQ={deleteRFQ}
           />
         )}
-        {activeTab === "quotes" && (
+        {activeTab === "quotes" && permittedTabs.includes('quotes') && (
           <QuotesTab 
             quotes={quotes} 
             loading={loading}
@@ -2522,7 +2571,7 @@ const AdminDashboard = () => {
             onDeleteQuote={deleteQuote}
           />
         )}
-        {activeTab === "orders" && (
+        {activeTab === "orders" && permittedTabs.includes('orders') && (
           <OrdersTab 
             orders={orders} 
             loading={loading}
@@ -2531,7 +2580,7 @@ const AdminDashboard = () => {
             onDeleteOrder={deleteOrder}
           />
         )}
-        {activeTab === "drawings" && (
+        {activeTab === "drawings" && permittedTabs.includes('drawings') && (
           <DrawingsTab 
             drawings={drawings} 
             loading={loading}
@@ -2539,7 +2588,7 @@ const AdminDashboard = () => {
             onDeleteDrawing={deleteDrawing}
           />
         )}
-        {activeTab === "ndas" && (
+        {activeTab === "ndas" && permittedTabs.includes('ndas') && (
           <NDAsTab 
             ndas={ndas}
             users={users}
