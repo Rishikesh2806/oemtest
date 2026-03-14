@@ -869,12 +869,9 @@ export function usePermittedActions(dashboardType) {
   useEffect(() => {
     if (loading) return;
 
-    // Get actions for the dashboard type, fall back to admin if not found
-    let actions = DASHBOARD_ACTIONS[dashboardType];
-    if (!actions || actions.length === 0) {
-      // Fall back to admin actions for unknown dashboard types
-      actions = DASHBOARD_ACTIONS['admin'] || [];
-    }
+    // For staff users (custom roles), always use admin actions filtered by their actual permissions
+    // This ensures actions match exactly what admin assigned in Roles Manager
+    const actions = DASHBOARD_ACTIONS['admin'] || [];
     
     const filtered = actions.filter(action => {
       // If no permissions required, always show
