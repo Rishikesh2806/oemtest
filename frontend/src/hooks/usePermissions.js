@@ -156,31 +156,103 @@ export const DASHBOARD_ACTIONS = {
   // Admin Dashboard Actions
   admin: [
     {
-      id: 'manage_users',
-      title: 'Manage Users',
-      description: 'View and manage user accounts',
+      id: 'view_users',
+      title: 'View Users',
+      description: 'Browse user accounts',
       icon: 'Users',
       path: '/admin/dashboard?tab=users',
       permissions: ['users.view'],
       color: 'blue'
     },
     {
-      id: 'manage_vendors',
-      title: 'Manage Vendors',
-      description: 'Approve and manage vendor profiles',
+      id: 'edit_users',
+      title: 'Edit Users',
+      description: 'Modify user accounts',
+      icon: 'UserCog',
+      path: '/admin/dashboard?tab=users',
+      permissions: ['users.edit'],
+      color: 'blue'
+    },
+    {
+      id: 'delete_users',
+      title: 'Delete Users',
+      description: 'Remove user accounts',
+      icon: 'UserX',
+      path: '/admin/dashboard?tab=users',
+      permissions: ['users.delete'],
+      color: 'red'
+    },
+    {
+      id: 'view_vendors',
+      title: 'View Vendors',
+      description: 'Browse vendor profiles',
       icon: 'Building2',
       path: '/admin/dashboard?tab=vendors',
-      permissions: ['vendors.view', 'vendors.approve'],
+      permissions: ['vendors.view'],
       color: 'green'
+    },
+    {
+      id: 'approve_vendors',
+      title: 'Approve Vendors',
+      description: 'Approve vendor applications',
+      icon: 'CheckCircle',
+      path: '/admin/dashboard?tab=vendors',
+      permissions: ['vendors.approve'],
+      color: 'green'
+    },
+    {
+      id: 'edit_vendors',
+      title: 'Edit Vendors',
+      description: 'Modify vendor profiles',
+      icon: 'Edit',
+      path: '/admin/dashboard?tab=vendors',
+      permissions: ['vendors.edit'],
+      color: 'orange'
     },
     {
       id: 'view_rfqs',
       title: 'View All RFQs',
-      description: 'Browse and manage all RFQs',
+      description: 'Browse all RFQs in the system',
       icon: 'FileText',
       path: '/admin/dashboard?tab=rfqs',
       permissions: ['rfqs.view'],
       color: 'purple'
+    },
+    {
+      id: 'edit_rfqs',
+      title: 'Edit RFQs',
+      description: 'Modify RFQ details',
+      icon: 'Edit',
+      path: '/admin/dashboard?tab=rfqs',
+      permissions: ['rfqs.edit'],
+      color: 'orange'
+    },
+    {
+      id: 'delete_rfqs',
+      title: 'Delete RFQs',
+      description: 'Remove RFQs from system',
+      icon: 'Trash2',
+      path: '/admin/dashboard?tab=rfqs',
+      permissions: ['rfqs.delete'],
+      color: 'red'
+    },
+    {
+      id: 'view_quotes',
+      title: 'View Quotes',
+      description: 'Browse all vendor quotes',
+      icon: 'DollarSign',
+      path: '/admin/dashboard?tab=quotes',
+      permissions: ['quotes.view'],
+      color: 'green'
+    },
+    {
+      id: 'view_orders',
+      title: 'View Orders',
+      description: 'Track all orders',
+      icon: 'Package',
+      path: '/admin/dashboard?tab=orders',
+      permissions: ['orders.view'],
+      color: 'gray'
     },
     {
       id: 'analytics',
