@@ -160,7 +160,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Manage Users',
       description: 'View and manage user accounts',
       icon: 'Users',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=users',
       permissions: ['users.view'],
       color: 'blue'
     },
@@ -169,7 +169,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Manage Vendors',
       description: 'Approve and manage vendor profiles',
       icon: 'Building2',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=vendors',
       permissions: ['vendors.view', 'vendors.approve'],
       color: 'green'
     },
@@ -178,7 +178,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'View All RFQs',
       description: 'Browse and manage all RFQs',
       icon: 'FileText',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=rfqs',
       permissions: ['rfqs.view'],
       color: 'purple'
     },
@@ -241,7 +241,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Payments',
       description: 'View and process payments',
       icon: 'DollarSign',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=orders',
       permissions: ['payments.view', 'payments.process'],
       color: 'green'
     },
@@ -433,7 +433,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Vendor Directory',
       description: 'Browse and manage vendor profiles',
       icon: 'Building2',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=vendors',
       permissions: ['vendors.view'],
       color: 'green'
     },
@@ -442,7 +442,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Buyer Accounts',
       description: 'View buyer information',
       icon: 'Users',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=users',
       permissions: ['buyers.view'],
       color: 'blue'
     },
@@ -451,7 +451,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'All RFQs',
       description: 'Browse and manage all RFQs',
       icon: 'FileText',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=rfqs',
       permissions: ['rfqs.view'],
       color: 'purple'
     },
@@ -469,7 +469,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Edit RFQs',
       description: 'Modify RFQ details',
       icon: 'Edit',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=rfqs',
       permissions: ['rfqs.edit'],
       color: 'orange'
     },
@@ -478,7 +478,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'AI Analysis',
       description: 'Run AI analysis on drawings',
       icon: 'Sparkles',
-      path: '/admin/dashboard',
+      path: '/buyer/rfqs',
       permissions: ['rfqs.analyze'],
       color: 'purple'
     },
@@ -487,7 +487,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Match Vendors',
       description: 'Find matching vendors for RFQs',
       icon: 'Search',
-      path: '/admin/dashboard',
+      path: '/buyer/rfqs',
       permissions: ['rfqs.match_vendors'],
       color: 'teal'
     },
@@ -496,7 +496,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Review Quotes',
       description: 'View all vendor quotes',
       icon: 'FileText',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=quotes',
       permissions: ['quotes.view'],
       color: 'blue'
     },
@@ -505,7 +505,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Approve Quotes',
       description: 'Approve or reject quotes',
       icon: 'CheckCircle',
-      path: '/admin/dashboard',
+      path: '/buyer/quotes',
       permissions: ['quotes.approve'],
       color: 'green'
     },
@@ -514,7 +514,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Negotiate Deals',
       description: 'Handle quote negotiations',
       icon: 'MessageSquare',
-      path: '/admin/dashboard',
+      path: '/chat',
       permissions: ['quotes.negotiate'],
       color: 'orange'
     },
@@ -523,7 +523,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'View Orders',
       description: 'Track all orders',
       icon: 'Package',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=orders',
       permissions: ['orders.view'],
       color: 'gray'
     },
@@ -532,7 +532,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Create Orders',
       description: 'Create purchase orders',
       icon: 'ShoppingCart',
-      path: '/admin/dashboard',
+      path: '/buyer/quotes',
       permissions: ['orders.create'],
       color: 'green'
     },
@@ -554,7 +554,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'User Lookup',
       description: 'Search and view user accounts',
       icon: 'Users',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=users',
       permissions: ['users.view'],
       color: 'blue'
     },
@@ -563,7 +563,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Vendor Profiles',
       description: 'View vendor information',
       icon: 'Building2',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=vendors',
       permissions: ['vendors.view'],
       color: 'green'
     },
@@ -572,7 +572,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Buyer Profiles',
       description: 'View buyer information',
       icon: 'Users',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=users',
       permissions: ['buyers.view'],
       color: 'teal'
     },
@@ -581,7 +581,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'RFQ History',
       description: 'View RFQ details',
       icon: 'FileText',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=rfqs',
       permissions: ['rfqs.view'],
       color: 'purple'
     },
@@ -590,7 +590,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Quote History',
       description: 'View quote details',
       icon: 'FileText',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=quotes',
       permissions: ['quotes.view'],
       color: 'orange'
     },
@@ -599,7 +599,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Order Tracking',
       description: 'Track order status',
       icon: 'Package',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=orders',
       permissions: ['orders.view'],
       color: 'gray'
     },
@@ -608,7 +608,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'WhatsApp Inbox',
       description: 'View customer messages',
       icon: 'MessageSquare',
-      path: '/admin/whatsapp/inbox',
+      path: '/admin/whatsapp',
       permissions: ['whatsapp.view_messages'],
       color: 'green'
     },
@@ -648,7 +648,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Payment Dashboard',
       description: 'View all payment transactions',
       icon: 'DollarSign',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=orders',
       permissions: ['payments.view'],
       color: 'green'
     },
@@ -657,7 +657,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Process Payments',
       description: 'Release escrow payments',
       icon: 'CreditCard',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=orders',
       permissions: ['payments.process'],
       color: 'blue'
     },
@@ -666,7 +666,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Issue Refunds',
       description: 'Process refund requests',
       icon: 'RotateCcw',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=orders',
       permissions: ['payments.refund'],
       color: 'orange'
     },
@@ -684,7 +684,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Order Overview',
       description: 'Track order payments',
       icon: 'Package',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=orders',
       permissions: ['orders.view'],
       color: 'gray'
     },
@@ -724,7 +724,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Regional Vendors',
       description: 'View vendors in your region',
       icon: 'Building2',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=vendors',
       permissions: ['vendors.view'],
       color: 'green'
     },
@@ -733,7 +733,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Edit Vendors',
       description: 'Update vendor profiles',
       icon: 'Edit',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=vendors',
       permissions: ['vendors.edit'],
       color: 'blue'
     },
@@ -742,7 +742,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Regional RFQs',
       description: 'View RFQs in your region',
       icon: 'FileText',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=rfqs',
       permissions: ['rfqs.view'],
       color: 'purple'
     },
@@ -751,7 +751,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Manage RFQs',
       description: 'Edit and manage RFQs',
       icon: 'Edit',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=rfqs',
       permissions: ['rfqs.edit'],
       color: 'orange'
     },
@@ -760,7 +760,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Regional Quotes',
       description: 'View quotes in your region',
       icon: 'FileText',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=quotes',
       permissions: ['quotes.view'],
       color: 'teal'
     },
@@ -769,7 +769,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Approve Quotes',
       description: 'Approve regional quotes',
       icon: 'CheckCircle',
-      path: '/admin/dashboard',
+      path: '/buyer/quotes',
       permissions: ['quotes.approve'],
       color: 'green'
     },
@@ -791,7 +791,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Team Members',
       description: 'View your team members',
       icon: 'Users',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=users',
       permissions: ['users.view'],
       color: 'blue'
     },
@@ -800,7 +800,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Vendor List',
       description: 'Browse assigned vendors',
       icon: 'Building2',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=vendors',
       permissions: ['vendors.view'],
       color: 'green'
     },
@@ -809,7 +809,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'RFQ Queue',
       description: 'View pending RFQs',
       icon: 'FileText',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=rfqs',
       permissions: ['rfqs.view'],
       color: 'purple'
     },
@@ -818,7 +818,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Quote Review',
       description: 'Review submitted quotes',
       icon: 'FileText',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=quotes',
       permissions: ['quotes.view'],
       color: 'orange'
     },
@@ -827,7 +827,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'Order Status',
       description: 'Track order progress',
       icon: 'Package',
-      path: '/admin/dashboard',
+      path: '/admin/dashboard?tab=orders',
       permissions: ['orders.view'],
       color: 'gray'
     },
@@ -836,7 +836,7 @@ export const DASHBOARD_ACTIONS = {
       title: 'WhatsApp Messages',
       description: 'View team messages',
       icon: 'MessageSquare',
-      path: '/admin/whatsapp/inbox',
+      path: '/admin/whatsapp',
       permissions: ['whatsapp.view_messages'],
       color: 'green'
     },

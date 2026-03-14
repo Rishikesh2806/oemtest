@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth, api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import PermittedActions from "../components/PermittedActions";
@@ -2062,7 +2063,14 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
 // ============== MAIN ADMIN DASHBOARD ==============
 const AdminDashboard = () => {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState("overview");
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  // Get initial tab from URL query parameter
+  const searchParams = new URLSearchParams(location.search);
+  const initialTab = searchParams.get('tab') || 'overview';
+  
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [loading, setLoading] = useState(true);
   
   // Data states
@@ -2075,6 +2083,21 @@ const AdminDashboard = () => {
   const [drawings, setDrawings] = useState([]);
   const [ndas, setNdas] = useState([]);
   const [vendors, setVendors] = useState([]);
+
+  // Update tab when URL changes
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabFromUrl = params.get('tab');
+    if (tabFromUrl && tabFromUrl !== activeTab) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [location.search]);
+
+  // Update URL when tab changes
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    navigate(`/admin/dashboard?tab=${tab}`, { replace: true });
+  };
 
   useEffect(() => {
     fetchInitialData();
@@ -2395,54 +2418,54 @@ const AdminDashboard = () => {
           <div className="flex min-w-max">
             <TabButton 
               active={activeTab === "overview"} 
-              onClick={() => setActiveTab("overview")} 
+              onClick={() => handleTabChange("overview")} 
               icon={Package} 
               label="Overview" 
             />
             <TabButton 
               active={activeTab === "users"} 
-              onClick={() => setActiveTab("users")} 
+              onClick={() => handleTabChange("users")} 
               icon={Users} 
               label="Users"
               count={stats?.total_users}
             />
             <TabButton 
               active={activeTab === "vendors"} 
-              onClick={() => setActiveTab("vendors")} 
+              onClick={() => handleTabChange("vendors")} 
               icon={Building2} 
               label="Vendors"
               count={stats?.total_vendors}
             />
             <TabButton 
               active={activeTab === "rfqs"} 
-              onClick={() => setActiveTab("rfqs")} 
+              onClick={() => handleTabChange("rfqs")} 
               icon={FileText} 
               label="RFQs"
               count={stats?.total_rfqs}
             />
             <TabButton 
               active={activeTab === "quotes"} 
-              onClick={() => setActiveTab("quotes")} 
+              onClick={() => handleTabChange("quotes")} 
               icon={DollarSign} 
               label="Quotes"
               count={stats?.total_quotes}
             />
             <TabButton 
               active={activeTab === "orders"} 
-              onClick={() => setActiveTab("orders")} 
+              onClick={() => handleTabChange("orders")} 
               icon={Package} 
               label="Orders"
               count={stats?.total_orders}
             />
             <TabButton 
               active={activeTab === "drawings"} 
-              onClick={() => setActiveTab("drawings")} 
+              onClick={() => handleTabChange("drawings")} 
               icon={Wrench} 
               label="Drawings"
             />
             <TabButton 
               active={activeTab === "ndas"} 
-              onClick={() => setActiveTab("ndas")} 
+              onClick={() => handleTabChange("ndas")} 
               icon={FileCheck} 
               label="NDAs"
               count={stats?.total_ndas}
