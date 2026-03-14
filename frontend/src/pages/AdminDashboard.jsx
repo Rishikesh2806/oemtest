@@ -235,7 +235,7 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
   const [editUser, setEditUser] = useState(null);
   const [editForm, setEditForm] = useState({ name: "", role: "", custom_role: "" });
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [addForm, setAddForm] = useState({ name: "", email: "", password: "", role: "buyer", custom_role: "", company_name: "" });
+  const [addForm, setAddForm] = useState({ name: "", email: "", password: "", role: "", custom_role: "", company_name: "" });
   const [adding, setAdding] = useState(false);
   const [availableRoles, setAvailableRoles] = useState([]);
   const [loadingRoles, setLoadingRoles] = useState(false);
@@ -288,7 +288,7 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
     try {
       await onCreateUser(addForm);
       setShowAddDialog(false);
-      setAddForm({ name: "", email: "", password: "", role: "buyer", custom_role: "", company_name: "" });
+      setAddForm({ name: "", email: "", password: "", role: "", custom_role: "", company_name: "" });
     } finally {
       setAdding(false);
     }
@@ -406,11 +406,15 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Base Role</Label>
-                <Select value={editForm.role} onValueChange={(v) => setEditForm(prev => ({ ...prev, role: v }))}>
+                <Select 
+                  value={editForm.role || "none"} 
+                  onValueChange={(v) => setEditForm(prev => ({ ...prev, role: v === "none" ? "" : v }))}
+                >
                   <SelectTrigger data-testid="edit-user-role">
-                    <SelectValue />
+                    <SelectValue placeholder="None" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
                     <SelectItem value="buyer">Buyer</SelectItem>
                     <SelectItem value="vendor">Vendor</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
@@ -493,12 +497,16 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Base Role *</Label>
-                <Select value={addForm.role} onValueChange={(v) => setAddForm(prev => ({ ...prev, role: v }))}>
+                <Label>Base Role</Label>
+                <Select 
+                  value={addForm.role || "none"} 
+                  onValueChange={(v) => setAddForm(prev => ({ ...prev, role: v === "none" ? "" : v }))}
+                >
                   <SelectTrigger data-testid="add-user-role">
-                    <SelectValue />
+                    <SelectValue placeholder="None" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
                     <SelectItem value="buyer">Buyer</SelectItem>
                     <SelectItem value="vendor">Vendor</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
