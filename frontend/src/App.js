@@ -279,12 +279,12 @@ const AppRouter = () => {
         </ProtectedRoute>
       } />
       <Route path="/buyer/rfqs" element={
-        <ProtectedRoute allowedRoles={["buyer"]}>
+        <ProtectedRoute allowedRoles={["buyer", "staff"]}>
           <BuyerRFQList />
         </ProtectedRoute>
       } />
       <Route path="/buyer/quotes" element={
-        <ProtectedRoute allowedRoles={["buyer"]}>
+        <ProtectedRoute allowedRoles={["buyer", "staff"]}>
           <BuyerQuotes />
         </ProtectedRoute>
       } />
@@ -294,12 +294,12 @@ const AppRouter = () => {
         </ProtectedRoute>
       } />
       <Route path="/buyer/rfq/new" element={
-        <ProtectedRoute allowedRoles={["buyer"]}>
+        <ProtectedRoute allowedRoles={["buyer", "staff"]}>
           <CreateRFQ />
         </ProtectedRoute>
       } />
       <Route path="/buyer/rfq/:rfqId" element={
-        <ProtectedRoute allowedRoles={["buyer"]}>
+        <ProtectedRoute allowedRoles={["buyer", "staff"]}>
           <RFQDetail />
         </ProtectedRoute>
       } />
@@ -365,27 +365,27 @@ const AppRouter = () => {
       
       {/* Admin Routes */}
       <Route path="/admin/dashboard" element={
-        <ProtectedRoute allowedRoles={["admin"]}>
+        <ProtectedRoute allowedRoles={["admin", "staff"]}>
           <AdminDashboard />
         </ProtectedRoute>
       } />
       <Route path="/admin/analytics" element={
-        <ProtectedRoute allowedRoles={["admin"]}>
+        <ProtectedRoute allowedRoles={["admin", "staff"]}>
           <AdminAnalytics />
         </ProtectedRoute>
       } />
       <Route path="/admin/whatsapp" element={
-        <ProtectedRoute allowedRoles={["admin"]}>
+        <ProtectedRoute allowedRoles={["admin", "staff"]}>
           <WhatsAppAdmin />
         </ProtectedRoute>
       } />
       <Route path="/admin/whatsapp/inbox" element={
-        <ProtectedRoute allowedRoles={["admin"]}>
+        <ProtectedRoute allowedRoles={["admin", "staff"]}>
           <WhatsAppInbox />
         </ProtectedRoute>
       } />
       <Route path="/admin/whatsapp/logs" element={
-        <ProtectedRoute allowedRoles={["admin"]}>
+        <ProtectedRoute allowedRoles={["admin", "staff"]}>
           <WhatsAppLogs />
         </ProtectedRoute>
       } />
@@ -395,7 +395,7 @@ const AppRouter = () => {
         </ProtectedRoute>
       } />
       <Route path="/admin/files" element={
-        <ProtectedRoute allowedRoles={["admin"]}>
+        <ProtectedRoute allowedRoles={["admin", "staff"]}>
           <FileManager />
         </ProtectedRoute>
       } />

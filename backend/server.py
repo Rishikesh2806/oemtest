@@ -620,6 +620,12 @@ class UserRole:
     VENDOR = "vendor"
     ADMIN = "admin"
 
+# Helper function to check if user has admin-level access
+# This includes users with admin role OR users with custom_role (staff users)
+def has_admin_access(user: dict) -> bool:
+    """Check if user has admin-level access (admin role or custom_role)"""
+    return user.get("role") == UserRole.ADMIN or user.get("custom_role") is not None
+
 class UserBase(BaseModel):
     model_config = ConfigDict(extra="ignore")
     email: EmailStr
@@ -3346,7 +3352,7 @@ async def list_storage_files(
     user: dict = Depends(get_current_user)
 ):
     """List files in AWS S3 storage (Admin only)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.s3_storage_service import list_files
@@ -3364,7 +3370,7 @@ async def delete_storage_file(
     user: dict = Depends(get_current_user)
 ):
     """Delete a file from AWS S3 storage (Admin only)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.s3_storage_service import delete_file
@@ -3382,7 +3388,7 @@ async def get_storage_stats(
     user: dict = Depends(get_current_user)
 ):
     """Get AWS S3 storage statistics (Admin only)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.s3_storage_service import list_files
@@ -7021,7 +7027,7 @@ async def stripe_webhook(request: Request):
 
 @api_router.get("/admin/vendors/pending")
 async def get_pending_vendors(user: dict = Depends(get_current_user)):
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     vendors = await db.vendors.find({"is_approved": False}, {"_id": 0}).to_list(100)
@@ -7029,7 +7035,7 @@ async def get_pending_vendors(user: dict = Depends(get_current_user)):
 
 @api_router.post("/admin/vendors/{vendor_id}/approve")
 async def approve_vendor(vendor_id: str, user: dict = Depends(get_current_user)):
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     result = await db.vendors.update_one(
@@ -7044,7 +7050,7 @@ async def approve_vendor(vendor_id: str, user: dict = Depends(get_current_user))
 
 @api_router.get("/admin/stats")
 async def get_admin_stats(user: dict = Depends(get_current_user)):
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     total_users = await db.users.count_documents({})
@@ -7069,7 +7075,7 @@ async def get_admin_stats(user: dict = Depends(get_current_user)):
 @api_router.get("/admin/users")
 async def admin_list_users(user: dict = Depends(get_current_user), role: Optional[str] = None, search: Optional[str] = None):
     """List all users with optional filtering"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     query = {}
@@ -7095,7 +7101,7 @@ class AdminUserCreate(BaseModel):
 @api_router.post("/admin/users")
 async def admin_create_user(user_data: AdminUserCreate, user: dict = Depends(get_current_user)):
     """Admin creates a new user"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     # Check if email already exists
@@ -7154,7 +7160,7 @@ class AdminVendorCreate(BaseModel):
 @api_router.post("/admin/vendors")
 async def admin_create_vendor(vendor_data: AdminVendorCreate, user: dict = Depends(get_current_user)):
     """Admin creates a new vendor with user account"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     # Check if email already exists
@@ -7206,7 +7212,7 @@ async def admin_create_vendor(vendor_data: AdminVendorCreate, user: dict = Depen
 @api_router.get("/admin/users/{user_id}")
 async def admin_get_user(user_id: str, user: dict = Depends(get_current_user)):
     """Get user details"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     target_user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "password_hash": 0})
@@ -7221,7 +7227,7 @@ async def admin_get_user(user_id: str, user: dict = Depends(get_current_user)):
 @api_router.put("/admin/users/{user_id}")
 async def admin_update_user(user_id: str, request: Request, user: dict = Depends(get_current_user)):
     """Update user details"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     body = await request.json()
@@ -7240,7 +7246,7 @@ async def admin_update_user(user_id: str, request: Request, user: dict = Depends
 @api_router.delete("/admin/users/{user_id}")
 async def admin_delete_user(user_id: str, user: dict = Depends(get_current_user)):
     """Delete a user and associated data"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     # Prevent self-deletion
@@ -7279,7 +7285,7 @@ async def admin_delete_user(user_id: str, user: dict = Depends(get_current_user)
 @api_router.get("/admin/rfqs")
 async def admin_list_rfqs(user: dict = Depends(get_current_user), status: Optional[str] = None, search: Optional[str] = None):
     """List all RFQs with optional filtering"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     query = {}
@@ -7303,7 +7309,7 @@ async def admin_list_rfqs(user: dict = Depends(get_current_user), status: Option
 @api_router.get("/admin/rfqs/{rfq_id}")
 async def admin_get_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
     """Get RFQ details with all related data"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
@@ -7330,7 +7336,7 @@ async def admin_get_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
 @api_router.put("/admin/rfqs/{rfq_id}")
 async def admin_update_rfq(rfq_id: str, request: Request, user: dict = Depends(get_current_user)):
     """Update RFQ details"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     body = await request.json()
@@ -7347,7 +7353,7 @@ async def admin_update_rfq(rfq_id: str, request: Request, user: dict = Depends(g
 @api_router.delete("/admin/rfqs/{rfq_id}")
 async def admin_delete_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
     """Delete an RFQ and associated data"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
@@ -7366,7 +7372,7 @@ async def admin_delete_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
 @api_router.get("/admin/quotes")
 async def admin_list_quotes(user: dict = Depends(get_current_user), status: Optional[str] = None):
     """List all quotes"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     query = {}
@@ -7387,7 +7393,7 @@ async def admin_list_quotes(user: dict = Depends(get_current_user), status: Opti
 @api_router.put("/admin/quotes/{quote_id}")
 async def admin_update_quote(quote_id: str, request: Request, user: dict = Depends(get_current_user)):
     """Update quote details"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     body = await request.json()
@@ -7403,7 +7409,7 @@ async def admin_update_quote(quote_id: str, request: Request, user: dict = Depen
 @api_router.delete("/admin/quotes/{quote_id}")
 async def admin_delete_quote(quote_id: str, user: dict = Depends(get_current_user)):
     """Delete a quote"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     result = await db.quotes.delete_one({"quote_id": quote_id})
@@ -7417,7 +7423,7 @@ async def admin_delete_quote(quote_id: str, user: dict = Depends(get_current_use
 @api_router.get("/admin/orders")
 async def admin_list_orders(user: dict = Depends(get_current_user), status: Optional[str] = None):
     """List all orders"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     query = {}
@@ -7440,7 +7446,7 @@ async def admin_list_orders(user: dict = Depends(get_current_user), status: Opti
 @api_router.put("/admin/orders/{order_id}")
 async def admin_update_order(order_id: str, request: Request, user: dict = Depends(get_current_user)):
     """Update order details"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     body = await request.json()
@@ -7468,7 +7474,7 @@ async def admin_update_order(order_id: str, request: Request, user: dict = Depen
 @api_router.delete("/admin/orders/{order_id}")
 async def admin_delete_order(order_id: str, user: dict = Depends(get_current_user)):
     """Delete an order"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     result = await db.orders.delete_one({"order_id": order_id})
@@ -7482,7 +7488,7 @@ async def admin_delete_order(order_id: str, user: dict = Depends(get_current_use
 @api_router.get("/admin/drawings")
 async def admin_list_drawings(user: dict = Depends(get_current_user)):
     """List all drawings (without file data)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     drawings = await db.drawings.find({}, {"_id": 0, "file_data": 0}).sort("created_at", -1).to_list(200)
@@ -7497,7 +7503,7 @@ async def admin_list_drawings(user: dict = Depends(get_current_user)):
 @api_router.get("/admin/drawings/{drawing_id}")
 async def admin_get_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
     """Get drawing details including file data"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     drawing = await db.drawings.find_one({"drawing_id": drawing_id}, {"_id": 0})
@@ -7509,7 +7515,7 @@ async def admin_get_drawing(drawing_id: str, user: dict = Depends(get_current_us
 @api_router.delete("/admin/drawings/{drawing_id}")
 async def admin_delete_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
     """Delete a drawing"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     # Remove from RFQ drawing_ids
@@ -7546,7 +7552,7 @@ class NDACreate(BaseModel):
 @api_router.post("/admin/ndas")
 async def admin_create_nda(nda: NDACreate, user: dict = Depends(get_current_user)):
     """Create a new NDA"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     nda_id = f"nda_{uuid.uuid4().hex[:12]}"
@@ -7576,7 +7582,7 @@ async def admin_create_nda(nda: NDACreate, user: dict = Depends(get_current_user
 @api_router.get("/admin/ndas")
 async def admin_list_ndas(user: dict = Depends(get_current_user), status: Optional[str] = None):
     """List all NDAs"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     query = {}
@@ -7597,7 +7603,7 @@ async def admin_list_ndas(user: dict = Depends(get_current_user), status: Option
 @api_router.get("/admin/ndas/{nda_id}")
 async def admin_get_nda(nda_id: str, user: dict = Depends(get_current_user)):
     """Get NDA details"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     nda = await db.ndas.find_one({"nda_id": nda_id}, {"_id": 0})
@@ -7612,7 +7618,7 @@ async def admin_get_nda(nda_id: str, user: dict = Depends(get_current_user)):
 @api_router.put("/admin/ndas/{nda_id}")
 async def admin_update_nda(nda_id: str, request: Request, user: dict = Depends(get_current_user)):
     """Update NDA details"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     body = await request.json()
@@ -7629,7 +7635,7 @@ async def admin_update_nda(nda_id: str, request: Request, user: dict = Depends(g
 @api_router.post("/admin/ndas/{nda_id}/send")
 async def admin_send_nda(nda_id: str, user: dict = Depends(get_current_user)):
     """Send NDA to parties for signing"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     result = await db.ndas.update_one(
@@ -7644,7 +7650,7 @@ async def admin_send_nda(nda_id: str, user: dict = Depends(get_current_user)):
 @api_router.delete("/admin/ndas/{nda_id}")
 async def admin_delete_nda(nda_id: str, user: dict = Depends(get_current_user)):
     """Delete an NDA"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     result = await db.ndas.delete_one({"nda_id": nda_id})
@@ -7704,7 +7710,7 @@ async def sign_nda(nda_id: str, user: dict = Depends(get_current_user)):
 @api_router.get("/admin/vendors")
 async def admin_list_vendors(user: dict = Depends(get_current_user), approved: Optional[bool] = None):
     """List all vendors"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     query = {}
@@ -7725,7 +7731,7 @@ async def admin_list_vendors(user: dict = Depends(get_current_user), approved: O
 @api_router.put("/admin/vendors/{vendor_id}")
 async def admin_update_vendor(vendor_id: str, request: Request, user: dict = Depends(get_current_user)):
     """Update vendor details"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     body = await request.json()
@@ -7741,7 +7747,7 @@ async def admin_update_vendor(vendor_id: str, request: Request, user: dict = Dep
 @api_router.post("/admin/vendors/{vendor_id}/reject")
 async def admin_reject_vendor(vendor_id: str, user: dict = Depends(get_current_user)):
     """Reject/unapprove a vendor"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     result = await db.vendors.update_one(
@@ -7758,7 +7764,7 @@ async def admin_reject_vendor(vendor_id: str, user: dict = Depends(get_current_u
 @api_router.get("/admin/vendors/{vendor_id}/full")
 async def admin_get_vendor_full_profile(vendor_id: str, user: dict = Depends(get_current_user)):
     """Get complete vendor profile with all details for admin editing"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     vendor = await db.vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
@@ -7792,7 +7798,7 @@ async def admin_get_vendor_full_profile(vendor_id: str, user: dict = Depends(get
 @api_router.put("/admin/vendors/{vendor_id}/profile")
 async def admin_update_vendor_profile(vendor_id: str, request: Request, user: dict = Depends(get_current_user)):
     """Update vendor profile details (admin)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     body = await request.json()
@@ -7814,7 +7820,7 @@ async def admin_update_vendor_profile(vendor_id: str, request: Request, user: di
 @api_router.get("/admin/machines")
 async def admin_list_all_machines(user: dict = Depends(get_current_user), vendor_id: Optional[str] = None):
     """List all machines, optionally filtered by vendor"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     query = {}
@@ -8030,7 +8036,7 @@ async def get_machine_categories():
 @api_router.post("/admin/machines")
 async def admin_create_machine(request: Request, user: dict = Depends(get_current_user)):
     """Create a machine for any vendor (admin)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     body = await request.json()
@@ -8111,7 +8117,7 @@ async def admin_create_machine(request: Request, user: dict = Depends(get_curren
 @api_router.get("/admin/machines/{machine_id}")
 async def admin_get_machine(machine_id: str, user: dict = Depends(get_current_user)):
     """Get machine details (admin)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     machine = await db.machines.find_one({"machine_id": machine_id}, {"_id": 0})
@@ -8127,7 +8133,7 @@ async def admin_get_machine(machine_id: str, user: dict = Depends(get_current_us
 @api_router.put("/admin/machines/{machine_id}")
 async def admin_update_machine(machine_id: str, request: Request, user: dict = Depends(get_current_user)):
     """Update any machine (admin)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     body = await request.json()
@@ -8178,7 +8184,7 @@ async def admin_update_machine(machine_id: str, request: Request, user: dict = D
 @api_router.delete("/admin/machines/{machine_id}")
 async def admin_delete_machine(machine_id: str, user: dict = Depends(get_current_user)):
     """Delete any machine (admin)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     result = await db.machines.delete_one({"machine_id": machine_id})
@@ -8362,7 +8368,7 @@ async def get_vendor_dashboard(user: dict = Depends(get_current_user)):
 @api_router.get("/admin/analytics")
 async def get_platform_analytics(user: dict = Depends(get_current_user)):
     """Get comprehensive platform analytics for admin dashboard"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     now = datetime.now(timezone.utc)
@@ -8602,7 +8608,7 @@ async def get_platform_analytics(user: dict = Depends(get_current_user)):
 @api_router.get("/admin/analytics/export")
 async def export_analytics_csv(user: dict = Depends(get_current_user)):
     """Export analytics data as CSV"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     import csv
@@ -9008,7 +9014,7 @@ async def admin_get_whatsapp_stats(user: dict = Depends(get_current_user)):
 @api_router.post("/admin/whatsapp/grant-access/{user_id}")
 async def admin_grant_whatsapp_access(user_id: str, user: dict = Depends(get_current_user)):
     """Grant WhatsApp admin access to a user"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     result = await db.users.update_one(
@@ -9024,7 +9030,7 @@ async def admin_grant_whatsapp_access(user_id: str, user: dict = Depends(get_cur
 @api_router.post("/admin/whatsapp/revoke-access/{user_id}")
 async def admin_revoke_whatsapp_access(user_id: str, user: dict = Depends(get_current_user)):
     """Revoke WhatsApp admin access from a user"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     result = await db.users.update_one(
@@ -9040,7 +9046,7 @@ async def admin_revoke_whatsapp_access(user_id: str, user: dict = Depends(get_cu
 @api_router.get("/admin/whatsapp/users-with-access")
 async def admin_get_whatsapp_users(user: dict = Depends(get_current_user)):
     """Get list of users with WhatsApp admin access"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     users = await db.users.find(
@@ -9232,7 +9238,7 @@ async def process_data_deletion(confirmation_code: str, user: dict = Depends(get
     Admin endpoint to process a data deletion request
     This actually deletes the user's data from the database
     """
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     # Find the deletion request
@@ -9323,7 +9329,7 @@ async def get_data_deletion_requests(
     status: Optional[str] = None
 ):
     """Get all data deletion requests (admin only)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     query = {}
@@ -9529,7 +9535,7 @@ async def get_disputes(
     for s in [DisputeStatus.OPEN, DisputeStatus.UNDER_REVIEW, DisputeStatus.AWAITING_RESPONSE, 
               DisputeStatus.ESCALATED, DisputeStatus.RESOLVED, DisputeStatus.CLOSED]:
         count_query = {"status": s}
-        if user["role"] != UserRole.ADMIN:
+        if not has_admin_access(user):
             count_query["$or"] = [{"buyer_id": user["user_id"]}, {"vendor_id": user["user_id"]}]
         status_counts[s] = await db.disputes.count_documents(count_query)
     
@@ -9713,7 +9719,7 @@ async def resolve_dispute(
     user: dict = Depends(get_current_user)
 ):
     """Resolve a dispute (admin only)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Only admin can resolve disputes")
     
     dispute = await db.disputes.find_one({"dispute_id": dispute_id}, {"_id": 0})
@@ -11264,7 +11270,7 @@ async def send_whatsapp_message(
     user: dict = Depends(get_current_user)
 ):
     """Send a WhatsApp message (Admin only)"""
-    if user.get("role") != "admin":
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     if not whatsapp_service.is_configured():
@@ -11287,7 +11293,7 @@ async def send_whatsapp_voice_message(
     user: dict = Depends(get_current_user)
 ):
     """Send a voice message via WhatsApp (Admin only) - generates TTS and sends audio"""
-    if user.get("role") != "admin":
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     if not whatsapp_service.is_configured():
@@ -11362,7 +11368,7 @@ async def get_whatsapp_logs(
     - limit: Number of results (max 200)
     - skip: Pagination offset
     """
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.whatsapp_logger import whatsapp_logger
@@ -11404,7 +11410,7 @@ async def get_whatsapp_stats(
     - Top errors
     - Daily and hourly trends
     """
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.whatsapp_logger import whatsapp_logger
@@ -11427,7 +11433,7 @@ async def get_whatsapp_errors(
     
     Returns grouped errors with counts and sample details
     """
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.whatsapp_logger import whatsapp_logger
@@ -11467,7 +11473,7 @@ class AssignRoleRequest(BaseModel):
 @api_router.get("/admin/permissions")
 async def get_all_permissions(user: dict = Depends(get_current_user)):
     """Get all available permissions grouped by module (Admin only)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.rbac_service import rbac_service
@@ -11484,7 +11490,7 @@ async def get_all_roles(
     user: dict = Depends(get_current_user)
 ):
     """Get all roles (Admin only)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.rbac_service import rbac_service
@@ -11496,7 +11502,7 @@ async def get_all_roles(
 @api_router.get("/admin/roles/{role_id}")
 async def get_role(role_id: str, user: dict = Depends(get_current_user)):
     """Get a specific role by ID (Admin only)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.rbac_service import rbac_service
@@ -11511,7 +11517,7 @@ async def get_role(role_id: str, user: dict = Depends(get_current_user)):
 @api_router.post("/admin/roles")
 async def create_role(data: CreateRoleRequest, user: dict = Depends(get_current_user)):
     """Create a new custom role (Admin only)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.rbac_service import rbac_service
@@ -11536,7 +11542,7 @@ async def update_role(
     user: dict = Depends(get_current_user)
 ):
     """Update an existing role (Admin only)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.rbac_service import rbac_service
@@ -11558,7 +11564,7 @@ async def update_role(
 @api_router.delete("/admin/roles/{role_id}")
 async def delete_role(role_id: str, user: dict = Depends(get_current_user)):
     """Delete a custom role (Admin only, system roles cannot be deleted)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.rbac_service import rbac_service
@@ -11573,7 +11579,7 @@ async def delete_role(role_id: str, user: dict = Depends(get_current_user)):
 @api_router.post("/admin/roles/assign")
 async def assign_role_to_user(data: AssignRoleRequest, user: dict = Depends(get_current_user)):
     """Assign a role to a user (Admin only)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.rbac_service import rbac_service
@@ -11592,7 +11598,7 @@ async def assign_role_to_user(data: AssignRoleRequest, user: dict = Depends(get_
 @api_router.delete("/admin/roles/assign/{user_id}")
 async def remove_role_from_user(user_id: str, user: dict = Depends(get_current_user)):
     """Remove custom role from a user (Admin only)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.rbac_service import rbac_service
@@ -11607,7 +11613,7 @@ async def remove_role_from_user(user_id: str, user: dict = Depends(get_current_u
 @api_router.get("/admin/roles/{role_id}/users")
 async def get_users_by_role(role_id: str, user: dict = Depends(get_current_user)):
     """Get all users assigned to a role (Admin only)"""
-    if user["role"] != UserRole.ADMIN:
+    if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
     from app.services.rbac_service import rbac_service
