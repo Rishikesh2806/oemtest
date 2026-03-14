@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth, api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
+import PermittedActions from "../components/PermittedActions";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -154,6 +155,14 @@ const OverviewTab = ({ stats, pendingVendors, onApproveVendor, onRejectVendor, o
         </CardContent>
       </Card>
     </div>
+    
+    {/* Permitted Quick Actions */}
+    <PermittedActions 
+      dashboardType="admin" 
+      title="Quick Actions"
+      description="Available actions based on your permissions"
+      columns={4}
+    />
     
     {/* Pending Vendors */}
     <Card className="border-slate-200">

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth, api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import VoiceAgent from "../components/VoiceAgent";
+import PermittedActions from "../components/PermittedActions";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { toast } from "sonner";
@@ -205,6 +206,14 @@ const VendorDashboard = () => {
             </div>
           </CardContent>
         </Card>
+        
+        {/* Permitted Quick Actions */}
+        <PermittedActions 
+          dashboardType="vendor" 
+          title="Quick Actions"
+          description="Available actions based on your permissions"
+          columns={4}
+        />
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* Matched RFQs */}

@@ -2,6 +2,7 @@ import { useState, useEffect, createContext, useContext, useRef } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Toaster } from "./components/ui/sonner";
+import { PermissionsProvider } from "./hooks/usePermissions";
 
 // Pages
 import LandingPage from "./pages/LandingPage";
@@ -437,8 +438,10 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRouter />
-        <Toaster position="top-right" />
+        <PermissionsProvider>
+          <AppRouter />
+          <Toaster position="top-right" />
+        </PermissionsProvider>
       </AuthProvider>
     </BrowserRouter>
   );

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth, api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
+import PermittedActions from "../components/PermittedActions";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { toast } from "sonner";
@@ -132,6 +133,14 @@ const BuyerDashboard = () => {
             </CardContent>
           </Card>
         </div>
+        
+        {/* Permitted Quick Actions */}
+        <PermittedActions 
+          dashboardType="buyer" 
+          title="Quick Actions"
+          description="Available actions based on your permissions"
+          columns={4}
+        />
 
         {/* Recent RFQs */}
         <Card className="border-slate-200">
