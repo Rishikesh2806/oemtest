@@ -233,10 +233,34 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [editUser, setEditUser] = useState(null);
-  const [editForm, setEditForm] = useState({ name: "", role: "" });
+  const [editForm, setEditForm] = useState({ name: "", role: "", custom_role: "" });
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [addForm, setAddForm] = useState({ name: "", email: "", password: "", role: "buyer", company_name: "" });
+  const [addForm, setAddForm] = useState({ name: "", email: "", password: "", role: "buyer", custom_role: "", company_name: "" });
   const [adding, setAdding] = useState(false);
+  const [availableRoles, setAvailableRoles] = useState([]);
+  const [loadingRoles, setLoadingRoles] = useState(false);
+  
+  // Fetch available roles
+  useEffect(() => {
+    const fetchRoles = async () => {
+      setLoadingRoles(true);
+      try {
+        const token = localStorage.getItem('token');
+        const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/admin/roles?include_base_roles=false`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setAvailableRoles(data.roles || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch roles:', error);
+      } finally {
+        setLoadingRoles(false);
+      }
+    };
+    fetchRoles();
+  }, []);
   
   const filteredUsers = users.filter(u => {
     const matchesSearch = u.name?.toLowerCase().includes(search.toLowerCase()) || 
@@ -247,7 +271,7 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
   
   const handleEdit = (user) => {
     setEditUser(user);
-    setEditForm({ name: user.name, role: user.role, company_name: user.company_name || "" });
+    setEditForm({ name: user.name, role: user.role, custom_role: user.custom_role || "", company_name: user.company_name || "" });
   };
   
   const handleSave = async () => {
@@ -264,7 +288,7 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
     try {
       await onCreateUser(addForm);
       setShowAddDialog(false);
-      setAddForm({ name: "", email: "", password: "", role: "buyer", company_name: "" });
+      setAddForm({ name: "", email: "", password: "", role: "buyer", custom_role: "", company_name: "" });
     } finally {
       setAdding(false);
     }
@@ -358,7 +382,7 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
       
       {/* Edit Dialog */}
       <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
           </DialogHeader>
@@ -368,6 +392,7 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
               <Input
                 value={editForm.name}
                 onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                data-testid="edit-user-name"
               />
             </div>
             <div>
@@ -375,22 +400,55 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
               <Input
                 value={editForm.company_name || ""}
                 onChange={(e) => setEditForm(prev => ({ ...prev, company_name: e.target.value }))}
+                data-testid="edit-user-company"
               />
             </div>
-            <div>
-              <Label>Role</Label>
-              <Select value={editForm.role} onValueChange={(v) => setEditForm(prev => ({ ...prev, role: v }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="buyer">Buyer</SelectItem>
-                  <SelectItem value="vendor">Vendor</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Base Role</Label>
+                <Select value={editForm.role} onValueChange={(v) => setEditForm(prev => ({ ...prev, role: v }))}>
+                  <SelectTrigger data-testid="edit-user-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="buyer">Buyer</SelectItem>
+                    <SelectItem value="vendor">Vendor</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Custom Role</Label>
+                <Select 
+                  value={editForm.custom_role || "none"} 
+                  onValueChange={(v) => setEditForm(prev => ({ ...prev, custom_role: v === "none" ? "" : v }))}
+                >
+                  <SelectTrigger data-testid="edit-user-custom-role">
+                    <SelectValue placeholder="None" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {availableRoles.map(role => (
+                      <SelectItem key={role.role_id} value={role.role_id}>
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-2 h-2 rounded-full" 
+                            style={{ backgroundColor: role.color || '#6b7280' }}
+                          />
+                          {role.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <Button onClick={handleSave} className="w-full bg-orange-600 hover:bg-orange-700">
+            {editForm.custom_role && (
+              <p className="text-xs text-muted-foreground">
+                User will have permissions from both {editForm.role} role and {availableRoles.find(r => r.role_id === editForm.custom_role)?.name || editForm.custom_role} role
+              </p>
+            )}
+            <Button onClick={handleSave} className="w-full bg-orange-600 hover:bg-orange-700" data-testid="save-user-btn">
               Save Changes
             </Button>
           </div>
@@ -399,7 +457,7 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
 
       {/* Add User Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Add New User</DialogTitle>
           </DialogHeader>
@@ -410,6 +468,7 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
                 value={addForm.name}
                 onChange={(e) => setAddForm(prev => ({ ...prev, name: e.target.value }))}
                 placeholder="Full name"
+                data-testid="add-user-name"
               />
             </div>
             <div>
@@ -419,6 +478,7 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
                 value={addForm.email}
                 onChange={(e) => setAddForm(prev => ({ ...prev, email: e.target.value }))}
                 placeholder="email@example.com"
+                data-testid="add-user-email"
               />
             </div>
             <div>
@@ -428,30 +488,64 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
                 value={addForm.password}
                 onChange={(e) => setAddForm(prev => ({ ...prev, password: e.target.value }))}
                 placeholder="Minimum 6 characters"
+                data-testid="add-user-password"
               />
             </div>
-            <div>
-              <Label>Role</Label>
-              <Select value={addForm.role} onValueChange={(v) => setAddForm(prev => ({ ...prev, role: v }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="buyer">Buyer</SelectItem>
-                  <SelectItem value="vendor">Vendor</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Base Role *</Label>
+                <Select value={addForm.role} onValueChange={(v) => setAddForm(prev => ({ ...prev, role: v }))}>
+                  <SelectTrigger data-testid="add-user-role">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="buyer">Buyer</SelectItem>
+                    <SelectItem value="vendor">Vendor</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Custom Role</Label>
+                <Select 
+                  value={addForm.custom_role || "none"} 
+                  onValueChange={(v) => setAddForm(prev => ({ ...prev, custom_role: v === "none" ? "" : v }))}
+                >
+                  <SelectTrigger data-testid="add-user-custom-role">
+                    <SelectValue placeholder="Optional" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {availableRoles.map(role => (
+                      <SelectItem key={role.role_id} value={role.role_id}>
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="w-2 h-2 rounded-full" 
+                            style={{ backgroundColor: role.color || '#6b7280' }}
+                          />
+                          {role.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+            {addForm.custom_role && (
+              <p className="text-xs text-muted-foreground">
+                User will have permissions from both {addForm.role} role and {availableRoles.find(r => r.role_id === addForm.custom_role)?.name || addForm.custom_role} role
+              </p>
+            )}
             <div>
               <Label>Company Name</Label>
               <Input
                 value={addForm.company_name}
                 onChange={(e) => setAddForm(prev => ({ ...prev, company_name: e.target.value }))}
                 placeholder="Company name (optional)"
+                data-testid="add-user-company"
               />
             </div>
-            <Button onClick={handleAddUser} disabled={adding} className="w-full bg-orange-600 hover:bg-orange-700">
+            <Button onClick={handleAddUser} disabled={adding} className="w-full bg-orange-600 hover:bg-orange-700" data-testid="create-user-btn">
               {adding ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Plus className="w-4 h-4 mr-2" />}
               Create User
             </Button>

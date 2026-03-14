@@ -1,0 +1,83 @@
+{
+  "summary": "Tested Admin Role Selection Feature for assigning base role and custom role to users. All backend APIs (create, update, clear custom_role) work correctly. Frontend UI has proper dropdowns for Base Role and Custom Role with all 7 custom roles available. User creation via UI successfully persists custom_role to database.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Add User Dialog",
+        "issues": ["Dialog shows helpful message 'User will have permissions from both X role and Y role' which is good UX"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_admin_role_selection.py",
+    "/app/test_reports/pytest/admin_role_selection_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_admin_role_selection.py"
+  ],
+  "success_rate": {
+    "backend": "100% - 9/9 tests passed",
+    "frontend": "100% - All features work as expected"
+  },
+  "test_credentials": {
+    "admin_email": "admin@offoadex.com",
+    "admin_password": "admin123"
+  },
+  "seed_data_creation": "Test users created during testing were cleaned up automatically via pytest fixtures and manual cleanup",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Admin Role Selection feature fully tested. Backend endpoints POST /api/admin/users and PUT /api/admin/users/{user_id} both support custom_role field. Frontend AdminDashboard.jsx UsersTab has both base role and custom role dropdowns with data-testid attributes for easy testing.",
+  "features_tested": {
+    "get_available_custom_roles": {
+      "status": "PASS",
+      "endpoint": "GET /api/admin/roles?include_base_roles=false",
+      "details": "Returns 7 custom roles: admin, finance_admin, regional_manager, sales_manager, super_admin, supervisor, support_agent"
+    },
+    "create_user_with_custom_role": {
+      "status": "PASS",
+      "endpoint": "POST /api/admin/users",
+      "details": "User created with base_role='buyer' and custom_role='sales_manager' persisted correctly"
+    },
+    "update_user_custom_role": {
+      "status": "PASS",
+      "endpoint": "PUT /api/admin/users/{user_id}",
+      "details": "custom_role can be updated from 'sales_manager' to 'regional_manager'"
+    },
+    "clear_custom_role": {
+      "status": "PASS",
+      "endpoint": "PUT /api/admin/users/{user_id}",
+      "details": "Setting custom_role to empty string clears it"
+    },
+    "frontend_add_user_dialog": {
+      "status": "PASS",
+      "details": "Add New User dialog has Base Role dropdown (Buyer/Vendor/Admin) and Custom Role dropdown with all 7 roles + None option"
+    },
+    "frontend_edit_user_dialog": {
+      "status": "PASS",
+      "details": "Edit User dialog also has both Base Role and Custom Role dropdowns with data-testid attributes"
+    },
+    "frontend_custom_role_persistence": {
+      "status": "PASS",
+      "details": "User created via UI with Sales Manager custom role was verified in database"
+    }
+  },
+  "api_tests_results": {
+    "test_get_available_custom_roles": "PASS",
+    "test_create_user_with_custom_role": "PASS",
+    "test_create_user_without_custom_role": "PASS",
+    "test_create_admin_user_with_super_admin_custom_role": "PASS",
+    "test_update_user_custom_role": "PASS",
+    "test_update_both_base_role_and_custom_role": "PASS",
+    "test_clear_custom_role": "PASS",
+    "test_create_user_with_all_custom_roles": "PASS",
+    "test_get_users_list_includes_custom_role": "PASS"
+  }
+}
