@@ -243,7 +243,7 @@ const OverviewTab = ({ stats, pendingVendors, onApproveVendor, onRejectVendor, o
 );
 
 // ============== USERS TAB ==============
-const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCreateUser }) => {
+const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCreateUser, canEdit = true, canDelete = true, canCreate = true }) => {
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [editUser, setEditUser] = useState(null);
@@ -335,9 +335,11 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
         <Button variant="outline" size="sm" onClick={onRefresh}>
           <RefreshCw className="w-4 h-4" />
         </Button>
-        <Button onClick={() => setShowAddDialog(true)} className="bg-orange-600 hover:bg-orange-700">
-          <Plus className="w-4 h-4 mr-2" /> Add User
-        </Button>
+        {canCreate && (
+          <Button onClick={() => setShowAddDialog(true)} className="bg-orange-600 hover:bg-orange-700">
+            <Plus className="w-4 h-4 mr-2" /> Add User
+          </Button>
+        )}
       </div>
       
       {/* Users Table */}
@@ -350,7 +352,9 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Role</th>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Company</th>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Created</th>
-                <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
+                {(canEdit || canDelete) && (
+                  <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -369,21 +373,27 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
                   <td className="p-4 text-sm text-slate-500">
                     {new Date(user.created_at).toLocaleDateString()}
                   </td>
-                  <td className="p-4 text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => handleEdit(user)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-red-600 hover:bg-red-50"
-                        onClick={() => onDeleteUser(user.user_id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </td>
+                  {(canEdit || canDelete) && (
+                    <td className="p-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        {canEdit && (
+                          <Button variant="ghost" size="sm" onClick={() => handleEdit(user)}>
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-red-600 hover:bg-red-50"
+                            onClick={() => onDeleteUser(user.user_id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -579,7 +589,7 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
 };
 
 // ============== RFQs TAB ==============
-const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ }) => {
+const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit = true, canDelete = true }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [editRFQ, setEditRFQ] = useState(null);
@@ -651,7 +661,9 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ }) => {
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Material</th>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Status</th>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Created</th>
-                <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
+                {(canEdit || canDelete) && (
+                  <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -674,21 +686,27 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ }) => {
                   <td className="p-4 text-sm text-slate-500">
                     {new Date(rfq.created_at).toLocaleDateString()}
                   </td>
-                  <td className="p-4 text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => handleEdit(rfq)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="text-red-600 hover:bg-red-50"
-                        onClick={() => onDeleteRFQ(rfq.rfq_id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </td>
+                  {(canEdit || canDelete) && (
+                    <td className="p-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        {canEdit && (
+                          <Button variant="ghost" size="sm" onClick={() => handleEdit(rfq)}>
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            className="text-red-600 hover:bg-red-50"
+                            onClick={() => onDeleteRFQ(rfq.rfq_id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -1363,7 +1381,7 @@ const NDAsTab = ({ ndas, users, vendors, loading, onRefresh, onCreateNDA, onUpda
 };
 
 // ============== VENDORS TAB ==============
-const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdateVendor, onCreateVendor }) => {
+const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdateVendor, onCreateVendor, canEdit = true, canDelete = true, canCreate = true, canApprove = true }) => {
   const [approvedFilter, setApprovedFilter] = useState("all");
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [vendorProfile, setVendorProfile] = useState(null);
@@ -1867,9 +1885,11 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
           <Button variant="outline" size="sm" onClick={onRefresh}>
             <RefreshCw className="w-4 h-4" />
           </Button>
-          <Button onClick={() => setShowAddVendorDialog(true)} className="bg-orange-600 hover:bg-orange-700">
-            <Plus className="w-4 h-4 mr-2" /> Add Vendor
-          </Button>
+          {canCreate && (
+            <Button onClick={() => setShowAddVendorDialog(true)} className="bg-orange-600 hover:bg-orange-700">
+              <Plus className="w-4 h-4 mr-2" /> Add Vendor
+            </Button>
+          )}
         </div>
       </div>
       
@@ -1886,7 +1906,9 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">GST</th>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Machines</th>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Status</th>
-                <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
+                {(canEdit || canApprove) && (
+                  <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1943,23 +1965,27 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
                   <td className="p-4">
                     <StatusBadge status={vendor.is_approved ? "approved" : "pending"} />
                   </td>
-                  <td className="p-4 text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => loadVendorProfile(vendor.vendor_id)} title="Manage Profile & Machines">
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      {!vendor.is_approved && (
-                        <Button variant="ghost" size="sm" className="text-green-600 hover:bg-green-50" onClick={() => onApprove(vendor.vendor_id)}>
-                          <CheckCircle2 className="w-4 h-4" />
-                        </Button>
-                      )}
-                      {vendor.is_approved && (
-                        <Button variant="ghost" size="sm" className="text-amber-600 hover:bg-amber-50" onClick={() => onReject(vendor.vendor_id)}>
-                          <XCircle className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </td>
+                  {(canEdit || canApprove) && (
+                    <td className="p-4 text-right">
+                      <div className="flex justify-end gap-2">
+                        {canEdit && (
+                          <Button variant="ghost" size="sm" onClick={() => loadVendorProfile(vendor.vendor_id)} title="Manage Profile & Machines">
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {canApprove && !vendor.is_approved && (
+                          <Button variant="ghost" size="sm" className="text-green-600 hover:bg-green-50" onClick={() => onApprove(vendor.vendor_id)}>
+                            <CheckCircle2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {canApprove && vendor.is_approved && (
+                          <Button variant="ghost" size="sm" className="text-amber-600 hover:bg-amber-50" onClick={() => onReject(vendor.vendor_id)}>
+                            <XCircle className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -2544,6 +2570,9 @@ const AdminDashboard = () => {
             onUpdateUser={updateUser}
             onDeleteUser={deleteUser}
             onCreateUser={createUser}
+            canEdit={isAdmin || hasAnyPermission(['users.edit'])}
+            canDelete={isAdmin || hasAnyPermission(['users.delete'])}
+            canCreate={isAdmin || hasAnyPermission(['users.create'])}
           />
         )}
         {activeTab === "vendors" && permittedTabs.includes('vendors') && (
@@ -2555,6 +2584,10 @@ const AdminDashboard = () => {
             onReject={rejectVendor}
             onUpdateVendor={updateVendor}
             onCreateVendor={createVendor}
+            canEdit={isAdmin || hasAnyPermission(['vendors.edit'])}
+            canDelete={isAdmin || hasAnyPermission(['vendors.delete'])}
+            canCreate={isAdmin || hasAnyPermission(['vendors.create'])}
+            canApprove={isAdmin || hasAnyPermission(['vendors.approve'])}
           />
         )}
         {activeTab === "rfqs" && permittedTabs.includes('rfqs') && (
@@ -2564,6 +2597,8 @@ const AdminDashboard = () => {
             onRefresh={fetchRFQs}
             onUpdateRFQ={updateRFQ}
             onDeleteRFQ={deleteRFQ}
+            canEdit={isAdmin || hasAnyPermission(['rfqs.edit'])}
+            canDelete={isAdmin || hasAnyPermission(['rfqs.delete'])}
           />
         )}
         {activeTab === "quotes" && permittedTabs.includes('quotes') && (
