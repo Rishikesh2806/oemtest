@@ -11714,9 +11714,9 @@ async def notify_vendors_new_rfq(
 ):
     """
     Send WhatsApp notifications to matched vendors about a new RFQ
-    Uses friendly text message for better user experience
+    Uses rfq_alert_pdf template with drawing attachment
     """
-    if user.get("role") not in ["admin", "buyer"]:
+    if not has_admin_access(user) and user.get("role") != "buyer":
         raise HTTPException(status_code=403, detail="Not authorized")
     
     if not whatsapp_service.is_configured():
@@ -11728,6 +11728,21 @@ async def notify_vendors_new_rfq(
         raise HTTPException(status_code=404, detail="RFQ not found")
     
     BASE_URL = "https://oemlinker.com"
+    
+    # Get the first drawing URL for the template (if available)
+    drawing_url = None
+    drawing_filename = None
+    drawing_ids = rfq.get("drawing_ids", [])
+    if drawing_ids:
+        first_drawing = await db.drawings.find_one({"drawing_id": drawing_ids[0]}, {"_id": 0})
+        if first_drawing:
+            # Check if it's stored in S3
+            file_path = first_drawing.get("file_path", "")
+            if file_path.startswith("s3://") or "s3.amazonaws.com" in file_path:
+                drawing_url = file_path if file_path.startswith("http") else None
+            elif first_drawing.get("s3_url"):
+                drawing_url = first_drawing.get("s3_url")
+            drawing_filename = first_drawing.get("original_filename", f"drawing_{rfq_id}.pdf")
     
     # Get matched vendors with their phone numbers
     notified_count = 0
@@ -11770,10 +11785,6 @@ async def notify_vendors_new_rfq(
         else:
             deadline_str = "As per RFQ"
         
-        # Get urgency
-        urgency = rfq.get("urgency", "normal")
-        urgency_emoji = {"urgent": "🔴", "high": "🟠", "normal": "🟢", "low": "🔵"}.get(urgency, "🟢")
-        
         match_score = match.get("suitability_score", match.get("match_score", 0))
         
         # Generate magic link with redirect to RFQ page for instant access
@@ -11781,23 +11792,41 @@ async def notify_vendors_new_rfq(
         magic_link_result = await generate_magic_link_for_vendor(phone, redirect_path)
         
         if magic_link_result.get("success"):
-            # Use magic link for instant authenticated access
             rfq_link = f"{BASE_URL}/magic-login?token={magic_link_result['token']}"
-            link_note = "🔑 _Click link for instant access (no login needed)_"
         else:
-            # Fallback to regular link if magic link generation fails
             rfq_link = f"{BASE_URL}/vendor/rfq/{rfq_id}"
-            link_note = "_Login to view and submit quote_"
         
-        # User-friendly notification message with magic link
-        notification_message = f"""🔔 *New RFQ Match for You!*
+        # Try to send using rfq_alert_pdf template with drawing
+        if drawing_url:
+            # Template params: company_name, part_name, process, quantity, deadline, match_score, rfq_link
+            template_params = [
+                company_name,
+                part_name,
+                process_str,
+                quantity,
+                deadline_str,
+                f"{match_score}%",
+                rfq_link
+            ]
+            
+            result = await whatsapp_service.send_template_with_document(
+                to_number=phone,
+                template_id="rfq_alert_pdf",
+                params=template_params,
+                document_url=drawing_url,
+                document_filename=drawing_filename,
+                context="rfq_vendor_notification",
+                vendor_id=vendor_id
+            )
+        else:
+            # Fallback to text message if no drawing available
+            notification_message = f"""🔔 *New RFQ Match for You!*
 
 Hello *{company_name}*,
 
 Great news! A new RFQ matching your capabilities is available.
 
 📋 *{part_name}*
-{urgency_emoji} Priority: {urgency.title()}
 🔧 Process: {process_str}
 📦 Quantity: {quantity}
 📅 Deadline: {deadline_str}
@@ -11806,38 +11835,32 @@ Great news! A new RFQ matching your capabilities is available.
 👉 *View & Submit Quote:*
 {rfq_link}
 
-{link_note}
+🔑 _Click link for instant access_
 
 Reply *rfqs* to see all opportunities.
 
 _Team OEMLinker_"""
-
-        # Send friendly text message
-        result = await whatsapp_service.send_text_message(phone, notification_message)
+            
+            result = await whatsapp_service.send_text_message(
+                phone, 
+                notification_message,
+                context="rfq_vendor_notification",
+                vendor_id=vendor_id
+            )
         
         if result.get("success"):
             notified_count += 1
             logger.info(f"RFQ notification sent to vendor {vendor_id}")
             
-            # Store the notification
+            # Store the notification record
             await store_whatsapp_message(
                 phone=phone,
                 direction="outgoing",
-                message_type="text",
-                content=notification_message,
+                message_type="rfq_alert",
+                content=f"RFQ Alert: {part_name}",
                 vendor_id=vendor_id,
                 vendor_name=company_name
             )
-            
-            # Send drawing files if available
-            drawing_ids = rfq.get("drawing_ids", [])
-            if drawing_ids:
-                asyncio.create_task(send_rfq_drawings_to_vendor(
-                    phone,
-                    rfq_id,
-                    drawing_ids,
-                    part_name
-                ))
         else:
             errors.append({"vendor_id": vendor_id, "error": result.get("error")})
             logger.warning(f"Failed to send RFQ notification to {vendor_id}: {result.get('error')}")

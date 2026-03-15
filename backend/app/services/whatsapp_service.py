@@ -270,6 +270,136 @@ class WhatsAppService:
                 "response": result
             }
     
+    async def send_template_with_document(
+        self,
+        to_number: str,
+        template_id: str,
+        params: List[str] = None,
+        document_url: str = None,
+        document_filename: str = None,
+        context: str = None,
+        vendor_id: str = None,
+        user_id: str = None
+    ) -> Dict[str, Any]:
+        """
+        Send a template message with PDF/document attachment via Gupshup
+        
+        Args:
+            to_number: Recipient phone number
+            template_id: Template ID (e.g., 'rfq_alert_pdf')
+            params: List of template parameter values
+            document_url: Public URL of the PDF/document
+            document_filename: Display filename for the document
+            context: Context/purpose for logging
+            vendor_id: Associated vendor ID for logging
+            user_id: Associated user ID for logging
+            
+        Returns:
+            API response dict
+        """
+        if not self.is_configured():
+            return {"success": False, "error": "WhatsApp not configured"}
+        
+        to_number = to_number.replace("+", "").replace(" ", "").replace("-", "")
+        if not to_number.startswith("91") and len(to_number) == 10:
+            to_number = "91" + to_number
+        
+        headers = {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "apikey": self.api_key
+        }
+        
+        import json
+        
+        # Build template payload with document header
+        template_payload = {
+            "id": template_id,
+            "params": params or []
+        }
+        
+        # Add document header if provided
+        if document_url:
+            template_payload["header"] = {
+                "type": "document",
+                "document": {
+                    "link": document_url,
+                    "filename": document_filename or "document.pdf"
+                }
+            }
+        
+        payload = {
+            "channel": "whatsapp",
+            "source": self.source_number,
+            "destination": to_number,
+            "template": json.dumps(template_payload),
+            "src.name": self.app_name
+        }
+        
+        result = {}
+        success = False
+        message_id = None
+        error_message = None
+        error_code = None
+        
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    self.template_url,
+                    headers=headers,
+                    data=payload,
+                    timeout=60.0
+                )
+                
+                result = response.json() if response.text else {}
+                
+                if response.status_code in [200, 201, 202]:
+                    logger.info(f"Template with doc {template_id} sent to {to_number[:6]}***")
+                    success = True
+                    message_id = result.get("messageId")
+                else:
+                    logger.error(f"Template with doc send failed: {result}")
+                    error_message = result.get("message", "Send failed")
+                    error_code = str(response.status_code)
+                    
+        except Exception as e:
+            logger.error(f"Template with doc send error: {str(e)}")
+            error_message = str(e)
+            error_code = "EXCEPTION"
+        
+        # Log the message
+        try:
+            wa_logger = await self._get_logger()
+            await wa_logger.log_outbound_message(
+                phone=to_number,
+                message_type="template_document",
+                content=f"Template: {template_id}, Params: {params}, Doc: {document_filename}",
+                success=success,
+                message_id=message_id,
+                error_message=error_message,
+                error_code=error_code,
+                template_id=template_id,
+                api_response=result,
+                vendor_id=vendor_id,
+                user_id=user_id,
+                context=context or "rfq_alert_pdf",
+                metadata={"document_url": document_url, "filename": document_filename}
+            )
+        except Exception as log_error:
+            logger.error(f"Failed to log WhatsApp template with doc: {log_error}")
+        
+        if success:
+            return {
+                "success": True,
+                "message_id": message_id,
+                "response": result
+            }
+        else:
+            return {
+                "success": False,
+                "error": error_message,
+                "response": result
+            }
+
     async def send_text_message(
         self, 
         to_number: str, 
