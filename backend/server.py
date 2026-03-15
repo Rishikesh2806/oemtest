@@ -971,6 +971,12 @@ MACHINE_CATEGORIES = {
     "Drilling": {
         "types": ["Radial Drilling", "CNC Drilling", "Deep Hole Drilling", "Multi-Spindle Drilling", "Gang Drilling"],
     },
+    "Casting": {
+        "types": ["Sand Casting", "Investment Casting", "Die Casting", "Gravity Die Casting", "Pressure Die Casting", "Centrifugal Casting", "Shell Moulding", "Lost Wax Casting", "Continuous Casting"],
+    },
+    "Forging": {
+        "types": ["Open Die Forging", "Closed Die Forging", "Drop Forging", "Press Forging", "Roll Forging", "Upset Forging", "Ring Rolling", "Cold Forging", "Hot Forging"],
+    },
     "Sheet Metal": {
         "types": ["Laser Cutting", "Plasma Cutting", "Waterjet Cutting", "CNC Turret Punch", "Press Brake", "Shearing Machine", "Rolling Machine"],
     },
@@ -8151,6 +8157,25 @@ async def get_machine_categories():
                 {"key": "max_z", "label": "Build Volume Z (mm)", "type": "number"},
                 {"key": "layer_thickness", "label": "Min Layer Thickness (μm)", "type": "number"}
             ]
+        },
+        "Casting": {
+            "types": ["Sand Casting", "Investment Casting", "Die Casting", "Gravity Die Casting", "Pressure Die Casting", "Centrifugal Casting", "Shell Moulding", "Lost Wax Casting", "Continuous Casting"],
+            "dimension_fields": [
+                {"key": "max_weight", "label": "Max Casting Weight (kg)", "type": "number"},
+                {"key": "max_x", "label": "Max Casting Length (mm)", "type": "number"},
+                {"key": "max_y", "label": "Max Casting Width (mm)", "type": "number"},
+                {"key": "max_z", "label": "Max Casting Height (mm)", "type": "number"},
+                {"key": "min_thickness", "label": "Min Wall Thickness (mm)", "type": "number"}
+            ]
+        },
+        "Forging": {
+            "types": ["Open Die Forging", "Closed Die Forging", "Drop Forging", "Press Forging", "Roll Forging", "Upset Forging", "Ring Rolling", "Cold Forging", "Hot Forging"],
+            "dimension_fields": [
+                {"key": "max_weight", "label": "Max Forging Weight (kg)", "type": "number"},
+                {"key": "tonnage", "label": "Press/Hammer Tonnage (ton)", "type": "number"},
+                {"key": "max_diameter", "label": "Max Forging Diameter (mm)", "type": "number"},
+                {"key": "max_length", "label": "Max Forging Length (mm)", "type": "number"}
+            ]
         }
     }
     return categories
@@ -8226,6 +8251,8 @@ async def admin_create_machine(request: Request, user: dict = Depends(get_curren
         "layer_thickness": body.get("layer_thickness", 0),
         # EDM specific
         "max_taper_angle": body.get("max_taper_angle", 0),
+        # Casting specific
+        "min_thickness": body.get("min_thickness", 0),
         # General
         "materials": body.get("materials", []),
         "materials_supported": body.get("materials_supported", []),
