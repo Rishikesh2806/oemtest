@@ -2004,14 +2004,14 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
               <div>
                 <Label className="text-xs">Machine Category</Label>
                 <Select 
-                  value={machineSearchForm.machine_category} 
-                  onValueChange={(v) => setMachineSearchForm(f => ({...f, machine_category: v, machine_type: ""}))}
+                  value={machineSearchForm.machine_category || "__all__"} 
+                  onValueChange={(v) => setMachineSearchForm(f => ({...f, machine_category: v === "__all__" ? "" : v, machine_type: ""}))}
                 >
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Any category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Any Category</SelectItem>
+                    <SelectItem value="__all__">Any Category</SelectItem>
                     {Object.keys(machineCategories).sort().map(cat => (
                       <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                     ))}
@@ -2023,15 +2023,15 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
               <div>
                 <Label className="text-xs">Machine Type</Label>
                 <Select 
-                  value={machineSearchForm.machine_type} 
-                  onValueChange={(v) => setMachineSearchForm(f => ({...f, machine_type: v}))}
+                  value={machineSearchForm.machine_type || "__all__"} 
+                  onValueChange={(v) => setMachineSearchForm(f => ({...f, machine_type: v === "__all__" ? "" : v}))}
                   disabled={!machineSearchForm.machine_category}
                 >
                   <SelectTrigger className="h-9">
                     <SelectValue placeholder="Any type" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Any Type</SelectItem>
+                    <SelectItem value="__all__">Any Type</SelectItem>
                     {getSearchMachineTypes().map(type => (
                       <SelectItem key={type} value={type}>{type}</SelectItem>
                     ))}
