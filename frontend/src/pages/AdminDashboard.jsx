@@ -1405,6 +1405,26 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
   });
   const [profileForm, setProfileForm] = useState({});
   
+  // Machine search state
+  const [showMachineSearch, setShowMachineSearch] = useState(false);
+  const [machineSearchLoading, setMachineSearchLoading] = useState(false);
+  const [machineSearchResults, setMachineSearchResults] = useState(null);
+  const [machineSearchForm, setMachineSearchForm] = useState({
+    machine_category: "",
+    machine_type: "",
+    min_x: "",
+    min_y: "",
+    min_z: "",
+    min_diameter: "",
+    min_length: "",
+    min_weight: "",
+    min_tonnage: "",
+    material: "",
+    city: "",
+    state: "",
+    approved_only: true
+  });
+  
   // Load machine categories on mount
   useEffect(() => {
     const loadCategories = async () => {
@@ -1417,6 +1437,71 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
     };
     loadCategories();
   }, []);
+  
+  // Search vendors by machine capabilities
+  const searchVendorsByMachines = async () => {
+    setMachineSearchLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (machineSearchForm.machine_category) params.append("machine_category", machineSearchForm.machine_category);
+      if (machineSearchForm.machine_type) params.append("machine_type", machineSearchForm.machine_type);
+      if (machineSearchForm.min_x) params.append("min_x", machineSearchForm.min_x);
+      if (machineSearchForm.min_y) params.append("min_y", machineSearchForm.min_y);
+      if (machineSearchForm.min_z) params.append("min_z", machineSearchForm.min_z);
+      if (machineSearchForm.min_diameter) params.append("min_diameter", machineSearchForm.min_diameter);
+      if (machineSearchForm.min_length) params.append("min_length", machineSearchForm.min_length);
+      if (machineSearchForm.min_weight) params.append("min_weight", machineSearchForm.min_weight);
+      if (machineSearchForm.min_tonnage) params.append("min_tonnage", machineSearchForm.min_tonnage);
+      if (machineSearchForm.material) params.append("material", machineSearchForm.material);
+      if (machineSearchForm.city) params.append("city", machineSearchForm.city);
+      if (machineSearchForm.state) params.append("state", machineSearchForm.state);
+      params.append("approved_only", machineSearchForm.approved_only);
+      
+      const res = await api.get(`/admin/vendors/search-by-machines?${params.toString()}`);
+      setMachineSearchResults(res.data);
+      toast.success(`Found ${res.data.total} vendors with ${res.data.machines_found} matching machines`);
+    } catch (error) {
+      toast.error("Failed to search vendors");
+      console.error(error);
+    } finally {
+      setMachineSearchLoading(false);
+    }
+  };
+  
+  const clearMachineSearch = () => {
+    setMachineSearchForm({
+      machine_category: "",
+      machine_type: "",
+      min_x: "",
+      min_y: "",
+      min_z: "",
+      min_diameter: "",
+      min_length: "",
+      min_weight: "",
+      min_tonnage: "",
+      material: "",
+      city: "",
+      state: "",
+      approved_only: true
+    });
+    setMachineSearchResults(null);
+  };
+  
+  // Get search dimension fields based on selected search category
+  const getSearchDimensionFields = () => {
+    if (!machineSearchForm.machine_category || !machineCategories[machineSearchForm.machine_category]) {
+      return [];
+    }
+    return machineCategories[machineSearchForm.machine_category].dimension_fields || [];
+  };
+  
+  // Get machine types for selected search category
+  const getSearchMachineTypes = () => {
+    if (!machineSearchForm.machine_category || !machineCategories[machineSearchForm.machine_category]) {
+      return [];
+    }
+    return machineCategories[machineSearchForm.machine_category].types || [];
+  };
   
   // Get dimension fields based on selected category
   const getDimensionFields = () => {
@@ -1869,18 +1954,29 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="flex gap-4 items-center justify-between">
-        <Select value={approvedFilter} onValueChange={setApprovedFilter}>
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="All vendors" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Vendors</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
-          </SelectContent>
-        </Select>
+      {/* Filters and Search Toggle */}
+      <div className="flex gap-4 items-center justify-between flex-wrap">
+        <div className="flex gap-2 items-center">
+          <Select value={approvedFilter} onValueChange={setApprovedFilter}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="All vendors" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Vendors</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button 
+            variant={showMachineSearch ? "default" : "outline"} 
+            size="sm" 
+            onClick={() => setShowMachineSearch(!showMachineSearch)}
+            className={showMachineSearch ? "bg-orange-600 hover:bg-orange-700" : ""}
+          >
+            <Search className="w-4 h-4 mr-2" />
+            Search by Machines
+          </Button>
+        </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={onRefresh}>
             <RefreshCw className="w-4 h-4" />
@@ -1893,7 +1989,276 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
         </div>
       </div>
       
-      {/* Vendors Table */}
+      {/* Machine Search Panel */}
+      {showMachineSearch && (
+        <Card className="border-orange-200 bg-orange-50/30">
+          <CardHeader className="py-3">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Wrench className="w-4 h-4 text-orange-600" />
+              Search Vendors by Machine Capabilities
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {/* Machine Category */}
+              <div>
+                <Label className="text-xs">Machine Category</Label>
+                <Select 
+                  value={machineSearchForm.machine_category} 
+                  onValueChange={(v) => setMachineSearchForm(f => ({...f, machine_category: v, machine_type: ""}))}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Any category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Any Category</SelectItem>
+                    {Object.keys(machineCategories).sort().map(cat => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Machine Type */}
+              <div>
+                <Label className="text-xs">Machine Type</Label>
+                <Select 
+                  value={machineSearchForm.machine_type} 
+                  onValueChange={(v) => setMachineSearchForm(f => ({...f, machine_type: v}))}
+                  disabled={!machineSearchForm.machine_category}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Any type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Any Type</SelectItem>
+                    {getSearchMachineTypes().map(type => (
+                      <SelectItem key={type} value={type}>{type}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Material */}
+              <div>
+                <Label className="text-xs">Material</Label>
+                <Input 
+                  className="h-9" 
+                  placeholder="e.g. Steel, Aluminum" 
+                  value={machineSearchForm.material}
+                  onChange={(e) => setMachineSearchForm(f => ({...f, material: e.target.value}))}
+                />
+              </div>
+              
+              {/* Location - City */}
+              <div>
+                <Label className="text-xs">City</Label>
+                <Input 
+                  className="h-9" 
+                  placeholder="e.g. Mumbai, Chennai" 
+                  value={machineSearchForm.city}
+                  onChange={(e) => setMachineSearchForm(f => ({...f, city: e.target.value}))}
+                />
+              </div>
+            </div>
+            
+            {/* Dynamic Dimension Fields based on category */}
+            {machineSearchForm.machine_category && getSearchDimensionFields().length > 0 && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 border-t">
+                <div className="col-span-full">
+                  <Label className="text-xs text-orange-700">Minimum Dimensions for {machineSearchForm.machine_category}</Label>
+                </div>
+                {getSearchDimensionFields().map(field => (
+                  <div key={field.key}>
+                    <Label className="text-xs">{field.label.replace('Max ', 'Min ')}</Label>
+                    <Input 
+                      type="number" 
+                      className="h-9" 
+                      placeholder="0"
+                      value={machineSearchForm[`min_${field.key.replace('max_', '')}`] || ""}
+                      onChange={(e) => setMachineSearchForm(f => ({
+                        ...f, 
+                        [`min_${field.key.replace('max_', '')}`]: e.target.value
+                      }))}
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* Common dimension fields when no category selected */}
+            {!machineSearchForm.machine_category && (
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 pt-2 border-t">
+                <div className="col-span-full">
+                  <Label className="text-xs text-slate-500">Minimum Dimensions (common)</Label>
+                </div>
+                <div>
+                  <Label className="text-xs">Min X (mm)</Label>
+                  <Input 
+                    type="number" 
+                    className="h-9" 
+                    placeholder="0"
+                    value={machineSearchForm.min_x}
+                    onChange={(e) => setMachineSearchForm(f => ({...f, min_x: e.target.value}))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Min Y (mm)</Label>
+                  <Input 
+                    type="number" 
+                    className="h-9" 
+                    placeholder="0"
+                    value={machineSearchForm.min_y}
+                    onChange={(e) => setMachineSearchForm(f => ({...f, min_y: e.target.value}))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Min Z (mm)</Label>
+                  <Input 
+                    type="number" 
+                    className="h-9" 
+                    placeholder="0"
+                    value={machineSearchForm.min_z}
+                    onChange={(e) => setMachineSearchForm(f => ({...f, min_z: e.target.value}))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Min Diameter (mm)</Label>
+                  <Input 
+                    type="number" 
+                    className="h-9" 
+                    placeholder="0"
+                    value={machineSearchForm.min_diameter}
+                    onChange={(e) => setMachineSearchForm(f => ({...f, min_diameter: e.target.value}))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Min Length (mm)</Label>
+                  <Input 
+                    type="number" 
+                    className="h-9" 
+                    placeholder="0"
+                    value={machineSearchForm.min_length}
+                    onChange={(e) => setMachineSearchForm(f => ({...f, min_length: e.target.value}))}
+                  />
+                </div>
+              </div>
+            )}
+            
+            {/* Search Actions */}
+            <div className="flex gap-2 justify-end pt-2">
+              <div className="flex items-center gap-2 mr-auto">
+                <input 
+                  type="checkbox" 
+                  id="approved-only" 
+                  checked={machineSearchForm.approved_only}
+                  onChange={(e) => setMachineSearchForm(f => ({...f, approved_only: e.target.checked}))}
+                  className="rounded"
+                />
+                <Label htmlFor="approved-only" className="text-xs">Approved vendors only</Label>
+              </div>
+              <Button variant="outline" size="sm" onClick={clearMachineSearch}>
+                Clear
+              </Button>
+              <Button 
+                size="sm" 
+                onClick={searchVendorsByMachines} 
+                disabled={machineSearchLoading}
+                className="bg-orange-600 hover:bg-orange-700"
+              >
+                {machineSearchLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Search className="w-4 h-4 mr-2" />}
+                Search Vendors
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* Machine Search Results */}
+      {machineSearchResults && (
+        <Card className="border-green-200 bg-green-50/30">
+          <CardHeader className="py-3">
+            <div className="flex justify-between items-center">
+              <CardTitle className="text-sm font-medium flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-green-600" />
+                Search Results: {machineSearchResults.total} vendors with {machineSearchResults.machines_found} matching machines
+              </CardTitle>
+              <Button variant="ghost" size="sm" onClick={() => setMachineSearchResults(null)}>
+                <XCircle className="w-4 h-4" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <table className="w-full">
+              <thead className="bg-green-100/50 border-b">
+                <tr>
+                  <th className="text-left p-3 text-xs font-bold uppercase text-slate-600">Company</th>
+                  <th className="text-left p-3 text-xs font-bold uppercase text-slate-600">Location</th>
+                  <th className="text-left p-3 text-xs font-bold uppercase text-slate-600">Matching Machines</th>
+                  <th className="text-left p-3 text-xs font-bold uppercase text-slate-600">Total Machines</th>
+                  <th className="text-left p-3 text-xs font-bold uppercase text-slate-600">Rating</th>
+                  {canEdit && <th className="text-right p-3 text-xs font-bold uppercase text-slate-600">Actions</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-green-100">
+                {machineSearchResults.vendors.map((vendor) => (
+                  <tr key={vendor.vendor_id} className="hover:bg-green-50">
+                    <td className="p-3">
+                      <div>
+                        <p className="font-medium text-slate-900">{vendor.company_name}</p>
+                        <p className="text-xs text-slate-500">{vendor.user_info?.email}</p>
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <p className="text-sm">{vendor.city || '-'}{vendor.state ? `, ${vendor.state}` : ''}</p>
+                    </td>
+                    <td className="p-3">
+                      <div>
+                        <span className="text-lg font-bold text-green-600">{vendor.matching_machine_count}</span>
+                        <div className="text-xs text-slate-500 max-w-xs">
+                          {vendor.matching_machines?.slice(0, 3).map((m, i) => (
+                            <span key={i} className="inline-block bg-slate-100 px-1 rounded mr-1 mb-1">
+                              {m.machine_type || m.name}
+                            </span>
+                          ))}
+                          {vendor.matching_machines?.length > 3 && (
+                            <span className="text-slate-400">+{vendor.matching_machines.length - 3} more</span>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <span className="text-sm">{vendor.total_machine_count}</span>
+                    </td>
+                    <td className="p-3">
+                      {vendor.rating > 0 ? (
+                        <span className="text-amber-600">⭐ {vendor.rating?.toFixed(1)}</span>
+                      ) : '-'}
+                    </td>
+                    {canEdit && (
+                      <td className="p-3 text-right">
+                        <Button variant="ghost" size="sm" onClick={() => loadVendorProfile(vendor.vendor_id)}>
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {machineSearchResults.vendors.length === 0 && (
+              <div className="text-center py-8 text-slate-500">
+                No vendors found matching your criteria
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* All Vendors Table (hidden when showing search results) */}
+      {!machineSearchResults && (
+        <>
+          {/* Vendors Table */}
       <Card className="border-slate-200">
         <CardContent className="p-0">
           <table className="w-full">
@@ -1995,6 +2360,8 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
           )}
         </CardContent>
       </Card>
+        </>
+      )}
 
       {/* Add Vendor Dialog */}
       <Dialog open={showAddVendorDialog} onOpenChange={setShowAddVendorDialog}>

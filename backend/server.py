@@ -7856,6 +7856,116 @@ async def admin_list_vendors(user: dict = Depends(get_current_user), approved: O
     
     return vendors
 
+@api_router.get("/admin/vendors/search-by-machines")
+async def search_vendors_by_machines(
+    user: dict = Depends(get_current_user),
+    machine_category: Optional[str] = None,
+    machine_type: Optional[str] = None,
+    min_x: Optional[float] = None,
+    min_y: Optional[float] = None,
+    min_z: Optional[float] = None,
+    min_diameter: Optional[float] = None,
+    min_length: Optional[float] = None,
+    min_weight: Optional[float] = None,
+    min_tonnage: Optional[float] = None,
+    material: Optional[str] = None,
+    city: Optional[str] = None,
+    state: Optional[str] = None,
+    approved_only: bool = True
+):
+    """
+    Search vendors by their machine capabilities.
+    Returns vendors that have machines matching the specified criteria.
+    """
+    if not has_admin_access(user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    # Build machine query
+    machine_query = {"is_active": True}
+    
+    if machine_category:
+        machine_query["machine_category"] = machine_category
+    if machine_type:
+        machine_query["machine_type"] = machine_type
+    
+    # Dimension filters
+    if min_x:
+        machine_query["max_x"] = {"$gte": min_x}
+    if min_y:
+        machine_query["max_y"] = {"$gte": min_y}
+    if min_z:
+        machine_query["max_z"] = {"$gte": min_z}
+    if min_diameter:
+        machine_query["max_diameter"] = {"$gte": min_diameter}
+    if min_length:
+        machine_query["max_length"] = {"$gte": min_length}
+    if min_weight:
+        machine_query["max_weight"] = {"$gte": min_weight}
+    if min_tonnage:
+        machine_query["tonnage"] = {"$gte": min_tonnage}
+    
+    # Material filter (check if material is in the materials array)
+    if material:
+        machine_query["$or"] = [
+            {"materials": {"$regex": material, "$options": "i"}},
+            {"materials_supported": {"$regex": material, "$options": "i"}}
+        ]
+    
+    # Find machines matching criteria
+    matching_machines = await db.machines.find(machine_query, {"_id": 0}).to_list(1000)
+    
+    # Get unique vendor IDs from matching machines
+    vendor_ids = list(set(m["vendor_id"] for m in matching_machines))
+    
+    if not vendor_ids:
+        return {"vendors": [], "total": 0, "machines_found": 0}
+    
+    # Build vendor query
+    vendor_query = {"vendor_id": {"$in": vendor_ids}}
+    if approved_only:
+        vendor_query["is_approved"] = True
+    if city:
+        vendor_query["city"] = {"$regex": city, "$options": "i"}
+    if state:
+        vendor_query["state"] = {"$regex": state, "$options": "i"}
+    
+    # Fetch vendors
+    vendors = await db.vendors.find(vendor_query, {"_id": 0}).to_list(200)
+    
+    # Enrich vendors with machine details and user info
+    result_vendors = []
+    for vendor in vendors:
+        # Get user info
+        vendor_user = await db.users.find_one({"user_id": vendor["user_id"]}, {"_id": 0, "email": 1, "name": 1})
+        vendor["user_info"] = vendor_user
+        
+        # Get matching machines for this vendor
+        vendor_machines = [m for m in matching_machines if m["vendor_id"] == vendor["vendor_id"]]
+        vendor["matching_machines"] = vendor_machines
+        vendor["matching_machine_count"] = len(vendor_machines)
+        
+        # Total machine count
+        total_machines = await db.machines.count_documents({"vendor_id": vendor["vendor_id"]})
+        vendor["total_machine_count"] = total_machines
+        
+        result_vendors.append(vendor)
+    
+    # Sort by matching machine count (most capable first)
+    result_vendors.sort(key=lambda v: v["matching_machine_count"], reverse=True)
+    
+    return {
+        "vendors": result_vendors,
+        "total": len(result_vendors),
+        "machines_found": len(matching_machines),
+        "search_criteria": {
+            "machine_category": machine_category,
+            "machine_type": machine_type,
+            "min_dimensions": {"x": min_x, "y": min_y, "z": min_z, "diameter": min_diameter, "length": min_length},
+            "material": material,
+            "location": {"city": city, "state": state}
+        }
+    }
+
 @api_router.put("/admin/vendors/{vendor_id}")
 async def admin_update_vendor(vendor_id: str, request: Request, user: dict = Depends(get_current_user)):
     """Update vendor details"""
