@@ -1381,7 +1381,7 @@ const NDAsTab = ({ ndas, users, vendors, loading, onRefresh, onCreateNDA, onUpda
 };
 
 // ============== VENDORS TAB ==============
-const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdateVendor, onCreateVendor, canEdit = true, canDelete = true, canCreate = true, canApprove = true }) => {
+const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdateVendor, onCreateVendor, canEdit = true, canDelete = true, canCreate = true, canApprove = true, canSearchMachines = true }) => {
   const [approvedFilter, setApprovedFilter] = useState("all");
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [vendorProfile, setVendorProfile] = useState(null);
@@ -1967,15 +1967,18 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
               <SelectItem value="pending">Pending</SelectItem>
             </SelectContent>
           </Select>
-          <Button 
-            variant={showMachineSearch ? "default" : "outline"} 
-            size="sm" 
-            onClick={() => setShowMachineSearch(!showMachineSearch)}
-            className={showMachineSearch ? "bg-orange-600 hover:bg-orange-700" : ""}
-          >
-            <Search className="w-4 h-4 mr-2" />
-            Search by Machines
-          </Button>
+          {canSearchMachines && (
+            <Button 
+              variant={showMachineSearch ? "default" : "outline"} 
+              size="sm" 
+              onClick={() => setShowMachineSearch(!showMachineSearch)}
+              className={showMachineSearch ? "bg-orange-600 hover:bg-orange-700" : ""}
+              data-testid="search-by-machines-btn"
+            >
+              <Search className="w-4 h-4 mr-2" />
+              Search by Machines
+            </Button>
+          )}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={onRefresh}>
@@ -1989,8 +1992,8 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
         </div>
       </div>
       
-      {/* Machine Search Panel */}
-      {showMachineSearch && (
+      {/* Machine Search Panel - Only show if user has permission */}
+      {canSearchMachines && showMachineSearch && (
         <Card className="border-orange-200 bg-orange-50/30">
           <CardHeader className="py-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -2955,6 +2958,7 @@ const AdminDashboard = () => {
             canDelete={isAdmin || hasAnyPermission(['vendors.delete'])}
             canCreate={isAdmin || hasAnyPermission(['vendors.create'])}
             canApprove={isAdmin || hasAnyPermission(['vendors.approve'])}
+            canSearchMachines={isAdmin || hasAnyPermission(['vendors.search_machines'])}
           />
         )}
         {activeTab === "rfqs" && permittedTabs.includes('rfqs') && (

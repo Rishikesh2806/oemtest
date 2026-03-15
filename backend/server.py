@@ -7876,9 +7876,15 @@ async def search_vendors_by_machines(
     """
     Search vendors by their machine capabilities.
     Returns vendors that have machines matching the specified criteria.
+    Requires 'vendors.search_machines' permission.
     """
+    # Check for admin access OR specific permission
     if not has_admin_access(user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+        # Check for specific permission via custom role
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "vendors.search_machines")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied. Requires 'vendors.search_machines' permission.")
     
     # Build machine query
     machine_query = {"is_active": True}

@@ -32,6 +32,7 @@ PERMISSIONS = {
     "vendors.edit": {"label": "Edit Vendors", "module": "Vendor Management", "description": "Edit vendor profiles"},
     "vendors.delete": {"label": "Delete Vendors", "module": "Vendor Management", "description": "Delete vendor accounts"},
     "vendors.verify": {"label": "Verify Vendors", "module": "Vendor Management", "description": "Verify vendor documents"},
+    "vendors.search_machines": {"label": "Search by Machines", "module": "Vendor Management", "description": "Search vendors by machine capabilities"},
     
     # Buyer Management
     "buyers.view": {"label": "View Buyers", "module": "Buyer Management", "description": "View buyer profiles"},
@@ -103,7 +104,7 @@ DEFAULT_ROLES = {
         "description": "Administrative access to manage the platform",
         "permissions": [
             "users.view", "users.create", "users.edit", "users.assign_roles",
-            "vendors.view", "vendors.approve", "vendors.edit", "vendors.verify",
+            "vendors.view", "vendors.approve", "vendors.edit", "vendors.verify", "vendors.search_machines",
             "buyers.view", "buyers.edit",
             "rfqs.view", "rfqs.edit", "rfqs.analyze", "rfqs.match_vendors",
             "quotes.view", "quotes.approve", "quotes.negotiate",
@@ -121,7 +122,7 @@ DEFAULT_ROLES = {
         "name": "Sales Manager",
         "description": "Manage RFQs, quotes, and vendor relationships",
         "permissions": [
-            "vendors.view", "buyers.view",
+            "vendors.view", "vendors.search_machines", "buyers.view",
             "rfqs.view", "rfqs.create", "rfqs.edit", "rfqs.analyze", "rfqs.match_vendors",
             "quotes.view", "quotes.approve", "quotes.negotiate",
             "orders.view", "orders.create",
