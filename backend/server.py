@@ -2252,9 +2252,8 @@ async def forgot_password(reset_request: PasswordResetRequest, request: Request)
             "used": False
         })
         
-        # Send reset email
-        base_url = os.environ.get("APP_URL", "https://oemlinker.com")
-        reset_link = f"{base_url}/reset-password?token={reset_token}"
+        # Send reset email - always use production URL
+        reset_link = f"https://oemlinker.com/reset-password?token={reset_token}"
         
         email_html = f'''
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -5779,7 +5778,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 urgency = rfq.get("urgency", "normal")
                 urgency_emoji = {"urgent": "🔴", "high": "🟠", "normal": "🟢", "low": "🔵"}.get(urgency, "🟢")
                 
-                base_url = os.environ.get("APP_URL", "https://oemlinker.com")
+                base_url = "https://oemlinker.com"
                 rfq_link = f"{base_url}/vendor/rfq/{rfq_id}"
                 
                 # User-friendly notification message
@@ -5948,7 +5947,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
 ⭐ Vendor Rating: {vendor.get('rating', 0):.1f}/5
 
 🔗 Review Quote:
-{os.environ.get("APP_URL", "https://oemlinker.com")}/buyer/rfq/{quote.rfq_id}"""
+https://oemlinker.com/buyer/rfq/{quote.rfq_id}"""
             asyncio.create_task(whatsapp_service.send_text_message(buyer_profile["phone"], wa_message))
     
     return Quote(**quote_doc)
@@ -6283,7 +6282,7 @@ async def respond_to_negotiation(quote_id: str, negotiation_id: str, response: N
             wa_message += f"""
 
 🔗 View Details:
-{os.environ.get("APP_URL", "https://oemlinker.com")}/buyer/rfq/{quote['rfq_id']}"""
+https://oemlinker.com/buyer/rfq/{quote['rfq_id']}"""
             asyncio.create_task(whatsapp_service.send_text_message(buyer["phone"], wa_message))
     
     return {
@@ -6494,7 +6493,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
 3. Update order status regularly
 
 🔗 View Order:
-{os.environ.get("APP_URL", "https://oemlinker.com")}/vendor/order/{order_id}"""
+https://oemlinker.com/vendor/order/{order_id}"""
             asyncio.create_task(whatsapp_service.send_text_message(vendor["phone"], wa_message))
     
     return {"message": "Quote accepted", "order_id": order_id}
@@ -6616,7 +6615,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
         wa_message += f"""
 
 🔗 View Order:
-{os.environ.get("APP_URL", "https://oemlinker.com")}/vendor/order/{order_id}"""
+https://oemlinker.com/vendor/order/{order_id}"""
 
         # Notify vendor via WhatsApp
         if vendor and vendor.get("phone"):
@@ -11730,8 +11729,8 @@ async def notify_vendors_new_rfq(
     if not rfq:
         raise HTTPException(status_code=404, detail="RFQ not found")
     
-    # Use APP_URL from env for preview/production flexibility, fallback to production domain
-    BASE_URL = os.environ.get("APP_URL", "https://oemlinker.com")
+    # Always use production URL for WhatsApp notifications (vendors access live site)
+    BASE_URL = "https://oemlinker.com"
     
     # Check if drawings are available
     drawing_ids = rfq.get("drawing_ids", [])
