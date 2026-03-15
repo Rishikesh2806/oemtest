@@ -101,6 +101,19 @@ See ARCHITECTURE.md for detailed refactoring plan.
 - `GET /api/auth/2fa/status` - Get current 2FA status
 
 
+### WhatsApp RFQ Notification Fix - Text-Only with Magic Links (FIXED - Mar 15, 2026)
+- **Issue**: WhatsApp RFQ notifications with PDF attachments were failing due to:
+  - Meta content moderation blocking direct media files as "abusive" (error 368)
+  - Template mismatch errors (Gupshup error 4003)
+- **Solution**: Changed to text-only notification with secure magic link approach:
+  - Vendors receive a well-formatted text message with RFQ details (part name, priority, process, quantity, deadline, match score)
+  - Message includes a magic link for instant access (no login needed)
+  - Drawings are viewed securely on the platform after clicking the link
+- **Technical Changes**:
+  - `POST /api/whatsapp/notify-rfq` now sends text-only messages
+  - Fixed hardcoded `oemlinker.com` URLs to use `APP_URL` environment variable for preview/production flexibility
+  - Magic link redirects vendor directly to `/vendor/rfq/{rfq_id}` page where drawings can be viewed/downloaded
+
 ### Magic Link with Redirect for WhatsApp RFQ Access (NEW - Mar 13, 2026)
 - **Enhanced Magic Link Generation**: `POST /api/auth/magic-link/generate` now accepts optional `redirect_url` parameter
 - **Instant RFQ Access**: When vendors receive RFQ match notifications via WhatsApp, they get a magic link that:

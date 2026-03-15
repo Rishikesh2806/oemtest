@@ -2253,7 +2253,8 @@ async def forgot_password(reset_request: PasswordResetRequest, request: Request)
         })
         
         # Send reset email
-        reset_link = f"https://oemlinker.com/reset-password?token={reset_token}"
+        base_url = os.environ.get("APP_URL", "https://oemlinker.com")
+        reset_link = f"{base_url}/reset-password?token={reset_token}"
         
         email_html = f'''
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -2970,7 +2971,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://smart-manufacturing-7.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-test.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -4649,7 +4650,7 @@ async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list
     from app.services.whatsapp_service import send_image_message
     
     # Use the actual deployed URL
-    BASE_URL = os.environ.get("APP_URL", "https://smart-manufacturing-7.preview.emergentagent.com")
+    BASE_URL = os.environ.get("APP_URL", "https://rfq-marketplace-test.preview.emergentagent.com")
     
     # Small delay to let template message send first
     await asyncio.sleep(2)
@@ -5699,7 +5700,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://smart-manufacturing-7.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-test.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -5778,7 +5779,8 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 urgency = rfq.get("urgency", "normal")
                 urgency_emoji = {"urgent": "🔴", "high": "🟠", "normal": "🟢", "low": "🔵"}.get(urgency, "🟢")
                 
-                rfq_link = f"https://oemlinker.com/vendor/rfq/{rfq_id}"
+                base_url = os.environ.get("APP_URL", "https://oemlinker.com")
+                rfq_link = f"{base_url}/vendor/rfq/{rfq_id}"
                 
                 # User-friendly notification message
                 notification_message = f"""🔔 *New RFQ Match for You!*
@@ -5893,7 +5895,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://smart-manufacturing-7.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-test.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -5946,7 +5948,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
 ⭐ Vendor Rating: {vendor.get('rating', 0):.1f}/5
 
 🔗 Review Quote:
-https://oemlinker.com/buyer/rfq/{quote.rfq_id}"""
+{os.environ.get("APP_URL", "https://oemlinker.com")}/buyer/rfq/{quote.rfq_id}"""
             asyncio.create_task(whatsapp_service.send_text_message(buyer_profile["phone"], wa_message))
     
     return Quote(**quote_doc)
@@ -6145,7 +6147,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://smart-manufacturing-7.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://rfq-marketplace-test.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -6281,7 +6283,7 @@ async def respond_to_negotiation(quote_id: str, negotiation_id: str, response: N
             wa_message += f"""
 
 🔗 View Details:
-https://oemlinker.com/buyer/rfq/{quote['rfq_id']}"""
+{os.environ.get("APP_URL", "https://oemlinker.com")}/buyer/rfq/{quote['rfq_id']}"""
             asyncio.create_task(whatsapp_service.send_text_message(buyer["phone"], wa_message))
     
     return {
@@ -6427,7 +6429,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://smart-manufacturing-7.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-test.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -6492,7 +6494,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
 3. Update order status regularly
 
 🔗 View Order:
-https://oemlinker.com/vendor/order/{order_id}"""
+{os.environ.get("APP_URL", "https://oemlinker.com")}/vendor/order/{order_id}"""
             asyncio.create_task(whatsapp_service.send_text_message(vendor["phone"], wa_message))
     
     return {"message": "Quote accepted", "order_id": order_id}
@@ -6558,7 +6560,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://smart-manufacturing-7.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-test.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(
@@ -6614,7 +6616,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
         wa_message += f"""
 
 🔗 View Order:
-https://oemlinker.com/vendor/order/{order_id}"""
+{os.environ.get("APP_URL", "https://oemlinker.com")}/vendor/order/{order_id}"""
 
         # Notify vendor via WhatsApp
         if vendor and vendor.get("phone"):
@@ -11714,7 +11716,8 @@ async def notify_vendors_new_rfq(
 ):
     """
     Send WhatsApp notifications to matched vendors about a new RFQ
-    Uses rfq_alert_pdf template with drawing attachment
+    Sends text message with magic link - drawings are accessed via the platform
+    (Meta blocks direct PDF/image attachments as "abusive content")
     """
     if not has_admin_access(user) and user.get("role") != "buyer":
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -11727,22 +11730,12 @@ async def notify_vendors_new_rfq(
     if not rfq:
         raise HTTPException(status_code=404, detail="RFQ not found")
     
-    BASE_URL = "https://oemlinker.com"
+    # Use APP_URL from env for preview/production flexibility, fallback to production domain
+    BASE_URL = os.environ.get("APP_URL", "https://oemlinker.com")
     
-    # Get the first drawing URL for the template (if available)
-    drawing_url = None
-    drawing_filename = None
+    # Check if drawings are available
     drawing_ids = rfq.get("drawing_ids", [])
-    if drawing_ids:
-        first_drawing = await db.drawings.find_one({"drawing_id": drawing_ids[0]}, {"_id": 0})
-        if first_drawing:
-            # Check if it's stored in S3
-            file_path = first_drawing.get("file_path", "")
-            if file_path.startswith("s3://") or "s3.amazonaws.com" in file_path:
-                drawing_url = file_path if file_path.startswith("http") else None
-            elif first_drawing.get("s3_url"):
-                drawing_url = first_drawing.get("s3_url")
-            drawing_filename = first_drawing.get("original_filename", f"drawing_{rfq_id}.pdf")
+    has_drawings = len(drawing_ids) > 0
     
     # Get matched vendors with their phone numbers
     notified_count = 0
@@ -11785,6 +11778,10 @@ async def notify_vendors_new_rfq(
         else:
             deadline_str = "As per RFQ"
         
+        # Get urgency
+        urgency = rfq.get("urgency", "normal")
+        urgency_emoji = {"urgent": "🔴", "high": "🟠", "normal": "🟢", "low": "🔵"}.get(urgency, "🟢")
+        
         match_score = match.get("suitability_score", match.get("match_score", 0))
         
         # Generate magic link with redirect to RFQ page for instant access
@@ -11793,60 +11790,45 @@ async def notify_vendors_new_rfq(
         
         if magic_link_result.get("success"):
             rfq_link = f"{BASE_URL}/magic-login?token={magic_link_result['token']}"
+            link_note = "🔑 _Click link for instant access (no login needed)_"
         else:
             rfq_link = f"{BASE_URL}/vendor/rfq/{rfq_id}"
+            link_note = "_Login to view and submit quote_"
         
-        # Try to send using rfq_alert_pdf template with drawing
-        if drawing_url:
-            # Template params: company_name, part_name, process, quantity, deadline, match_score, rfq_link
-            template_params = [
-                company_name,
-                part_name,
-                process_str,
-                quantity,
-                deadline_str,
-                f"{match_score}%",
-                rfq_link
-            ]
-            
-            result = await whatsapp_service.send_template_with_document(
-                to_number=phone,
-                template_id="rfq_alert_pdf",
-                params=template_params,
-                document_url=drawing_url,
-                document_filename=drawing_filename,
-                context="rfq_vendor_notification",
-                vendor_id=vendor_id
-            )
-        else:
-            # Fallback to text message if no drawing available
-            notification_message = f"""🔔 *New RFQ Match for You!*
+        # Drawing note
+        drawing_note = "📎 _Drawings available in the RFQ details_" if has_drawings else ""
+        
+        # User-friendly notification message
+        notification_message = f"""🔔 *New RFQ Match for You!*
 
 Hello *{company_name}*,
 
-Great news! A new RFQ matching your capabilities is available.
+A new RFQ matching your capabilities is available.
 
 📋 *{part_name}*
+{urgency_emoji} Priority: {urgency.title()}
 🔧 Process: {process_str}
 📦 Quantity: {quantity}
 📅 Deadline: {deadline_str}
 🎯 Match Score: {match_score}%
 
-👉 *View & Submit Quote:*
+👉 *View RFQ & Submit Quote:*
 {rfq_link}
 
-🔑 _Click link for instant access_
+{link_note}
+{drawing_note}
 
 Reply *rfqs* to see all opportunities.
 
 _Team OEMLinker_"""
-            
-            result = await whatsapp_service.send_text_message(
-                phone, 
-                notification_message,
-                context="rfq_vendor_notification",
-                vendor_id=vendor_id
-            )
+
+        # Send text message (drawings accessible via the platform link)
+        result = await whatsapp_service.send_text_message(
+            phone, 
+            notification_message,
+            context="rfq_vendor_notification",
+            vendor_id=vendor_id
+        )
         
         if result.get("success"):
             notified_count += 1
