@@ -1979,6 +1979,61 @@ async def logout(request: Request, response: Response):
 
 # Magic link tokens are stored in MongoDB for persistence across instances
 
+async def generate_magic_link_for_user(user_id: str, redirect_url: str = None) -> dict:
+    """
+    Generate a magic link token for any user (buyer, vendor, or admin).
+    Used for WhatsApp notifications to enable instant login.
+    
+    Args:
+        user_id: User's unique ID
+        redirect_url: Path to redirect to after login (e.g., /buyer/rfq/rfq_123)
+    
+    Returns:
+        dict with success, token, and redirect_url
+    """
+    try:
+        user = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+        if not user:
+            logger.warning(f"Magic link generation failed: User not found for user_id {user_id}")
+            return {"success": False, "error": "User not found"}
+        
+        # Generate secure token
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)  # 30 min expiry
+        
+        # Validate and sanitize redirect URL - only allow internal paths
+        safe_redirect = None
+        if redirect_url:
+            # Only allow relative paths starting with /
+            if redirect_url.startswith("/") and not redirect_url.startswith("//"):
+                # Whitelist of allowed redirect patterns
+                allowed_patterns = ["/vendor/", "/buyer/", "/admin/", "/dashboard", "/rfq/", "/quotes", "/orders"]
+                if any(pattern in redirect_url for pattern in allowed_patterns):
+                    safe_redirect = redirect_url
+        
+        # Store token in MongoDB with redirect URL
+        await db.magic_link_tokens.insert_one({
+            "token": token,
+            "user_id": user["user_id"],
+            "redirect_url": safe_redirect,
+            "expires_at": expires_at.isoformat(),
+            "used": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "purpose": "whatsapp_notification"
+        })
+        
+        logger.info(f"Magic link generated for user {user_id} with redirect to {safe_redirect}")
+        
+        return {
+            "success": True,
+            "token": token,
+            "expires_in_minutes": 30,
+            "redirect_url": safe_redirect
+        }
+    except Exception as e:
+        logger.error(f"Magic link generation error: {str(e)}")
+        return {"success": False, "error": str(e)}
+
 @api_router.post("/auth/magic-link/generate")
 async def generate_magic_link(phone: str, redirect_url: Optional[str] = None):
     """Generate a magic link token for WhatsApp users (internal use only)
@@ -5778,8 +5833,15 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 urgency = rfq.get("urgency", "normal")
                 urgency_emoji = {"urgent": "🔴", "high": "🟠", "normal": "🟢", "low": "🔵"}.get(urgency, "🟢")
                 
+                # Generate magic link for instant access
                 base_url = "https://oemlinker.com"
-                rfq_link = f"{base_url}/vendor/rfq/{rfq_id}"
+                magic_result = await generate_magic_link_for_user(matched.get("user_id"), f"/vendor/rfq/{rfq_id}")
+                if magic_result.get("success"):
+                    rfq_link = f"{base_url}/magic-login?token={magic_result['token']}"
+                    link_note = "🔑 _Click for instant access (no login needed)_"
+                else:
+                    rfq_link = f"{base_url}/vendor/rfq/{rfq_id}"
+                    link_note = "_Login to view and submit quote_"
                 
                 # User-friendly notification message
                 notification_message = f"""🔔 *New RFQ Match for You!*
@@ -5797,6 +5859,8 @@ Great news! A new RFQ matching your capabilities is available.
 
 👉 *Submit your quote:*
 {rfq_link}
+
+{link_note}
 
 Reply *rfqs* to see all opportunities.
 
@@ -5937,6 +6001,15 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     if buyer and whatsapp_service.is_configured():
         buyer_profile = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "phone": 1})
         if buyer_profile and buyer_profile.get("phone"):
+            # Generate magic link for buyer
+            magic_result = await generate_magic_link_for_user(rfq["buyer_id"], f"/buyer/rfq/{quote.rfq_id}")
+            if magic_result.get("success"):
+                review_link = f"https://oemlinker.com/magic-login?token={magic_result['token']}"
+                link_note = "🔑 _Click for instant access_"
+            else:
+                review_link = f"https://oemlinker.com/buyer/rfq/{quote.rfq_id}"
+                link_note = ""
+            
             wa_message = f"""💰 *New Quote Received!*
 
 📋 *{rfq.get('title', 'Your RFQ')}*
@@ -5947,7 +6020,8 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
 ⭐ Vendor Rating: {vendor.get('rating', 0):.1f}/5
 
 🔗 Review Quote:
-https://oemlinker.com/buyer/rfq/{quote.rfq_id}"""
+{review_link}
+{link_note}"""
             asyncio.create_task(whatsapp_service.send_text_message(buyer_profile["phone"], wa_message))
     
     return Quote(**quote_doc)
@@ -6263,9 +6337,19 @@ async def respond_to_negotiation(quote_id: str, negotiation_id: str, response: N
     
     # Send WhatsApp notification to buyer about negotiation response
     if whatsapp_service.is_configured():
-        buyer = await db.users.find_one({"user_id": negotiation["buyer_id"]}, {"_id": 0, "phone": 1})
+        buyer = await db.users.find_one({"user_id": negotiation["buyer_id"]}, {"_id": 0, "phone": 1, "user_id": 1})
         if buyer and buyer.get("phone"):
             action_emoji = {"accept": "✅", "counter": "🔄", "reject": "❌"}.get(response.action, "📨")
+            
+            # Generate magic link for buyer
+            magic_result = await generate_magic_link_for_user(buyer["user_id"], f"/buyer/rfq/{quote['rfq_id']}")
+            if magic_result.get("success"):
+                view_link = f"https://oemlinker.com/magic-login?token={magic_result['token']}"
+                link_note = "🔑 _Instant access_"
+            else:
+                view_link = f"https://oemlinker.com/buyer/rfq/{quote['rfq_id']}"
+                link_note = ""
+            
             wa_message = f"""{action_emoji} *Negotiation Update!*
 
 📋 *{rfq.get('title', 'Your RFQ')}*
@@ -6282,7 +6366,8 @@ async def respond_to_negotiation(quote_id: str, negotiation_id: str, response: N
             wa_message += f"""
 
 🔗 View Details:
-https://oemlinker.com/buyer/rfq/{quote['rfq_id']}"""
+{view_link}
+{link_note}"""
             asyncio.create_task(whatsapp_service.send_text_message(buyer["phone"], wa_message))
     
     return {
@@ -6478,6 +6563,15 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
         
         # Send WhatsApp notification to vendor about accepted quote and PO
         if whatsapp_service.is_configured() and vendor.get("phone"):
+            # Generate magic link for vendor
+            magic_result = await generate_magic_link_for_user(vendor.get("user_id"), f"/vendor/order/{order_id}")
+            if magic_result.get("success"):
+                order_link = f"https://oemlinker.com/magic-login?token={magic_result['token']}"
+                link_note = "🔑 _Instant access_"
+            else:
+                order_link = f"https://oemlinker.com/vendor/order/{order_id}"
+                link_note = ""
+            
             wa_message = f"""🎉 *Congratulations! Quote Accepted!*
 
 📋 *{rfq.get('title', 'RFQ')}*
@@ -6493,7 +6587,8 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
 3. Update order status regularly
 
 🔗 View Order:
-https://oemlinker.com/vendor/order/{order_id}"""
+{order_link}
+{link_note}"""
             asyncio.create_task(whatsapp_service.send_text_message(vendor["phone"], wa_message))
     
     return {"message": "Quote accepted", "order_id": order_id}
@@ -6603,28 +6698,54 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
             "completed": "🎉",
             "cancelled": "❌"
         }.get(new_status, "📋")
-        
-        wa_message = f"""{status_emoji} *Order Status Update*
+
+        # Notify vendor via WhatsApp
+        if vendor and vendor.get("phone"):
+            # Generate magic link for vendor
+            vendor_magic = await generate_magic_link_for_user(vendor.get("user_id"), f"/vendor/order/{order_id}")
+            if vendor_magic.get("success"):
+                vendor_link = f"https://oemlinker.com/magic-login?token={vendor_magic['token']}"
+            else:
+                vendor_link = f"https://oemlinker.com/vendor/order/{order_id}"
+            
+            vendor_wa_message = f"""{status_emoji} *Order Status Update*
 
 🧾 *PO #{order.get('po_number', order_id[:8])}*
 📋 {rfq_title}
 
 📊 Status: *{status_label}*"""
-        if note:
-            wa_message += f"\n📝 Note: {note}"
-        wa_message += f"""
+            if note:
+                vendor_wa_message += f"\n📝 Note: {note}"
+            vendor_wa_message += f"""
 
 🔗 View Order:
-https://oemlinker.com/vendor/order/{order_id}"""
-
-        # Notify vendor via WhatsApp
-        if vendor and vendor.get("phone"):
-            asyncio.create_task(whatsapp_service.send_text_message(vendor["phone"], wa_message))
+{vendor_link}
+🔑 _Instant access_"""
+            asyncio.create_task(whatsapp_service.send_text_message(vendor["phone"], vendor_wa_message))
         
         # Notify buyer via WhatsApp
-        buyer = await db.users.find_one({"user_id": order["buyer_id"]}, {"_id": 0, "phone": 1})
+        buyer = await db.users.find_one({"user_id": order["buyer_id"]}, {"_id": 0, "phone": 1, "user_id": 1})
         if buyer and buyer.get("phone"):
-            buyer_wa_message = wa_message.replace("/vendor/order/", "/buyer/order/")
+            # Generate magic link for buyer
+            buyer_magic = await generate_magic_link_for_user(buyer["user_id"], f"/buyer/order/{order_id}")
+            if buyer_magic.get("success"):
+                buyer_link = f"https://oemlinker.com/magic-login?token={buyer_magic['token']}"
+            else:
+                buyer_link = f"https://oemlinker.com/buyer/order/{order_id}"
+            
+            buyer_wa_message = f"""{status_emoji} *Order Status Update*
+
+🧾 *PO #{order.get('po_number', order_id[:8])}*
+📋 {rfq_title}
+
+📊 Status: *{status_label}*"""
+            if note:
+                buyer_wa_message += f"\n📝 Note: {note}"
+            buyer_wa_message += f"""
+
+🔗 View Order:
+{buyer_link}
+🔑 _Instant access_"""
             asyncio.create_task(whatsapp_service.send_text_message(buyer["phone"], buyer_wa_message))
     
     return {"message": "Status updated", "status": new_status}
