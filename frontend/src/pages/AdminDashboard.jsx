@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { 
   Users, FileText, Package, DollarSign, Building2, Wrench, FileCheck,
   CheckCircle2, XCircle, Loader2, Search, Plus, Edit, Trash2,
-  Eye, Send, AlertCircle, RefreshCw, ChevronRight, Clock
+  Eye, Send, AlertCircle, RefreshCw, ChevronRight, Clock, Camera, Upload
 } from "lucide-react";
 
 // Tab configuration with required permissions
@@ -1381,7 +1381,7 @@ const NDAsTab = ({ ndas, users, vendors, loading, onRefresh, onCreateNDA, onUpda
 };
 
 // ============== VENDORS TAB ==============
-const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdateVendor, onCreateVendor, canEdit = true, canDelete = true, canCreate = true, canApprove = true, canSearchMachines = true, canViewMachines = true, canCreateMachines = true, canEditMachines = true, canDeleteMachines = true }) => {
+const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdateVendor, onCreateVendor, canEdit = true, canDelete = true, canCreate = true, canApprove = true, canSearchMachines = true, canViewMachines = true, canCreateMachines = true, canEditMachines = true, canDeleteMachines = true, canManageMachineImages = true }) => {
   const [approvedFilter, setApprovedFilter] = useState("all");
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [vendorProfile, setVendorProfile] = useState(null);
@@ -1404,6 +1404,10 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
     max_taper_angle: 0, materials: ""
   });
   const [profileForm, setProfileForm] = useState({});
+  
+  // Machine images state
+  const [machineImages, setMachineImages] = useState([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
   
   // Machine search state
   const [showMachineSearch, setShowMachineSearch] = useState(false);
@@ -1643,6 +1647,60 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
       max_taper_angle: machine.max_taper_angle || 0,
       materials: (machine.materials || machine.materials_supported)?.join(", ") || ""
     });
+    // Load machine images
+    setMachineImages(machine.images || []);
+  };
+  
+  // Upload machine image
+  const uploadMachineImage = async (machineId, file) => {
+    if (!canManageMachineImages) {
+      toast.error("You don't have permission to manage machine images");
+      return;
+    }
+    
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const res = await api.post(`/admin/machines/${machineId}/images`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      setMachineImages(res.data.images || []);
+      // Update the machine in the local machines array
+      setMachines(prev => prev.map(m => 
+        m.machine_id === machineId ? {...m, images: res.data.images} : m
+      ));
+      toast.success("Image uploaded successfully");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to upload image");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+  
+  // Delete machine image
+  const deleteMachineImage = async (machineId, imageUrl) => {
+    if (!canManageMachineImages) {
+      toast.error("You don't have permission to manage machine images");
+      return;
+    }
+    
+    try {
+      const res = await api.delete(`/admin/machines/${machineId}/images`, {
+        params: { image_url: imageUrl }
+      });
+      
+      setMachineImages(res.data.images || []);
+      // Update the machine in the local machines array
+      setMachines(prev => prev.map(m => 
+        m.machine_id === machineId ? {...m, images: res.data.images} : m
+      ));
+      toast.success("Image deleted");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to delete image");
+    }
   };
   
   const resetMachineForm = () => {
@@ -1653,6 +1711,7 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
       bore_diameter: 0, outer_diameter: 0, max_thickness: 0, tonnage: 0,
       max_taper_angle: 0, materials: ""
     });
+    setMachineImages([]);
   };
   
   // Helper to get machine display name
@@ -1930,6 +1989,77 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
                   <Label>Materials (comma-separated)</Label>
                   <Input value={machineForm.materials} onChange={(e) => setMachineForm(m => ({...m, materials: e.target.value}))} placeholder="Aluminum, Steel, Stainless Steel, Titanium" />
                 </div>
+                
+                {/* Machine Images Section - Only show when editing an existing machine */}
+                {editMachine && canManageMachineImages && (
+                  <div className="col-span-2 border-t pt-4 mt-2">
+                    <Label className="flex items-center gap-2 mb-3">
+                      <Camera className="w-4 h-4 text-orange-600" />
+                      Machine Images ({machineImages.length})
+                    </Label>
+                    
+                    {/* Image Grid */}
+                    {machineImages.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2 mb-3">
+                        {machineImages.map((imgUrl, idx) => (
+                          <div key={idx} className="relative group rounded-lg overflow-hidden border bg-slate-50">
+                            <img 
+                              src={imgUrl} 
+                              alt={`Machine ${idx + 1}`} 
+                              className="w-full h-20 object-cover"
+                              onError={(e) => { e.target.src = '/placeholder-machine.png'; e.target.onerror = null; }}
+                            />
+                            <button
+                              onClick={() => deleteMachineImage(editMachine.machine_id, imgUrl)}
+                              className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              title="Delete image"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Upload Button */}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="file"
+                        id="machine-image-upload"
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            uploadMachineImage(editMachine.machine_id, file);
+                            e.target.value = '';
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={uploadingImage}
+                        onClick={() => document.getElementById('machine-image-upload').click()}
+                        className="w-full"
+                      >
+                        {uploadingImage ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="w-4 h-4 mr-2" />
+                            Upload Image
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-1">Max 5MB. JPEG, PNG, or WebP only.</p>
+                  </div>
+                )}
               </div>
               <Button onClick={saveMachine} className="w-full bg-orange-600 hover:bg-orange-700" disabled={!machineForm.machine_category}>
                 {editMachine ? "Update Machine" : "Create Machine"}
@@ -2971,6 +3101,7 @@ const AdminDashboard = () => {
             canCreateMachines={isAdmin || hasAnyPermission(['machines.create'])}
             canEditMachines={isAdmin || hasAnyPermission(['machines.edit'])}
             canDeleteMachines={isAdmin || hasAnyPermission(['machines.delete'])}
+            canManageMachineImages={isAdmin || hasAnyPermission(['machines.manage_images'])}
           />
         )}
         {activeTab === "rfqs" && permittedTabs.includes('rfqs') && (

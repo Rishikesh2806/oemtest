@@ -39,6 +39,7 @@ PERMISSIONS = {
     "machines.create": {"label": "Add Machines", "module": "Machine Management", "description": "Add machines to vendor profiles"},
     "machines.edit": {"label": "Edit Machines", "module": "Machine Management", "description": "Edit machine details"},
     "machines.delete": {"label": "Delete Machines", "module": "Machine Management", "description": "Delete machines from vendor profiles"},
+    "machines.manage_images": {"label": "Manage Machine Images", "module": "Machine Management", "description": "Upload and delete machine images"},
     
     # Buyer Management
     "buyers.view": {"label": "View Buyers", "module": "Buyer Management", "description": "View buyer profiles"},
@@ -111,7 +112,7 @@ DEFAULT_ROLES = {
         "permissions": [
             "users.view", "users.create", "users.edit", "users.assign_roles",
             "vendors.view", "vendors.approve", "vendors.edit", "vendors.verify", "vendors.search_machines",
-            "machines.view", "machines.create", "machines.edit", "machines.delete",
+            "machines.view", "machines.create", "machines.edit", "machines.delete", "machines.manage_images",
             "buyers.view", "buyers.edit",
             "rfqs.view", "rfqs.edit", "rfqs.analyze", "rfqs.match_vendors",
             "quotes.view", "quotes.approve", "quotes.negotiate",
@@ -144,7 +145,7 @@ DEFAULT_ROLES = {
         "description": "Manage vendor profiles and machines",
         "permissions": [
             "vendors.view", "vendors.edit", "vendors.verify", "vendors.search_machines",
-            "machines.view", "machines.create", "machines.edit", "machines.delete",
+            "machines.view", "machines.create", "machines.edit", "machines.delete", "machines.manage_images",
             "analytics.view_dashboard"
         ],
         "is_system": True,

@@ -8671,6 +8671,118 @@ async def admin_delete_machine(machine_id: str, user: dict = Depends(get_current
     
     return {"message": "Machine deleted successfully"}
 
+
+@api_router.post("/admin/machines/{machine_id}/images")
+async def admin_upload_machine_image(
+    machine_id: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user)
+):
+    """Upload an image for any machine (admin or users with machines.manage_images permission)"""
+    from app.services.s3_storage_service import upload_file
+    
+    # Check for admin access OR specific permission
+    if not has_admin_access(user):
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "machines.manage_images")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied. Requires 'machines.manage_images' permission.")
+    
+    # Get machine
+    machine = await db.machines.find_one({"machine_id": machine_id}, {"_id": 0})
+    if not machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, and WebP images are allowed")
+    
+    # Read file content
+    content = await file.read()
+    
+    # Check file size (max 5MB)
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image size must be less than 5MB")
+    
+    # Upload to AWS S3
+    try:
+        result = upload_file(
+            data=content,
+            filename=file.filename,
+            folder=f"machines/{machine['vendor_id']}",
+            content_type=file.content_type
+        )
+        image_url = result["url"]  # Use presigned URL
+    except Exception as e:
+        logger.error(f"S3 upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload image to storage: {str(e)}")
+    
+    # Update machine with new image
+    current_images = machine.get("images", [])
+    current_images.append(image_url)
+    
+    await db.machines.update_one(
+        {"machine_id": machine_id},
+        {"$set": {"images": current_images}}
+    )
+    
+    logger.info(f"Admin uploaded machine image to S3: {machine_id} - {image_url}")
+    
+    return {"image_url": image_url, "images": current_images}
+
+
+@api_router.delete("/admin/machines/{machine_id}/images")
+async def admin_delete_machine_image(
+    machine_id: str,
+    image_url: str,
+    user: dict = Depends(get_current_user)
+):
+    """Delete an image from any machine (admin or users with machines.manage_images permission)"""
+    from app.services.s3_storage_service import delete_file as s3_delete_file
+    
+    # Check for admin access OR specific permission
+    if not has_admin_access(user):
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "machines.manage_images")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied. Requires 'machines.manage_images' permission.")
+    
+    # Get machine
+    machine = await db.machines.find_one({"machine_id": machine_id}, {"_id": 0})
+    if not machine:
+        raise HTTPException(status_code=404, detail="Machine not found")
+    
+    current_images = machine.get("images", [])
+    if image_url not in current_images:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    # Remove from list
+    current_images.remove(image_url)
+    
+    await db.machines.update_one(
+        {"machine_id": machine_id},
+        {"$set": {"images": current_images}}
+    )
+    
+    # Delete file from S3 if it's an S3 URL
+    bucket_name = os.environ.get("AWS_S3_BUCKET_NAME", "oemlinker-storage")
+    if f"{bucket_name}" in image_url or "s3." in image_url:
+        # Extract S3 key from URL
+        try:
+            if ".amazonaws.com/" in image_url:
+                s3_key = image_url.split(".amazonaws.com/")[1].split("?")[0]
+                # Handle regional endpoint format: s3.region.amazonaws.com/bucket/key
+                if s3_key.startswith(f"{bucket_name}/"):
+                    s3_key = s3_key[len(bucket_name)+1:]
+                s3_delete_file(s3_key)
+                logger.info(f"Admin deleted S3 file: {s3_key}")
+        except Exception as e:
+            logger.warning(f"Failed to delete S3 file {image_url}: {e}")
+    
+    return {"message": "Image deleted", "images": current_images}
+
+
 # ============== DASHBOARD STATS ==============
 
 @api_router.get("/buyer/quotes")
