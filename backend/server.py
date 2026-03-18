@@ -3395,7 +3395,16 @@ async def serve_machine_image(filename: str):
 @api_router.get("/storage/{path:path}")
 async def serve_cloud_storage_file(path: str):
     """Serve files from AWS S3 storage"""
-    from app.services.s3_storage_service import download_file
+    from app.services.s3_storage_service import download_file, AWS_S3_BUCKET_NAME
+    
+    # Strip bucket name prefix if incorrectly included in path
+    # This handles old URLs like /api/storage/oemlinker/machines/...
+    if path.startswith(f"{AWS_S3_BUCKET_NAME}/"):
+        path = path[len(AWS_S3_BUCKET_NAME) + 1:]
+    elif path.startswith("oemlinker-storage/"):
+        path = path[len("oemlinker-storage/"):]
+    elif path.startswith("oemlinker/"):
+        path = path[len("oemlinker/"):]
     
     try:
         content, content_type = download_file(path)
@@ -3403,6 +3412,20 @@ async def serve_cloud_storage_file(path: str):
     except Exception as e:
         logger.error(f"Failed to serve S3 file {path}: {e}")
         raise HTTPException(status_code=404, detail="File not found")
+
+
+@api_router.get("/uploads/{path:path}")
+async def serve_legacy_uploads(path: str):
+    """
+    Handle legacy /api/uploads/ URLs.
+    These files were stored locally before S3 migration and no longer exist.
+    Returns 404 with helpful message.
+    """
+    logger.warning(f"Legacy upload URL requested: /api/uploads/{path}")
+    raise HTTPException(
+        status_code=404, 
+        detail="This file was stored in legacy format and is no longer available. Please re-upload the image."
+    )
 
 
 # ============== ADMIN FILE MANAGER ==============
@@ -3501,8 +3524,17 @@ async def migrate_image_urls(user: dict = Depends(get_current_user)):
     
     def extract_s3_key(url: str) -> str:
         """Extract S3 key from various URL formats"""
+        # Handle /api/storage/ URLs (with potential bucket name prefix)
         if url.startswith("/api/storage/"):
-            return url.replace("/api/storage/", "")
+            key = url.replace("/api/storage/", "")
+            # Strip bucket name prefix if present
+            if key.startswith(f"{bucket_name}/"):
+                key = key[len(bucket_name)+1:]
+            elif key.startswith("oemlinker/"):
+                key = key[len("oemlinker/"):]
+            elif key.startswith("oemlinker-storage/"):
+                key = key[len("oemlinker-storage/"):]
+            return key if key else None
         elif s3_base in url:
             return url.split(s3_base)[-1].split("?")[0]  # Remove query params
         elif s3_base_alt in url and ".amazonaws.com/" in url:
@@ -3519,7 +3551,13 @@ async def migrate_image_urls(user: dict = Depends(get_current_user)):
                 return parts[len(bucket_name)+1:]
             return parts
         elif "emergent" in url and "/api/storage/" in url:
-            return url.split("/api/storage/")[-1].split("?")[0]
+            key = url.split("/api/storage/")[-1].split("?")[0]
+            # Strip bucket name prefix if present
+            if key.startswith(f"{bucket_name}/"):
+                key = key[len(bucket_name)+1:]
+            elif key.startswith("oemlinker/"):
+                key = key[len("oemlinker/"):]
+            return key if key else None
         return None
     
     def generate_presigned(s3_key: str) -> str:
