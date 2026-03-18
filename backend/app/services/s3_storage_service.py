@@ -44,13 +44,18 @@ def get_s3_client():
         if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY:
             raise ValueError("AWS credentials not configured")
         
+        # Use regional endpoint for proper presigned URL generation
+        endpoint_url = f"https://s3.{AWS_REGION}.amazonaws.com"
+        
         _s3_client = boto3.client(
             's3',
             aws_access_key_id=AWS_ACCESS_KEY_ID,
             aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-            region_name=AWS_REGION
+            region_name=AWS_REGION,
+            endpoint_url=endpoint_url,
+            config=boto3.session.Config(signature_version='s3v4')
         )
-        logger.info(f"S3 client initialized for bucket: {AWS_S3_BUCKET_NAME}")
+        logger.info(f"S3 client initialized for bucket: {AWS_S3_BUCKET_NAME} in region: {AWS_REGION}")
     
     return _s3_client
 
@@ -118,8 +123,16 @@ def upload_file(
             ContentType=content_type
         )
         
-        # Generate public URL
+        # Generate public URL (works if bucket has public access enabled)
         public_url = f"https://{AWS_S3_BUCKET_NAME}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
+        
+        # Also generate a presigned URL with max allowed expiration (7 days)
+        # For production, consider refreshing URLs periodically or making bucket public
+        presigned_url = client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': AWS_S3_BUCKET_NAME, 'Key': s3_key},
+            ExpiresIn=604800  # 7 days (max allowed)
+        )
         
         logger.info(f"File uploaded to S3: {s3_key} ({len(data)} bytes)")
         
@@ -128,7 +141,8 @@ def upload_file(
             "size": len(data),
             "filename": filename,
             "content_type": content_type,
-            "url": public_url,
+            "url": presigned_url,  # Use presigned URL for reliable access
+            "public_url": public_url,  # Direct URL (requires public bucket)
             "storage_url": f"/api/storage/{s3_key}"
         }
     except ClientError as e:

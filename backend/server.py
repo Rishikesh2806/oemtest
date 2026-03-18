@@ -3474,6 +3474,161 @@ async def get_storage_stats(
     }
 
 
+@api_router.post("/admin/migrate-image-urls")
+async def migrate_image_urls(user: dict = Depends(get_current_user)):
+    """
+    Migrate old image URLs to S3 presigned URLs.
+    Removes invalid /api/uploads/ URLs and converts S3 public URLs to presigned URLs.
+    """
+    if not has_admin_access(user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    from app.services.s3_storage_service import get_presigned_url, get_s3_client
+    
+    bucket_name = os.environ.get("AWS_S3_BUCKET_NAME", "oemlinker-storage")
+    region = os.environ.get("AWS_REGION", "ap-south-1")
+    s3_base = f"https://{bucket_name}.s3.{region}.amazonaws.com/"
+    s3_base_alt = f"https://{bucket_name}.s3."
+    
+    stats = {
+        "machines_updated": 0,
+        "images_removed": 0,
+        "images_migrated": 0,
+        "vendors_updated": 0,
+        "rfqs_updated": 0,
+        "errors": []
+    }
+    
+    def extract_s3_key(url: str) -> str:
+        """Extract S3 key from various URL formats"""
+        if url.startswith("/api/storage/"):
+            return url.replace("/api/storage/", "")
+        elif s3_base in url:
+            return url.split(s3_base)[-1].split("?")[0]  # Remove query params
+        elif s3_base_alt in url and ".amazonaws.com/" in url:
+            # Handle BUCKET.s3.REGION.amazonaws.com/KEY format
+            return url.split(".amazonaws.com/")[-1].split("?")[0]
+        elif f"s3.{region}.amazonaws.com/{bucket_name}/" in url:
+            # Handle s3.REGION.amazonaws.com/BUCKET/KEY format (regional endpoint)
+            return url.split(f"s3.{region}.amazonaws.com/{bucket_name}/")[-1].split("?")[0]
+        elif "s3.amazonaws.com" in url:
+            # Handle various S3 URL formats
+            parts = url.split("amazonaws.com/")[-1].split("?")[0]
+            # Remove bucket name if present at start
+            if parts.startswith(f"{bucket_name}/"):
+                return parts[len(bucket_name)+1:]
+            return parts
+        elif "emergent" in url and "/api/storage/" in url:
+            return url.split("/api/storage/")[-1].split("?")[0]
+        return None
+    
+    def generate_presigned(s3_key: str) -> str:
+        """Generate a 7-day presigned URL (max allowed by S3)"""
+        try:
+            return get_presigned_url(s3_key, expiration=604800)  # 7 days (max)
+        except Exception as e:
+            logger.error(f"Failed to generate presigned URL for {s3_key}: {e}")
+            return None
+    
+    # 1. Fix machine images
+    machines = await db.machines.find({"images": {"$exists": True, "$ne": []}}).to_list(1000)
+    for machine in machines:
+        old_images = machine.get("images", [])
+        new_images = []
+        updated = False
+        
+        for img_url in old_images:
+            # Force regeneration of all presigned URLs to ensure correct regional endpoint
+            # Extract S3 key and generate presigned URL
+            s3_key = extract_s3_key(img_url)
+            if s3_key:
+                presigned = generate_presigned(s3_key)
+                if presigned:
+                    new_images.append(presigned)
+                    if presigned != img_url:
+                        stats["images_migrated"] += 1
+                        updated = True
+                else:
+                    stats["images_removed"] += 1
+                    updated = True
+            elif img_url.startswith("/api/uploads/"):
+                # Remove old invalid uploads
+                stats["images_removed"] += 1
+                updated = True
+            else:
+                # Keep unknown URLs
+                new_images.append(img_url)
+        
+        if updated or new_images != old_images:
+            await db.machines.update_one(
+                {"machine_id": machine["machine_id"]},
+                {"$set": {"images": new_images}}
+            )
+            stats["machines_updated"] += 1
+    
+    # 2. Fix vendor profile images/logos
+    vendors = await db.vendors.find({
+        "$or": [
+            {"logo_url": {"$exists": True, "$ne": None}},
+            {"profile_image": {"$exists": True, "$ne": None}}
+        ]
+    }).to_list(500)
+    
+    for vendor in vendors:
+        updates = {}
+        for field in ["logo_url", "profile_image"]:
+            url = vendor.get(field)
+            if url:
+                s3_key = extract_s3_key(url)
+                if s3_key:
+                    presigned = generate_presigned(s3_key)
+                    if presigned:
+                        updates[field] = presigned
+                        stats["images_migrated"] += 1
+                elif url.startswith("/api/uploads/"):
+                    updates[field] = None
+                    stats["images_removed"] += 1
+        
+        if updates:
+            await db.vendors.update_one(
+                {"vendor_id": vendor["vendor_id"]},
+                {"$set": updates}
+            )
+            stats["vendors_updated"] += 1
+    
+    # 3. Fix RFQ drawing URLs
+    rfqs = await db.rfqs.find({"drawings": {"$exists": True, "$ne": []}}).to_list(1000)
+    for rfq in rfqs:
+        drawings = rfq.get("drawings", [])
+        updated = False
+        
+        for drawing in drawings:
+            for url_field in ["url", "file_url", "s3_url", "preview_url"]:
+                url = drawing.get(url_field)
+                if url:
+                    s3_key = extract_s3_key(url)
+                    if s3_key:
+                        presigned = generate_presigned(s3_key)
+                        if presigned:
+                            drawing[url_field] = presigned
+                            stats["images_migrated"] += 1
+                            updated = True
+        
+        if updated:
+            await db.rfqs.update_one(
+                {"rfq_id": rfq["rfq_id"]},
+                {"$set": {"drawings": drawings}}
+            )
+            stats["rfqs_updated"] += 1
+    
+    logger.info(f"Image URL migration completed: {stats}")
+    return {
+        "success": True,
+        "message": "Image URL migration completed - all images now use presigned URLs",
+        "stats": stats
+    }
+
+
 # Machine Availability Update
 class MachineAvailabilityUpdate(BaseModel):
     availability_status: str  # available, engaged, maintenance, offline
