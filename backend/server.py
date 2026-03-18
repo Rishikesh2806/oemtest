@@ -8256,9 +8256,13 @@ async def admin_update_vendor_profile(vendor_id: str, request: Request, user: di
 
 @api_router.get("/admin/machines")
 async def admin_list_all_machines(user: dict = Depends(get_current_user), vendor_id: Optional[str] = None):
-    """List all machines, optionally filtered by vendor"""
+    """List all machines, optionally filtered by vendor (admin or users with machines.view permission)"""
+    # Check for admin access OR specific permission
     if not has_admin_access(user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "machines.view")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied. Requires 'machines.view' permission.")
     
     query = {}
     if vendor_id:
@@ -8491,9 +8495,13 @@ async def get_machine_categories():
 
 @api_router.post("/admin/machines")
 async def admin_create_machine(request: Request, user: dict = Depends(get_current_user)):
-    """Create a machine for any vendor (admin)"""
+    """Create a machine for any vendor (admin or users with machines.create permission)"""
+    # Check for admin access OR specific permission
     if not has_admin_access(user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "machines.create")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied. Requires 'machines.create' permission.")
     
     body = await request.json()
     vendor_id = body.get("vendor_id")
@@ -8574,9 +8582,13 @@ async def admin_create_machine(request: Request, user: dict = Depends(get_curren
 
 @api_router.get("/admin/machines/{machine_id}")
 async def admin_get_machine(machine_id: str, user: dict = Depends(get_current_user)):
-    """Get machine details (admin)"""
+    """Get machine details (admin or users with machines.view permission)"""
+    # Check for admin access OR specific permission
     if not has_admin_access(user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "machines.view")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied. Requires 'machines.view' permission.")
     
     machine = await db.machines.find_one({"machine_id": machine_id}, {"_id": 0})
     if not machine:
@@ -8590,9 +8602,13 @@ async def admin_get_machine(machine_id: str, user: dict = Depends(get_current_us
 
 @api_router.put("/admin/machines/{machine_id}")
 async def admin_update_machine(machine_id: str, request: Request, user: dict = Depends(get_current_user)):
-    """Update any machine (admin)"""
+    """Update any machine (admin or users with machines.edit permission)"""
+    # Check for admin access OR specific permission
     if not has_admin_access(user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "machines.edit")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied. Requires 'machines.edit' permission.")
     
     body = await request.json()
     
@@ -8641,9 +8657,13 @@ async def admin_update_machine(machine_id: str, request: Request, user: dict = D
 
 @api_router.delete("/admin/machines/{machine_id}")
 async def admin_delete_machine(machine_id: str, user: dict = Depends(get_current_user)):
-    """Delete any machine (admin)"""
+    """Delete any machine (admin or users with machines.delete permission)"""
+    # Check for admin access OR specific permission
     if not has_admin_access(user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "machines.delete")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied. Requires 'machines.delete' permission.")
     
     result = await db.machines.delete_one({"machine_id": machine_id})
     if result.deleted_count == 0:

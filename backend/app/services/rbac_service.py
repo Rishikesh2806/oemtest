@@ -34,6 +34,12 @@ PERMISSIONS = {
     "vendors.verify": {"label": "Verify Vendors", "module": "Vendor Management", "description": "Verify vendor documents"},
     "vendors.search_machines": {"label": "Search by Machines", "module": "Vendor Management", "description": "Search vendors by machine capabilities"},
     
+    # Machine Management
+    "machines.view": {"label": "View Machines", "module": "Machine Management", "description": "View vendor machines"},
+    "machines.create": {"label": "Add Machines", "module": "Machine Management", "description": "Add machines to vendor profiles"},
+    "machines.edit": {"label": "Edit Machines", "module": "Machine Management", "description": "Edit machine details"},
+    "machines.delete": {"label": "Delete Machines", "module": "Machine Management", "description": "Delete machines from vendor profiles"},
+    
     # Buyer Management
     "buyers.view": {"label": "View Buyers", "module": "Buyer Management", "description": "View buyer profiles"},
     "buyers.edit": {"label": "Edit Buyers", "module": "Buyer Management", "description": "Edit buyer profiles"},
@@ -105,6 +111,7 @@ DEFAULT_ROLES = {
         "permissions": [
             "users.view", "users.create", "users.edit", "users.assign_roles",
             "vendors.view", "vendors.approve", "vendors.edit", "vendors.verify", "vendors.search_machines",
+            "machines.view", "machines.create", "machines.edit", "machines.delete",
             "buyers.view", "buyers.edit",
             "rfqs.view", "rfqs.edit", "rfqs.analyze", "rfqs.match_vendors",
             "quotes.view", "quotes.approve", "quotes.negotiate",
@@ -123,6 +130,7 @@ DEFAULT_ROLES = {
         "description": "Manage RFQs, quotes, and vendor relationships",
         "permissions": [
             "vendors.view", "vendors.search_machines", "buyers.view",
+            "machines.view",
             "rfqs.view", "rfqs.create", "rfqs.edit", "rfqs.analyze", "rfqs.match_vendors",
             "quotes.view", "quotes.approve", "quotes.negotiate",
             "orders.view", "orders.create",
@@ -130,6 +138,17 @@ DEFAULT_ROLES = {
         ],
         "is_system": True,
         "color": "#16a34a"  # Green
+    },
+    "vendor_manager": {
+        "name": "Vendor Manager",
+        "description": "Manage vendor profiles and machines",
+        "permissions": [
+            "vendors.view", "vendors.edit", "vendors.verify", "vendors.search_machines",
+            "machines.view", "machines.create", "machines.edit", "machines.delete",
+            "analytics.view_dashboard"
+        ],
+        "is_system": True,
+        "color": "#f59e0b"  # Amber
     },
     "support_agent": {
         "name": "Support Agent",

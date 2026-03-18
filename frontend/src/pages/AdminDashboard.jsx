@@ -1381,7 +1381,7 @@ const NDAsTab = ({ ndas, users, vendors, loading, onRefresh, onCreateNDA, onUpda
 };
 
 // ============== VENDORS TAB ==============
-const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdateVendor, onCreateVendor, canEdit = true, canDelete = true, canCreate = true, canApprove = true, canSearchMachines = true }) => {
+const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdateVendor, onCreateVendor, canEdit = true, canDelete = true, canCreate = true, canApprove = true, canSearchMachines = true, canViewMachines = true, canCreateMachines = true, canEditMachines = true, canDeleteMachines = true }) => {
   const [approvedFilter, setApprovedFilter] = useState("all");
   const [selectedVendor, setSelectedVendor] = useState(null);
   const [vendorProfile, setVendorProfile] = useState(null);
@@ -1788,9 +1788,11 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
               <Wrench className="w-5 h-5 text-orange-600" />
               Machines ({machines.length})
             </CardTitle>
-            <Button size="sm" className="bg-orange-600 hover:bg-orange-700" onClick={() => { setCreateMachineOpen(true); setEditMachine(null); resetMachineForm(); }}>
-              <Plus className="w-4 h-4 mr-1" /> Add Machine
-            </Button>
+            {canCreateMachines && (
+              <Button size="sm" className="bg-orange-600 hover:bg-orange-700" onClick={() => { setCreateMachineOpen(true); setEditMachine(null); resetMachineForm(); }} data-testid="add-machine-btn">
+                <Plus className="w-4 h-4 mr-1" /> Add Machine
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             {machines.length > 0 ? (
@@ -1813,14 +1815,20 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
                         {getMachineMaterials(machine).length > 0 && <span>Materials: {getMachineMaterials(machine).slice(0, 3).join(", ")}</span>}
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" onClick={() => openEditMachine(machine)}>
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50" onClick={() => deleteMachine(machine.machine_id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    {(canEditMachines || canDeleteMachines) && (
+                      <div className="flex gap-2">
+                        {canEditMachines && (
+                          <Button variant="ghost" size="sm" onClick={() => openEditMachine(machine)} data-testid={`edit-machine-${machine.machine_id}`}>
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                        )}
+                        {canDeleteMachines && (
+                          <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50" onClick={() => deleteMachine(machine.machine_id)} data-testid={`delete-machine-${machine.machine_id}`}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2959,6 +2967,10 @@ const AdminDashboard = () => {
             canCreate={isAdmin || hasAnyPermission(['vendors.create'])}
             canApprove={isAdmin || hasAnyPermission(['vendors.approve'])}
             canSearchMachines={isAdmin || hasAnyPermission(['vendors.search_machines'])}
+            canViewMachines={isAdmin || hasAnyPermission(['machines.view'])}
+            canCreateMachines={isAdmin || hasAnyPermission(['machines.create'])}
+            canEditMachines={isAdmin || hasAnyPermission(['machines.edit'])}
+            canDeleteMachines={isAdmin || hasAnyPermission(['machines.delete'])}
           />
         )}
         {activeTab === "rfqs" && permittedTabs.includes('rfqs') && (
