@@ -607,6 +607,10 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
   const [loadingVendors, setLoadingVendors] = useState(false);
   const [matchingInProgress, setMatchingInProgress] = useState(false);
   const [viewMatchesRFQ, setViewMatchesRFQ] = useState(null);
+  const [viewRFQ, setViewRFQ] = useState(null);
+  const [viewRFQData, setViewRFQData] = useState(null);
+  const [loadingRFQDetails, setLoadingRFQDetails] = useState(false);
+  const [downloadingPDF, setDownloadingPDF] = useState(false);
   
   const filteredRFQs = rfqs.filter(r => {
     const matchesSearch = r.title?.toLowerCase().includes(search.toLowerCase()) ||
@@ -614,6 +618,43 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
     const matchesStatus = statusFilter === "all" || r.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+  
+  // View RFQ Details
+  const openViewRFQ = async (rfq) => {
+    setViewRFQ(rfq);
+    setLoadingRFQDetails(true);
+    try {
+      const res = await api.get(`/admin/rfqs/${rfq.rfq_id}`);
+      setViewRFQData(res.data);
+    } catch (error) {
+      toast.error("Failed to load RFQ details");
+      setViewRFQ(null);
+    } finally {
+      setLoadingRFQDetails(false);
+    }
+  };
+  
+  // Download RFQ as PDF
+  const downloadPDF = async (rfqId) => {
+    setDownloadingPDF(true);
+    try {
+      const res = await api.get(`/admin/rfqs/${rfqId}/pdf`, { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `RFQ_${rfqId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success("PDF downloaded successfully");
+    } catch (error) {
+      toast.error("Failed to download PDF");
+    } finally {
+      setDownloadingPDF(false);
+    }
+  };
   
   const handleEdit = (rfq) => {
     setEditRFQ(rfq);
@@ -802,6 +843,15 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
                   </td>
                   <td className="p-4 text-right">
                     <div className="flex justify-end gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => openViewRFQ(rfq)}
+                        className="text-blue-600 hover:bg-blue-50"
+                        data-testid={`view-rfq-${rfq.rfq_id}`}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </Button>
                       {canMatchVendors && (
                         <Button 
                           variant="outline" 
@@ -1140,6 +1190,267 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
               >
                 <Plus className="w-4 h-4 mr-1" /> Add More Vendors
               </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      
+      {/* View RFQ Details Dialog */}
+      <Dialog open={!!viewRFQ} onOpenChange={() => { setViewRFQ(null); setViewRFQData(null); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-orange-600" />
+                RFQ Details
+              </DialogTitle>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadPDF(viewRFQ?.rfq_id)}
+                disabled={downloadingPDF || !viewRFQData}
+                className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                data-testid="download-pdf-btn"
+              >
+                {downloadingPDF ? (
+                  <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Generating...</>
+                ) : (
+                  <><FileCheck className="w-4 h-4 mr-2" /> Download PDF</>
+                )}
+              </Button>
+            </div>
+          </DialogHeader>
+          
+          {loadingRFQDetails ? (
+            <div className="text-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto text-orange-600" />
+              <p className="text-slate-500 mt-2">Loading RFQ details...</p>
+            </div>
+          ) : viewRFQData ? (
+            <div className="space-y-6 mt-4">
+              {/* Header Info */}
+              <div className="flex items-center justify-between bg-orange-50 p-4 rounded-lg border border-orange-200">
+                <div>
+                  <p className="text-xs text-slate-500">RFQ ID</p>
+                  <p className="font-mono text-sm font-medium">{viewRFQData.rfq_id}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-slate-500">Status</p>
+                  <StatusBadge status={viewRFQData.status} />
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-slate-500">Created</p>
+                  <p className="text-sm">{new Date(viewRFQData.created_at).toLocaleDateString()}</p>
+                </div>
+              </div>
+              
+              {/* Buyer Details */}
+              <div>
+                <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-slate-400" /> Buyer Details
+                </h4>
+                <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg">
+                  <div>
+                    <p className="text-xs text-slate-500">Name</p>
+                    <p className="font-medium">{viewRFQData.buyer_info?.name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Company</p>
+                    <p className="font-medium">{viewRFQData.buyer_info?.company_name || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Email</p>
+                    <p className="text-sm">{viewRFQData.buyer_info?.email || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Phone</p>
+                    <p className="text-sm">{viewRFQData.buyer_info?.phone || 'N/A'}</p>
+                  </div>
+                  {(viewRFQData.buyer_info?.city || viewRFQData.buyer_info?.state) && (
+                    <div className="col-span-2">
+                      <p className="text-xs text-slate-500">Location</p>
+                      <p className="text-sm">{[viewRFQData.buyer_info?.city, viewRFQData.buyer_info?.state].filter(Boolean).join(', ')}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* RFQ Details */}
+              <div>
+                <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-slate-400" /> RFQ Information
+                </h4>
+                <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-lg">
+                  <div className="col-span-2">
+                    <p className="text-xs text-slate-500">Part Name / Title</p>
+                    <p className="font-medium text-lg">{viewRFQData.title || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Material</p>
+                    <p className="font-medium">{viewRFQData.material_type || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Quantity</p>
+                    <p className="font-medium">{viewRFQData.quantity || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Tolerance</p>
+                    <p className="font-medium">{viewRFQData.tolerance ? `${viewRFQData.tolerance} mm` : 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Surface Finish</p>
+                    <p className="font-medium">{viewRFQData.surface_finish || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Deadline</p>
+                    <p className="font-medium">{viewRFQData.deadline || 'As per RFQ'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500">Delivery Location</p>
+                    <p className="font-medium">{viewRFQData.delivery_location || viewRFQData.delivery_address || 'N/A'}</p>
+                  </div>
+                </div>
+                
+                {viewRFQData.description && (
+                  <div className="mt-4">
+                    <p className="text-xs text-slate-500 mb-1">Description / Specifications</p>
+                    <div className="bg-white border rounded-lg p-3 text-sm whitespace-pre-wrap">
+                      {viewRFQData.description}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              {/* AI Analysis */}
+              {viewRFQData.ai_summary && (viewRFQData.ai_summary.recommended_processes?.length > 0 || viewRFQData.ai_summary.overall_dimensions) && (
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                    <Wrench className="w-4 h-4 text-slate-400" /> Technical Analysis (AI)
+                  </h4>
+                  <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    {viewRFQData.ai_summary.recommended_processes?.length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-xs text-blue-600 mb-1">Recommended Processes</p>
+                        <div className="flex flex-wrap gap-2">
+                          {viewRFQData.ai_summary.recommended_processes.map((proc, i) => (
+                            <span key={i} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded">{proc}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {viewRFQData.ai_summary.overall_dimensions && Object.keys(viewRFQData.ai_summary.overall_dimensions).length > 0 && (
+                      <div className="mb-3">
+                        <p className="text-xs text-blue-600 mb-1">Dimensions</p>
+                        <p className="text-sm">
+                          {Object.entries(viewRFQData.ai_summary.overall_dimensions)
+                            .filter(([k, v]) => v)
+                            .map(([k, v]) => `${k}: ${v}mm`)
+                            .join(' × ')}
+                        </p>
+                      </div>
+                    )}
+                    {viewRFQData.ai_summary.part_geometry && (
+                      <div className="mb-3">
+                        <p className="text-xs text-blue-600 mb-1">Part Geometry</p>
+                        <p className="text-sm">{viewRFQData.ai_summary.part_geometry}</p>
+                      </div>
+                    )}
+                    {viewRFQData.ai_summary.complexity_score > 0 && (
+                      <div>
+                        <p className="text-xs text-blue-600 mb-1">Complexity Score</p>
+                        <p className="text-sm font-medium">{viewRFQData.ai_summary.complexity_score}/10</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Drawings / Attachments */}
+              {viewRFQData.drawings && viewRFQData.drawings.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-slate-400" /> Attachments ({viewRFQData.drawings.length})
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    {viewRFQData.drawings.map((drawing, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border">
+                        <div className="w-10 h-10 bg-orange-100 rounded flex items-center justify-center">
+                          <FileText className="w-5 h-5 text-orange-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{drawing.filename || drawing.original_filename || `Drawing ${i + 1}`}</p>
+                          <p className="text-xs text-slate-500">{drawing.file_type || 'File'}</p>
+                        </div>
+                        {drawing.file_url && (
+                          <a 
+                            href={drawing.file_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-orange-600 hover:text-orange-700"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Matched Vendors */}
+              {viewRFQData.matched_vendors_details && viewRFQData.matched_vendors_details.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                    <Building2 className="w-4 h-4 text-slate-400" /> Matched Vendors ({viewRFQData.matched_vendors_details.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {viewRFQData.matched_vendors_details.slice(0, 5).map((mv, i) => (
+                      <div key={i} className="flex items-center justify-between p-2 bg-slate-50 rounded">
+                        <div>
+                          <p className="text-sm font-medium">{mv.vendor_details?.company_name || mv.company_name || 'Unknown'}</p>
+                          <p className="text-xs text-slate-500">{mv.vendor_details?.city}, {mv.vendor_details?.state}</p>
+                        </div>
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          mv.match_type === 'manual' ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'
+                        }`}>
+                          {mv.suitability_score}% match
+                        </span>
+                      </div>
+                    ))}
+                    {viewRFQData.matched_vendors_details.length > 5 && (
+                      <p className="text-xs text-slate-500 text-center">+ {viewRFQData.matched_vendors_details.length - 5} more vendors</p>
+                    )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Quotes */}
+              {viewRFQData.quotes && viewRFQData.quotes.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                    <DollarSign className="w-4 h-4 text-slate-400" /> Quotes Received ({viewRFQData.quotes.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {viewRFQData.quotes.map((quote, i) => (
+                      <div key={i} className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
+                        <div>
+                          <p className="text-sm font-medium">{quote.vendor_info?.company_name || 'Unknown Vendor'}</p>
+                          <p className="text-xs text-slate-500">Lead time: {quote.lead_time_days} days</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-green-700">₹{quote.total_price?.toLocaleString('en-IN') || quote.price?.toLocaleString('en-IN')}</p>
+                          <StatusBadge status={quote.status} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-12 text-slate-500">
+              <AlertCircle className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+              <p>Failed to load RFQ details</p>
             </div>
           )}
         </DialogContent>

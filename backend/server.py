@@ -7631,28 +7631,333 @@ async def admin_list_rfqs(user: dict = Depends(get_current_user), status: Option
 async def admin_get_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
     """Get RFQ details with all related data"""
     if not has_admin_access(user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "rfqs.view")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
     
     rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
     if not rfq:
         raise HTTPException(status_code=404, detail="RFQ not found")
     
-    # Get related data
-    buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "email": 1})
+    # Get buyer info with more details
+    buyer = await db.users.find_one(
+        {"user_id": rfq["buyer_id"]}, 
+        {"_id": 0, "name": 1, "email": 1, "phone": 1, "company_name": 1, "city": 1, "state": 1, "country": 1}
+    )
+    
+    # Get drawings with file URLs
     drawings = await db.drawings.find({"rfq_id": rfq_id}, {"_id": 0, "file_data": 0}).to_list(20)
+    
+    # Generate fresh presigned URLs for drawings
+    for drawing in drawings:
+        if drawing.get("file_url"):
+            try:
+                # If it's an S3 key, generate presigned URL
+                file_key = drawing.get("s3_key") or drawing.get("file_url", "").replace(f"https://oemlinker-storage.s3.ap-south-1.amazonaws.com/", "")
+                if file_key and not file_key.startswith("http"):
+                    from app.services.s3_storage_service import s3_storage_service
+                    drawing["file_url"] = await s3_storage_service.get_presigned_url(file_key, expiry=3600)
+            except Exception as e:
+                logger.warning(f"Failed to generate presigned URL for drawing: {e}")
+    
+    # Get quotes
     quotes = await db.quotes.find({"rfq_id": rfq_id}, {"_id": 0}).to_list(50)
     
     # Enrich quotes with vendor info
     for quote in quotes:
-        vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0, "company_name": 1})
+        vendor = await db.vendors.find_one(
+            {"vendor_id": quote["vendor_id"]}, 
+            {"_id": 0, "company_name": 1, "city": 1, "state": 1}
+        )
         quote["vendor_info"] = vendor
+    
+    # Get matched vendors info
+    matched_vendors = []
+    for mv in rfq.get("matched_vendors", []):
+        vendor = await db.vendors.find_one(
+            {"vendor_id": mv.get("vendor_id")}, 
+            {"_id": 0, "company_name": 1, "city": 1, "state": 1, "phone": 1}
+        )
+        if vendor:
+            matched_vendors.append({
+                **mv,
+                "vendor_details": vendor
+            })
+    
+    # Get AI analysis summary
+    ai_analysis = rfq.get("ai_analysis", {})
     
     return {
         **rfq,
         "buyer_info": buyer,
         "drawings": drawings,
-        "quotes": quotes
+        "quotes": quotes,
+        "matched_vendors_details": matched_vendors,
+        "ai_summary": {
+            "recommended_processes": ai_analysis.get("recommended_processes", []),
+            "overall_dimensions": ai_analysis.get("overall_dimensions", {}),
+            "material_suggestions": ai_analysis.get("material_suggestions", []),
+            "complexity_score": ai_analysis.get("complexity_score", 0),
+            "part_geometry": ai_analysis.get("part_geometry", "")
+        }
     }
+
+
+@api_router.get("/admin/rfqs/{rfq_id}/pdf")
+async def admin_generate_rfq_pdf(rfq_id: str, user: dict = Depends(get_current_user)):
+    """Generate and return RFQ as a PDF document"""
+    if not has_admin_access(user):
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "rfqs.view")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Get buyer info
+    buyer = await db.users.find_one(
+        {"user_id": rfq["buyer_id"]}, 
+        {"_id": 0, "name": 1, "email": 1, "phone": 1, "company_name": 1, "city": 1, "state": 1}
+    )
+    
+    # Get drawings
+    drawings = await db.drawings.find({"rfq_id": rfq_id}, {"_id": 0, "file_data": 0}).to_list(20)
+    
+    # Get AI analysis
+    ai_analysis = rfq.get("ai_analysis", {})
+    
+    # Generate PDF
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch, mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from io import BytesIO
+    
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20*mm, leftMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
+    
+    # Styles
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=18,
+        textColor=colors.HexColor('#f97316'),
+        spaceAfter=12,
+        alignment=TA_CENTER
+    )
+    section_style = ParagraphStyle(
+        'SectionHeader',
+        parent=styles['Heading2'],
+        fontSize=12,
+        textColor=colors.HexColor('#1e293b'),
+        spaceBefore=15,
+        spaceAfter=8,
+        borderPadding=5,
+        backColor=colors.HexColor('#f8fafc')
+    )
+    normal_style = ParagraphStyle(
+        'CustomNormal',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.HexColor('#334155'),
+        spaceAfter=4
+    )
+    label_style = ParagraphStyle(
+        'Label',
+        parent=styles['Normal'],
+        fontSize=9,
+        textColor=colors.HexColor('#64748b'),
+        spaceAfter=2
+    )
+    
+    elements = []
+    
+    # Header with logo placeholder and title
+    header_data = [
+        [Paragraph('<b>OEMLinker</b>', ParagraphStyle('Logo', fontSize=16, textColor=colors.HexColor('#f97316'))),
+         Paragraph(f'<b>Request for Quotation</b>', title_style)]
+    ]
+    header_table = Table(header_data, colWidths=[80*mm, 90*mm])
+    header_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
+    ]))
+    elements.append(header_table)
+    elements.append(Spacer(1, 5*mm))
+    
+    # RFQ ID and Date bar
+    rfq_date = rfq.get("created_at", "")
+    if rfq_date:
+        try:
+            rfq_date = datetime.fromisoformat(rfq_date.replace('Z', '+00:00')).strftime("%d %b %Y")
+        except:
+            pass
+    
+    info_data = [
+        [Paragraph(f'<b>RFQ ID:</b> {rfq_id}', normal_style),
+         Paragraph(f'<b>Date:</b> {rfq_date}', normal_style),
+         Paragraph(f'<b>Status:</b> {rfq.get("status", "N/A").upper()}', normal_style)]
+    ]
+    info_table = Table(info_data, colWidths=[60*mm, 50*mm, 60*mm])
+    info_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#fff7ed')),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#1e293b')),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#fed7aa')),
+    ]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 8*mm))
+    
+    # Buyer Details Section
+    elements.append(Paragraph('BUYER DETAILS', section_style))
+    buyer_name = buyer.get("name", "N/A") if buyer else "N/A"
+    buyer_company = buyer.get("company_name", "") if buyer else ""
+    buyer_email = buyer.get("email", "N/A") if buyer else "N/A"
+    buyer_phone = buyer.get("phone", "N/A") if buyer else "N/A"
+    buyer_location = f"{buyer.get('city', '')}, {buyer.get('state', '')}" if buyer else "N/A"
+    
+    buyer_data = [
+        ['Name:', buyer_name, 'Company:', buyer_company or 'N/A'],
+        ['Email:', buyer_email, 'Phone:', buyer_phone],
+        ['Location:', buyer_location.strip(', ') or 'N/A', '', '']
+    ]
+    buyer_table = Table(buyer_data, colWidths=[25*mm, 55*mm, 25*mm, 55*mm])
+    buyer_table.setStyle(TableStyle([
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#64748b')),
+        ('TEXTCOLOR', (2, 0), (2, -1), colors.HexColor('#64748b')),
+        ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#1e293b')),
+        ('TEXTCOLOR', (3, 0), (3, -1), colors.HexColor('#1e293b')),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+    ]))
+    elements.append(buyer_table)
+    elements.append(Spacer(1, 5*mm))
+    
+    # RFQ Details Section
+    elements.append(Paragraph('RFQ DETAILS', section_style))
+    
+    rfq_details_data = [
+        ['Part Name:', rfq.get("title", "N/A")],
+        ['Material:', rfq.get("material_type", "N/A")],
+        ['Quantity:', str(rfq.get("quantity", "N/A"))],
+        ['Tolerance:', f'{rfq.get("tolerance", "N/A")} mm' if rfq.get("tolerance") else 'N/A'],
+        ['Surface Finish:', rfq.get("surface_finish", "N/A") or 'N/A'],
+        ['Deadline:', rfq.get("deadline", "As per RFQ") or 'As per RFQ'],
+    ]
+    rfq_table = Table(rfq_details_data, colWidths=[35*mm, 135*mm])
+    rfq_table.setStyle(TableStyle([
+        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#64748b')),
+        ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#1e293b')),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('LINEBELOW', (0, 0), (-1, -2), 0.5, colors.HexColor('#e2e8f0')),
+    ]))
+    elements.append(rfq_table)
+    elements.append(Spacer(1, 5*mm))
+    
+    # Description Section
+    if rfq.get("description"):
+        elements.append(Paragraph('DESCRIPTION', section_style))
+        desc_text = rfq.get("description", "").replace('\n', '<br/>')
+        elements.append(Paragraph(desc_text, normal_style))
+        elements.append(Spacer(1, 5*mm))
+    
+    # Technical Specifications (from AI Analysis)
+    if ai_analysis:
+        elements.append(Paragraph('TECHNICAL SPECIFICATIONS', section_style))
+        
+        specs_data = []
+        
+        # Dimensions
+        dims = ai_analysis.get("overall_dimensions", {})
+        if dims:
+            dim_str = []
+            if dims.get("length"): dim_str.append(f"L: {dims['length']}mm")
+            if dims.get("width"): dim_str.append(f"W: {dims['width']}mm")
+            if dims.get("height"): dim_str.append(f"H: {dims['height']}mm")
+            if dims.get("diameter"): dim_str.append(f"Ø: {dims['diameter']}mm")
+            if dim_str:
+                specs_data.append(['Overall Dimensions:', ' x '.join(dim_str)])
+        
+        # Recommended Processes
+        processes = ai_analysis.get("recommended_processes", [])
+        if processes:
+            specs_data.append(['Recommended Processes:', ', '.join(processes[:5])])
+        
+        # Part Geometry
+        geometry = ai_analysis.get("part_geometry", "")
+        if geometry:
+            specs_data.append(['Part Geometry:', geometry])
+        
+        # Complexity
+        complexity = ai_analysis.get("complexity_score", 0)
+        if complexity:
+            specs_data.append(['Complexity Score:', f'{complexity}/10'])
+        
+        if specs_data:
+            specs_table = Table(specs_data, colWidths=[45*mm, 125*mm])
+            specs_table.setStyle(TableStyle([
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#64748b')),
+                ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#1e293b')),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ]))
+            elements.append(specs_table)
+        elements.append(Spacer(1, 5*mm))
+    
+    # Attachments Section
+    if drawings:
+        elements.append(Paragraph('ATTACHMENTS', section_style))
+        for i, drawing in enumerate(drawings, 1):
+            drawing_name = drawing.get("filename", drawing.get("original_filename", f"Drawing {i}"))
+            drawing_url = drawing.get("file_url", "N/A")
+            elements.append(Paragraph(f'{i}. {drawing_name}', normal_style))
+            if drawing_url and drawing_url != "N/A":
+                elements.append(Paragraph(f'   <link href="{drawing_url}"><font color="#f97316">Download Link</font></link>', 
+                    ParagraphStyle('Link', parent=normal_style, fontSize=8, textColor=colors.HexColor('#64748b'))))
+        elements.append(Spacer(1, 5*mm))
+    
+    # Delivery Location
+    delivery_location = rfq.get("delivery_location") or rfq.get("delivery_address", "")
+    if delivery_location:
+        elements.append(Paragraph('DELIVERY LOCATION', section_style))
+        elements.append(Paragraph(delivery_location, normal_style))
+        elements.append(Spacer(1, 5*mm))
+    
+    # Footer
+    elements.append(Spacer(1, 10*mm))
+    footer_style = ParagraphStyle('Footer', fontSize=8, textColor=colors.HexColor('#94a3b8'), alignment=TA_CENTER)
+    elements.append(Paragraph('─' * 80, footer_style))
+    elements.append(Paragraph(f'Generated by OEMLinker • {datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC")}', footer_style))
+    elements.append(Paragraph('www.oemlinker.com • Connecting OEMs with Trusted Vendors', footer_style))
+    
+    # Build PDF
+    doc.build(elements)
+    buffer.seek(0)
+    
+    # Return as downloadable file
+    from fastapi.responses import StreamingResponse
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=RFQ_{rfq_id}.pdf"
+        }
+    )
 
 @api_router.put("/admin/rfqs/{rfq_id}")
 async def admin_update_rfq(rfq_id: str, request: Request, user: dict = Depends(get_current_user)):
