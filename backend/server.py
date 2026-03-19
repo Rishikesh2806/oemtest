@@ -3031,7 +3031,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-test.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://manufacturing-hub-49.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -4903,7 +4903,7 @@ async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list
     from app.services.whatsapp_service import send_image_message
     
     # Use the actual deployed URL
-    BASE_URL = os.environ.get("APP_URL", "https://rfq-marketplace-test.preview.emergentagent.com")
+    BASE_URL = os.environ.get("APP_URL", "https://manufacturing-hub-49.preview.emergentagent.com")
     
     # Small delay to let template message send first
     await asyncio.sleep(2)
@@ -5953,7 +5953,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-test.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://manufacturing-hub-49.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -6157,7 +6157,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-test.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://manufacturing-hub-49.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -6419,7 +6419,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://rfq-marketplace-test.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://manufacturing-hub-49.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -6712,7 +6712,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-test.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://manufacturing-hub-49.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -6853,7 +6853,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-test.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://manufacturing-hub-49.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(
@@ -8509,6 +8509,11 @@ async def admin_create_machine(request: Request, user: dict = Depends(get_curren
     if not vendor_id:
         raise HTTPException(status_code=400, detail="vendor_id is required")
     
+    # Validate required fields
+    machine_category = body.get("machine_category", "")
+    if not machine_category:
+        raise HTTPException(status_code=400, detail="machine_category is required")
+    
     vendor = await db.vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor not found")
@@ -8519,7 +8524,7 @@ async def admin_create_machine(request: Request, user: dict = Depends(get_curren
         "vendor_id": vendor_id,
         "name": body.get("name", ""),
         "machine_type": body.get("machine_type", ""),
-        "machine_category": body.get("machine_category", ""),
+        "machine_category": machine_category,
         "brand": body.get("brand", ""),
         "model": body.get("model", ""),
         "year_purchased": body.get("year_purchased"),
@@ -8571,13 +8576,38 @@ async def admin_create_machine(request: Request, user: dict = Depends(get_curren
         # Casting specific
         "min_thickness": body.get("min_thickness", 0),
         # General
+        "images": [],
         "materials": body.get("materials", []),
         "materials_supported": body.get("materials_supported", []),
         "is_active": body.get("is_active", True),
+        "created_by": user["user_id"],
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
     await db.machines.insert_one(machine_doc)
+    
+    # Log activity
+    activity_log = {
+        "activity_id": f"act_{uuid.uuid4().hex[:12]}",
+        "type": "machine_created",
+        "action": "create",
+        "entity_type": "machine",
+        "entity_id": machine_id,
+        "vendor_id": vendor_id,
+        "user_id": user["user_id"],
+        "user_name": user.get("name", user.get("email", "Unknown")),
+        "details": {
+            "machine_name": body.get("name", "") or f"{body.get('brand', '')} {body.get('model', '')}".strip(),
+            "machine_category": machine_category,
+            "machine_type": body.get("machine_type", ""),
+            "vendor_name": vendor.get("company_name", "Unknown")
+        },
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.activity_logs.insert_one(activity_log)
+    
+    logger.info(f"Machine created: {machine_id} for vendor {vendor_id} by user {user['user_id']}")
+    
     return {"machine_id": machine_id, "message": "Machine created successfully"}
 
 @api_router.get("/admin/machines/{machine_id}")
@@ -8649,9 +8679,37 @@ async def admin_update_machine(machine_id: str, request: Request, user: dict = D
     if not update_data:
         raise HTTPException(status_code=400, detail="No valid fields to update")
     
-    result = await db.machines.update_one({"machine_id": machine_id}, {"$set": update_data})
-    if result.matched_count == 0:
+    # Get machine for logging
+    machine = await db.machines.find_one({"machine_id": machine_id}, {"_id": 0})
+    if not machine:
         raise HTTPException(status_code=404, detail="Machine not found")
+    
+    update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    update_data["updated_by"] = user["user_id"]
+    
+    result = await db.machines.update_one({"machine_id": machine_id}, {"$set": update_data})
+    
+    # Log activity
+    vendor = await db.vendors.find_one({"vendor_id": machine.get("vendor_id")}, {"_id": 0, "company_name": 1})
+    activity_log = {
+        "activity_id": f"act_{uuid.uuid4().hex[:12]}",
+        "type": "machine_updated",
+        "action": "update",
+        "entity_type": "machine",
+        "entity_id": machine_id,
+        "vendor_id": machine.get("vendor_id"),
+        "user_id": user["user_id"],
+        "user_name": user.get("name", user.get("email", "Unknown")),
+        "details": {
+            "machine_name": machine.get("name", "") or f"{machine.get('brand', '')} {machine.get('model', '')}".strip(),
+            "updated_fields": list(update_data.keys()),
+            "vendor_name": vendor.get("company_name", "Unknown") if vendor else "Unknown"
+        },
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.activity_logs.insert_one(activity_log)
+    
+    logger.info(f"Machine updated: {machine_id} by user {user['user_id']}")
     
     return {"message": "Machine updated successfully"}
 
@@ -8665,9 +8723,35 @@ async def admin_delete_machine(machine_id: str, user: dict = Depends(get_current
         if not has_permission:
             raise HTTPException(status_code=403, detail="Permission denied. Requires 'machines.delete' permission.")
     
-    result = await db.machines.delete_one({"machine_id": machine_id})
-    if result.deleted_count == 0:
+    # Get machine for logging before deleting
+    machine = await db.machines.find_one({"machine_id": machine_id}, {"_id": 0})
+    if not machine:
         raise HTTPException(status_code=404, detail="Machine not found")
+    
+    result = await db.machines.delete_one({"machine_id": machine_id})
+    
+    # Log activity
+    vendor = await db.vendors.find_one({"vendor_id": machine.get("vendor_id")}, {"_id": 0, "company_name": 1})
+    activity_log = {
+        "activity_id": f"act_{uuid.uuid4().hex[:12]}",
+        "type": "machine_deleted",
+        "action": "delete",
+        "entity_type": "machine",
+        "entity_id": machine_id,
+        "vendor_id": machine.get("vendor_id"),
+        "user_id": user["user_id"],
+        "user_name": user.get("name", user.get("email", "Unknown")),
+        "details": {
+            "machine_name": machine.get("name", "") or f"{machine.get('brand', '')} {machine.get('model', '')}".strip(),
+            "machine_category": machine.get("machine_category", ""),
+            "machine_type": machine.get("machine_type", ""),
+            "vendor_name": vendor.get("company_name", "Unknown") if vendor else "Unknown"
+        },
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.activity_logs.insert_one(activity_log)
+    
+    logger.info(f"Machine deleted: {machine_id} by user {user['user_id']}")
     
     return {"message": "Machine deleted successfully"}
 
@@ -8692,6 +8776,11 @@ async def admin_upload_machine_image(
     machine = await db.machines.find_one({"machine_id": machine_id}, {"_id": 0})
     if not machine:
         raise HTTPException(status_code=404, detail="Machine not found")
+    
+    # Check max images limit (5)
+    current_images = machine.get("images", [])
+    if len(current_images) >= 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 images allowed per machine")
     
     # Validate file type
     allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
@@ -8781,6 +8870,56 @@ async def admin_delete_machine_image(
             logger.warning(f"Failed to delete S3 file {image_url}: {e}")
     
     return {"message": "Image deleted", "images": current_images}
+
+
+# ============== ACTIVITY LOGS ==============
+
+@api_router.get("/admin/activity-logs")
+async def get_activity_logs(
+    user: dict = Depends(get_current_user),
+    entity_type: Optional[str] = None,
+    action: Optional[str] = None,
+    vendor_id: Optional[str] = None,
+    limit: int = 50,
+    skip: int = 0
+):
+    """Get activity logs (admin only)"""
+    if not has_admin_access(user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    query = {}
+    if entity_type:
+        query["entity_type"] = entity_type
+    if action:
+        query["action"] = action
+    if vendor_id:
+        query["vendor_id"] = vendor_id
+    
+    logs = await db.activity_logs.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    total = await db.activity_logs.count_documents(query)
+    
+    return {"logs": logs, "total": total, "limit": limit, "skip": skip}
+
+
+@api_router.get("/admin/activity-logs/machines")
+async def get_machine_activity_logs(
+    user: dict = Depends(get_current_user),
+    vendor_id: Optional[str] = None,
+    limit: int = 50
+):
+    """Get machine-related activity logs"""
+    if not has_admin_access(user):
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "machines.view")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    query = {"entity_type": "machine"}
+    if vendor_id:
+        query["vendor_id"] = vendor_id
+    
+    logs = await db.activity_logs.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return logs
 
 
 # ============== DASHBOARD STATS ==============

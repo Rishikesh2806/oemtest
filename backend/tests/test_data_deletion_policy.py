@@ -10,7 +10,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://rfq-marketplace-test.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://manufacturing-hub-49.preview.emergentagent.com').rstrip('/')
 
 
 class TestDataDeletionRequest:

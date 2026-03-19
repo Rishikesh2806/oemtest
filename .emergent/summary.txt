@@ -1,6 +1,6 @@
 <analysis>**original_problem_statement:** The user wants to build a full-stack web application called **OEMLinker**, an AI-driven on-demand manufacturing marketplace. The core functionality involves buyers uploading RFQs with engineering drawings. An AI engine analyzes these drawings to extract technical specifications, which a smart matching algorithm uses to connect buyers with suitable manufacturing vendors based on capabilities, dimensions, and location.
 
-The platform must support a complete workflow: RFQ -> AI Analysis -> Vendor Matching -> Quotation -> Purchase Order -> Delivery -> Payment. It should handle different user roles (Buyer, Vendor, Admin) and include features like a vendor capability database, dashboards for each role, and a secure escrow payment system.
+The platform must support a complete workflow: RFQ -> AI Analysis -> Vendor Matching -> Quotation -> Purchase Order -> Delivery -> Payment. It should handle different user roles (Buyer, Vendor, Admin) and include features like a vendor capability database, dashboards for each role, and a secure escrow payment system. The user has also requested to fix image rendering issues and investigate deployment failures.
 
 **PRODUCT REQUIREMENTS:**
 -   **User Roles:** Buyer, Vendor, Admin, and custom staff roles (e.g., Sales Manager), all managed via a full RBAC system.
@@ -9,42 +9,34 @@ The platform must support a complete workflow: RFQ -> AI Analysis -> Vendor Matc
 -   **Workflow:** A complete RFQ-to-payment lifecycle management module.
 -   **Security:** Secure user authentication and granular, role-based permissions.
 -   **Commercials:** Escrow payments, platform commissions.
--   **Integrations:** WhatsApp for vendor communication, AWS S3 for file storage.
+-   **Integrations:** WhatsApp for vendor communication, AWS S3 for file storage, and a potential ElevenLabs integration for a voice agent.
 -   **WhatsApp Admin:** A system for admins to view user messages, templates, and detailed logs.
 -   **Compliance:** Meta (WhatsApp) compliant User Data Deletion policy.
 -   **Drawings Protection:** An NDA mechanism before vendors can access drawings.
+-   **Image URLs:** All image URLs must be direct S3 URLs (presigned) to prevent cross-origin issues.
 
 **User's preferred language**: English
 
 **what currently exists?**
-The OEMLinker application is a full-stack platform (React/FastAPI/MongoDB) with AWS S3 integration for file storage, JWT authentication, and a comprehensive Role-Based Access Control (RBAC) system.
+The OEMLinker application is a full-stack platform (React/FastAPI/MongoDB) with AWS S3 integration for file storage, JWT authentication, and a comprehensive Role-Based Access Control (RBAC) system. The application's frontend is highly dynamic and permission-aware, with the UI (sidebar, dashboard cards, admin tabs, action buttons) rendering conditionally based on the logged-in user's role and permissions.
 
-The application's frontend is now highly dynamic and permission-aware. The sidebar navigation, dashboard Quick Action cards, admin panel tabs (Users, Vendors, RFQs), and even in-table action buttons (Edit/Delete) are all rendered conditionally based on the granular permissions assigned to the logged-in user's role. This allows for creating custom staff roles (e.g., Sales Manager, Support Agent) with very specific access rights. The backend API endpoints have been updated to enforce these permissions.
+Key features implemented in the last session include:
+- A fix for the critical WhatsApp notification bug, now using text-based messages with magic links.
+- A new feature to search vendors by machine capabilities in the admin dashboard.
+- New machine categories (Casting, Forging).
+- A complete RBAC permission system for managing vendor machines and their images.
+- A fix for broken images by migrating all stored URLs to S3 presigned URLs.
+- A new Machines tab in the admin dashboard, which is currently a placeholder.
 
 **Last working item**:
--   Last item agent was working: The user reported that a WhatsApp notification for an RFQ with a PDF attachment () was not received on their phone (). The agent investigated and found that the custom WhatsApp template () was failing with a template did not match error from the Gupshup API. The previous method of sending a direct media file was also failing due to Meta's content moderation policies.
+-   Last item agent was working: The user requested to create dashboard tabs that match a user's assigned role permissions. The agent started by adding a new Machines tab to the Admin Dashboard, which is conditionally rendered based on the  permission. A new  React component was created as a placeholder.
 -   Status: IN PROGRESS
--   Agent Testing Done: N
--   Which testing method agent to use? backend testing agent
--   User Testing Done: Y
+-   Agent Testing Done: Y
+-   Which testing method agent to use? frontend testing agent
+-   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: WhatsApp RFQ Notification with PDF Fails (Priority: P0)**
-    -   **Description:** WhatsApp notifications to vendors containing RFQ drawing PDFs are not being delivered. This is a critical issue blocking a core workflow.
-    -   **Attempted fixes:**
-        1.  Sending a direct media message was blocked by Meta's content filter as abusive (error 368).
-        2.  Using a template message named  failed with a template did not match error (Gupshup error 4003), indicating the template is not correctly configured or named.
-    -   **Next debug checklist:**
-        1.  Modify the  function in .
-        2.  Since sending the file directly via WhatsApp is unreliable, the best-suggested fix is to change the notification message to be text-only.
-        3.  The text message should include a direct link to a page on the OEMLinker platform where the vendor can view the drawing securely after logging in (potentially using the existing magic link functionality).
-    -   **Why fix this issue and what will be achieved with the fix?** This will restore the critical vendor notification workflow, ensuring vendors are promptly alerted to new RFQs.
-    -   **Status:** IN PROGRESS
-    -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** backend
-    -   **Blocked on other issue:** None
-
--   **Issue 2: Production Login Failure with Password (Priority: P2)**
+-   **Issue 1: Production Login Failure with Password (Priority: P2)**
     -   **Description:** Password-based login fails on the production site. This is a carry-over issue.
     -   **Status:** BLOCKED (Pending user deployment of a prior fix).
     -   **Is recurring issue?** Y
@@ -52,7 +44,14 @@ The application's frontend is now highly dynamic and permission-aware. The sideb
     -   **Blocked on other issue:** None
 
 **In progress Task List**:
--   **Task 1:  Refactoring (Priority: P1)**
+-   **Task 1: Flesh out Machines Tab (Priority: P0)**
+    -   **Where to resume:** The newly created  component in  is currently an empty shell.
+    -   **What will be achieved with this?** This will complete the user's request for matching tabs by providing a functional, centralized view for admins and permitted staff to browse, search, and manage all machines in the system, independent of the vendor they belong to.
+    -   **Status:** IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?** frontend
+    -   **Blocked on something:** None
+
+-   **Task 2:  Refactoring (Priority: P1)**
     -   **Where to resume:** Continue the refactoring of the monolithic . The next logical step is to migrate authentication endpoints () into a new file: .
     -   **What will be achieved with this?** Improved code maintainability, scalability, and developer velocity.
     -   **Status:** IN PROGRESS
@@ -61,6 +60,7 @@ The application's frontend is now highly dynamic and permission-aware. The sideb
 
 **Upcoming and Future Tasks**
 **Upcoming Tasks:**
+-   **ElevenLabs Integration (P1):** The user has asked about integrating an ElevenLabs voice agent. The next step is to gather requirements (use cases, voice selection, API key) via  and then proceed with the .
 -   **Drawing Protection/NDA (P1):** Implement a click-to-accept modal or watermarking before vendors can access drawing files.
 -   **Stripe Integration (P1):** Implement the escrow payment system.
 -   **WordPress Integration (P1):** Scope and plan the integration of WordPress for content management.
@@ -75,15 +75,12 @@ The application's frontend is now highly dynamic and permission-aware. The sideb
 -   Localization of WhatsApp flows into more regional Indian languages.
 
 **Completed work in this session**
--   **Granular Permission-Based UI (DONE):** A major effort was completed to make the entire application UI respect the granular permissions defined in the RBAC system.
-    -   **Dynamic Sidebar:** The main navigation menu is now dynamically generated, showing only the links a user is permitted to access.
-    -   **Dynamic Admin Tabs:** Tabs within the Admin Dashboard (e.g., Users, Vendors, RFQs) are now hidden if a user lacks the necessary  permission.
-    -   **Dynamic Dashboard Actions:** Quick Action cards on the dashboard are filtered based on permissions, ensuring users only see actions they can perform.
-    -   **Dynamic Table Actions:** In-table Actions columns (with Edit/Delete buttons) are now conditionally rendered based on the user's  and  permissions.
--   **Staff User Workflow (DONE):** Implemented a complete workflow for staff users who have a  but no base role. This included fixing login redirects, ensuring session persistence on refresh, and routing them to a unified admin dashboard.
--   **Backend Permission Enforcement (DONE):** Refactored numerous admin API endpoints in  to correctly check for either an admin role or a  with the appropriate permissions, allowing staff users to access necessary data.
--   **Role Selection in Admin Panel (DONE):** The initial task of adding and testing user creation/editing with base and custom roles was completed and verified by the testing agent.
--   **None Base Role (DONE):** Added None as a valid option for a user's base role, enabling the creation of purely permission-based staff accounts.
+-   **WhatsApp RFQ Notification Fix (DONE):** Resolved the critical P0 bug by switching from failing PDF attachments to text-only messages containing secure, one-click magic login links. Updated all user-facing notification links to use this system.
+-   **Image URL & Deployment Fix (DONE):** Diagnosed and fixed broken images and deployment 404 errors by migrating all stored URLs from legacy proxy paths to secure, expiring S3 presigned URLs. Created a migration endpoint to fix existing data.
+-   **Vendor Search by Machine (DONE):** Implemented a new backend endpoint and a corresponding UI in the admin dashboard to allow searching for vendors by machine capabilities (category, type, dimensions, etc.).
+-   **Machine Category Expansion (DONE):** Added Casting and Forging categories, each with 9 specific types and relevant dimension fields, to the machine data model.
+-   **Machine Management Permissions (DONE):** Introduced a Machine Management RBAC module (, , , , ) and secured all relevant backend endpoints and frontend UI components. Admins or permitted staff can now manage machines on behalf of vendors.
+-   **Dynamic Admin Dashboard Tabs (DONE):** Added a new Machines tab that is only visible to users with the  permission, furthering the goal of a fully permission-driven UI.
 
 **Earlier issues found/mentioned but not fixed**
 -   The **Made with Emergent badge** cannot be removed via code in the preview environment as it's a platform limitation.
@@ -98,76 +95,76 @@ The application's frontend is now highly dynamic and permission-aware. The sideb
 -   **Backend:** FastAPI ( monolith).
 -   **Frontend:** React, Shadcn UI, Axios.
 -   **Database:** MongoDB.
--   **File Storage:** AWS S3.
--   **Security:** JWT, Magic Links, and a highly granular **Role-Based Access Control (RBAC)** system that dynamically controls the entire frontend UI.
+-   **File Storage:** AWS S3, now using **presigned URLs** for secure, temporary access to private objects.
+-   **Security:** JWT, Magic Links, and a highly granular **Role-Based Access Control (RBAC)** system.
 
 **key DB schema**
--   **users:** Contains  (e.g., admin, buyer, or now ) and  (e.g., sales_manager) fields, which are central to the new permission system.
--   **roles:** Stores role definitions and their associated permissions (e.g., , ).
+-   **machines:** The  array field now stores temporary S3 presigned URLs instead of persistent public or relative URLs.
 
 **changes in tech stack**
 -   None.
 
 **All files of reference**
--   : Heavily modified to add permission checks (), update user data responses to include , and modify the WhatsApp notification logic.
--   : Core file for the dynamic UI. Contains the logic for filtering dashboard actions and sidebar navigation items based on user permissions.
--   : The central hub for the admin panel. Modified extensively to handle dynamic tab rendering and pass permission props down to child components.
--   : Contains the new dynamic sidebar logic.
--   : Updated to correctly route staff users with custom roles.
--   : Example of a tab component modified to conditionally render its Actions column. (,  were also modified).
--   : Modified to redirect staff users correctly.
--   : Modified to handle  during login and session restoration.
+-   : Heavily modified to add new endpoints (machine search, image migration), update WhatsApp notifications to use magic links, secure endpoints with new RBAC permissions, and fix legacy URL routing.
+-   : Heavily modified to add a new Machines tab and component, implement the vendor search UI, and add a full machine management UI (add/edit/delete images) within the vendor profile view, all controlled by new permissions.
+-   : Modified to generate presigned URLs and configure the S3 client with a regional endpoint.
+-   : Modified to add the Machine Management permission module and update default roles.
+-   : Modified to add Casting and Forging categories.
 
 **Areas that need refactoring**:
--   : This remains the highest priority for refactoring. The file has grown even larger with new permission logic, making it critical to break it down into modular route files.
+-   : This file is now over 3,500 lines and contains the logic and JSX for at least five separate tabs. It urgently needs to be broken down. Each tab component (, , , , etc.) should be extracted into its own file (e.g., ).
+-   : This remains the highest priority for refactoring. The file has grown even larger and is difficult to maintain.
 
 **key api endpoints**
--   : Modified to return  in the user data payload.
--   : Modified to return  to ensure session persistence on page refresh.
--   All admin endpoints under : Many were updated to use a new  helper function instead of a simple role check, enabling staff access.
--   : The endpoint used to trigger RFQ notifications, currently under investigation.
+-   : **NEW**. Searches vendors by machine capabilities.
+-   , , , : **UPDATED** to check for  permissions.
+-   , : **NEW**. Admin endpoints to manage machine images.
+-   : **NEW**. An admin utility to regenerate all presigned URLs for images.
+-   : **UPDATED** to correctly handle S3 keys that may incorrectly contain the bucket name.
+-   : **NEW**. A legacy endpoint to gracefully return a 404 for old, non-existent image paths.
 
 **Critical Info for New Agent**
--   **Your immediate priority (P0) is to fix the WhatsApp RFQ notification bug.** The current direction is to abandon sending the file directly and instead send a text message with a secure link to view the drawing on the platform.
--   The entire application's UI is now driven by permissions. When adding new features or fixing bugs, always check the  hook and the relevant components to ensure UI elements are displayed conditionally based on the correct permission strings.
--   Staff users (with an empty base role and a ) are a core concept. They should be redirected to and operate within the , where their view is filtered by their specific permissions. The  is now deprecated.
--   When testing, use the different custom roles (Sales Manager, Vendor Manager, Regional Manager, Support Agent) to verify that the permission system is working as expected.
+-   **Your immediate priority (P0) is to implement the  component.** It has been added to the dashboard UI but is currently an empty placeholder. It needs to fetch and display all machines from  and include search, filter, and management actions.
+-   **Refactoring is critical.** The  file is extremely large and difficult to work with. Before adding more features, consider breaking out the tab components into their own files. Similarly, the  monolith needs to be broken down.
+-   The user has requested **ElevenLabs integration**. You should use  to confirm the use case and gather requirements before proceeding.
+-   Image URLs are now **presigned and temporary**. When developing UI that displays images, be aware that the URLs will expire (currently after 7 days). For testing, you may need to use the  endpoint to refresh them.
 
 **documents and test reports created in this job**
--   
 -    (updated)
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **user:**  (Status: **In Progress**, led to current bug).
-2.  **user:**  (Status: **Completed**, table actions are now permission-based).
-3.  **user:**  (Status: **Completed**, dashboard action cards were made more specific).
-4.  **user:**  (Status: **Completed**, dashboard cards now filter based on permissions).
-5.  **user:**  (Status: **Completed**, staff sidebar was simplified).
-6.  **user:**  (Status: **Completed**, dashboard action cards were made dynamic).
-7.  **user:**  (Status: **Completed**, removed duplicate Staff Dashboard link for staff users).
-8.  **user:**  (Status: **Completed**, Admin Dashboard tabs are now hidden based on permissions).
-9.  **user:**  (Status: **Completed**, sidebar is now strictly permission-based).
-10. **user:**  (Status: **Completed**, fixed a regression where admin sidebar was being filtered incorrectly).
+1.  **user:**  (Status: **In Progress**. The  component was created as a placeholder).
+2.  **user:**  (Status: **Completed**).
+3.  **user:**  (Status: **Completed**).
+4.  **user:**  (Status: **Completed**. Agent analyzed logs and fixed underlying URL issues).
+5.  **user:**  (Status: **Completed**. Migrated all image URLs to S3 presigned URLs).
+6.  **user:**  (Status: **Pending**. Agent asked for clarification but was interrupted by a higher-priority bug fix).
+7.  **user:**  (Status: **Completed**).
+8.  **user:**  (Status: **Completed**. Agent tested the API and fixed a frontend dropdown issue).
+9.  **user:**  (Status: **Completed**).
+10. **user:**  (Status: **Completed**).
 
 **Project Health Check:**
 -   **Broken:**
-    -   WhatsApp RFQ notifications with drawings are failing, which is a critical workflow.
+    -   None. The critical WhatsApp and image loading issues were resolved.
 -   **Mocked:**
     -   Stripe payment integration is planned but not implemented.
     -   WordPress integration is planned but not implemented.
+    -   ElevenLabs integration is pending requirements.
 
 **3rd Party Integrations**
 -   **OpenAI GPT:** Powers AI analysis. Uses Emergent LLM Key.
 -   **Resend:** For transactional emails. Requires user-provided key.
--   **Gupshup:** For WhatsApp Business API. Requires user-provided key. (This is the source of the current P0 issue).
+-   **Gupshup:** For WhatsApp Business API. Requires user-provided key.
 -   **GSTIN Check API:** For vendor data verification. Requires user-provided key.
 -   **AWS S3:** For persistent file storage. Fully integrated.
+-   **ElevenLabs:** **(Potential)** User has expressed interest. Requires user API key and further scoping.
 
 **Testing status**
--   Testing agent used after significant changes: YES, used early in the session to verify the initial role-selection feature.
+-   Testing agent used after significant changes: NO
 -   Troubleshoot agent used after agent stuck in loop: NO
 -   Test files created: None
--   Known regressions: A temporary regression where the admin sidebar was incorrectly filtered was introduced and then fixed.
+-   Known regressions: None
 
 **Credentials to test flow:**
 -   **Admin:** Email: , Password: 
@@ -176,4 +173,6 @@ The application's frontend is now highly dynamic and permission-aware. The sideb
 -   **Staff Users:** Create new users and assign custom roles like , , , or  to test the permission system.
 
 **What agent forgot to execute**
--   The agent correctly identified the WhatsApp issue but has not yet implemented the fallback solution (sending a text-only message with a link). This is the immediate next step.</analysis>
+-   The agent did not complete the implementation of the . It exists but is not functional.
+-   The agent did not follow up on the user's request for **ElevenLabs integration** after being sidetracked by the image URL bug. This needs to be revisited.
+-   The agent identified numerous linting warnings in  but did not fix them. While non-blocking, they should be addressed for code quality.</analysis>

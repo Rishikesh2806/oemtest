@@ -9,7 +9,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "../components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { toast } from "sonner";
 import { 
@@ -23,11 +23,12 @@ const TAB_CONFIG = {
   overview: { label: "Overview", icon: Package, permissions: [] },
   users: { label: "Users", icon: Users, permissions: ['users.view'] },
   vendors: { label: "Vendors", icon: Building2, permissions: ['vendors.view'] },
+  machines: { label: "Machines", icon: Wrench, permissions: ['machines.view'] },
   rfqs: { label: "RFQs", icon: FileText, permissions: ['rfqs.view'] },
   quotes: { label: "Quotes", icon: DollarSign, permissions: ['quotes.view'] },
   orders: { label: "Orders", icon: Package, permissions: ['orders.view'] },
-  drawings: { label: "Drawings", icon: Wrench, permissions: ['rfqs.view'] },
-  ndas: { label: "NDAs", icon: FileCheck, permissions: ['rfqs.view'] },
+  drawings: { label: "Drawings", icon: FileCheck, permissions: ['rfqs.view'] },
+  ndas: { label: "NDAs", icon: FileText, permissions: ['rfqs.view'] },
 };
 
 // Tab components
@@ -2607,6 +2608,532 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
   );
 };
 
+// ============== MACHINES TAB ==============
+const MachinesTab = ({ machines, loading, onRefresh, vendors, canCreate = true, canEdit = true, canDelete = true, canManageImages = true }) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [vendorFilter, setVendorFilter] = useState("all");
+  const [machineCategories, setMachineCategories] = useState({});
+  const [editMachine, setEditMachine] = useState(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [machineForm, setMachineForm] = useState({});
+  const [machineImages, setMachineImages] = useState([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [saving, setSaving] = useState(false);
+  
+  // Load categories
+  useEffect(() => {
+    const loadCategories = async () => {
+      try {
+        const res = await api.get("/machine-categories");
+        setMachineCategories(res.data);
+      } catch (error) {
+        console.error("Failed to load categories");
+      }
+    };
+    loadCategories();
+  }, []);
+  
+  // Get unique categories from machines
+  const uniqueCategories = [...new Set(machines.map(m => m.machine_category || 'Uncategorized').filter(Boolean))];
+  
+  // Get machine types for selected category
+  const getMachineTypes = () => {
+    if (!machineForm.machine_category || !machineCategories[machineForm.machine_category]) {
+      return [];
+    }
+    return machineCategories[machineForm.machine_category].types || [];
+  };
+  
+  // Get dimension fields for selected category
+  const getDimensionFields = () => {
+    if (!machineForm.machine_category || !machineCategories[machineForm.machine_category]) {
+      return [];
+    }
+    return machineCategories[machineForm.machine_category].dimension_fields || [];
+  };
+  
+  // Filter machines
+  const filteredMachines = machines.filter(m => {
+    const matchesSearch = !searchTerm || 
+      m.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.machine_type?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      m.model?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = categoryFilter === "all" || m.machine_category === categoryFilter;
+    const matchesVendor = vendorFilter === "all" || m.vendor_id === vendorFilter;
+    return matchesSearch && matchesCategory && matchesVendor;
+  });
+  
+  // Reset form
+  const resetForm = () => {
+    setMachineForm({
+      vendor_id: "",
+      name: "",
+      machine_category: "",
+      machine_type: "",
+      brand: "",
+      model: "",
+      tolerance: 0.01,
+      max_x: 0,
+      max_y: 0,
+      max_z: 0,
+      max_diameter: 0,
+      max_length: 0,
+      materials: ""
+    });
+    setMachineImages([]);
+  };
+  
+  // Open create dialog
+  const openCreateDialog = () => {
+    setEditMachine(null);
+    resetForm();
+    setCreateDialogOpen(true);
+  };
+  
+  // Open edit dialog
+  const openEditDialog = (machine) => {
+    setEditMachine(machine);
+    setMachineForm({
+      name: machine.name || machine.model || "",
+      machine_category: machine.machine_category || "",
+      machine_type: machine.machine_type || "",
+      brand: machine.brand || "",
+      model: machine.model || "",
+      tolerance: machine.tolerance || 0.01,
+      max_x: machine.max_x || 0,
+      max_y: machine.max_y || 0,
+      max_z: machine.max_z || 0,
+      max_diameter: machine.max_diameter || 0,
+      max_length: machine.max_length || 0,
+      materials: (machine.materials || machine.materials_supported)?.join(", ") || ""
+    });
+    setMachineImages(machine.images || []);
+    setEditDialogOpen(true);
+  };
+  
+  // Save machine (update)
+  const saveMachine = async () => {
+    if (!editMachine) return;
+    setSaving(true);
+    try {
+      const payload = {
+        ...machineForm,
+        materials: machineForm.materials ? machineForm.materials.split(",").map(m => m.trim()) : []
+      };
+      await api.put(`/admin/machines/${editMachine.machine_id}`, payload);
+      toast.success("Machine updated");
+      setEditDialogOpen(false);
+      onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to update machine");
+    } finally {
+      setSaving(false);
+    }
+  };
+  
+  // Create new machine
+  const createMachine = async () => {
+    if (!machineForm.vendor_id) {
+      toast.error("Please select a vendor");
+      return;
+    }
+    if (!machineForm.machine_category) {
+      toast.error("Please select a machine category");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        ...machineForm,
+        materials: machineForm.materials ? machineForm.materials.split(",").map(m => m.trim()) : []
+      };
+      await api.post("/admin/machines", payload);
+      toast.success("Machine created successfully");
+      setCreateDialogOpen(false);
+      resetForm();
+      onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to create machine");
+    } finally {
+      setSaving(false);
+    }
+  };
+  
+  // Delete machine
+  const deleteMachine = async (machineId) => {
+    if (!confirm("Delete this machine?")) return;
+    try {
+      await api.delete(`/admin/machines/${machineId}`);
+      toast.success("Machine deleted");
+      onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to delete machine");
+    }
+  };
+  
+  // Upload image
+  const uploadMachineImage = async (machineId, file) => {
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await api.post(`/admin/machines/${machineId}/images`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setMachineImages(res.data.images || []);
+      toast.success("Image uploaded");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to upload image");
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+  
+  // Delete image
+  const deleteMachineImage = async (machineId, imageUrl) => {
+    try {
+      const res = await api.delete(`/admin/machines/${machineId}/images`, {
+        params: { image_url: imageUrl }
+      });
+      setMachineImages(res.data.images || []);
+      toast.success("Image deleted");
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to delete image");
+    }
+  };
+  
+  // Get vendor name by ID
+  const getVendorName = (vendorId) => {
+    const vendor = vendors?.find(v => v.vendor_id === vendorId);
+    return vendor?.company_name || vendorId || "Unknown";
+  };
+  
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg font-heading">All Machines ({machines.length})</CardTitle>
+          <div className="flex gap-2">
+            {canCreate && (
+              <Button size="sm" className="bg-orange-600 hover:bg-orange-700" onClick={openCreateDialog} data-testid="machines-tab-add-btn">
+                <Plus className="w-4 h-4 mr-1" /> Add Machine
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={onRefresh}>
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {/* Filters */}
+        <div className="flex gap-4 mb-4 flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <Input
+              placeholder="Search machines..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-9"
+            />
+          </div>
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-48 h-9">
+              <SelectValue placeholder="All Categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {uniqueCategories.map(cat => (
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={vendorFilter} onValueChange={setVendorFilter}>
+            <SelectTrigger className="w-48 h-9">
+              <SelectValue placeholder="All Vendors" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Vendors</SelectItem>
+              {vendors?.map(v => (
+                <SelectItem key={v.vendor_id} value={v.vendor_id}>{v.company_name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        
+        {/* Machines Table */}
+        {loading ? (
+          <div className="text-center py-8"><Loader2 className="w-8 h-8 animate-spin mx-auto text-orange-600" /></div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-50 border-b">
+                <tr>
+                  <th className="text-left p-3 text-xs font-bold uppercase text-slate-600">Machine</th>
+                  <th className="text-left p-3 text-xs font-bold uppercase text-slate-600">Vendor</th>
+                  <th className="text-left p-3 text-xs font-bold uppercase text-slate-600">Category</th>
+                  <th className="text-left p-3 text-xs font-bold uppercase text-slate-600">Specs</th>
+                  <th className="text-left p-3 text-xs font-bold uppercase text-slate-600">Images</th>
+                  {(canEdit || canDelete) && (
+                    <th className="text-right p-3 text-xs font-bold uppercase text-slate-600">Actions</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {filteredMachines.map((machine) => (
+                  <tr key={machine.machine_id} className="hover:bg-slate-50">
+                    <td className="p-3">
+                      <div>
+                        <p className="font-medium text-slate-900">{machine.name || machine.model || machine.machine_type}</p>
+                        <p className="text-xs text-slate-500">{machine.brand} {machine.model}</p>
+                      </div>
+                    </td>
+                    <td className="p-3 text-sm">{getVendorName(machine.vendor_id)}</td>
+                    <td className="p-3">
+                      <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">
+                        {machine.machine_category || machine.machine_type || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="p-3 text-xs text-slate-500">
+                      {machine.max_x || machine.max_diameter ? (
+                        <span>
+                          {machine.max_x ? `${machine.max_x}×${machine.max_y}×${machine.max_z}mm` : ''}
+                          {machine.max_diameter ? ` Ø${machine.max_diameter}mm` : ''}
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td className="p-3">
+                      <span className="text-sm">{machine.images?.length || 0}</span>
+                    </td>
+                    {(canEdit || canDelete) && (
+                      <td className="p-3 text-right">
+                        <div className="flex gap-1 justify-end">
+                          {canEdit && (
+                            <Button variant="ghost" size="sm" onClick={() => openEditDialog(machine)}>
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button variant="ghost" size="sm" className="text-red-600" onClick={() => deleteMachine(machine.machine_id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {filteredMachines.length === 0 && (
+              <div className="text-center py-8 text-slate-500">No machines found</div>
+            )}
+          </div>
+        )}
+        
+        {/* Edit Machine Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Edit Machine</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-4 py-4">
+              <div>
+                <Label>Category</Label>
+                <Select value={machineForm.machine_category || ""} onValueChange={(v) => setMachineForm(f => ({...f, machine_category: v}))}>
+                  <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(machineCategories).sort().map(cat => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Type</Label>
+                <Select value={machineForm.machine_type || ""} onValueChange={(v) => setMachineForm(f => ({...f, machine_type: v}))}>
+                  <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+                  <SelectContent>
+                    {(machineCategories[machineForm.machine_category]?.types || []).map(t => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Brand</Label>
+                <Input value={machineForm.brand || ""} onChange={(e) => setMachineForm(f => ({...f, brand: e.target.value}))} />
+              </div>
+              <div>
+                <Label>Model</Label>
+                <Input value={machineForm.model || ""} onChange={(e) => setMachineForm(f => ({...f, model: e.target.value}))} />
+              </div>
+              <div>
+                <Label>Tolerance (mm)</Label>
+                <Input type="number" step="0.001" value={machineForm.tolerance || 0} onChange={(e) => setMachineForm(f => ({...f, tolerance: parseFloat(e.target.value)}))} />
+              </div>
+              <div>
+                <Label>Max Diameter (mm)</Label>
+                <Input type="number" value={machineForm.max_diameter || 0} onChange={(e) => setMachineForm(f => ({...f, max_diameter: parseFloat(e.target.value)}))} />
+              </div>
+              <div className="col-span-2">
+                <Label>Materials (comma-separated)</Label>
+                <Input value={machineForm.materials || ""} onChange={(e) => setMachineForm(f => ({...f, materials: e.target.value}))} placeholder="Steel, Aluminum, Titanium" />
+              </div>
+              
+              {/* Images Section */}
+              {canManageImages && editMachine && (
+                <div className="col-span-2 border-t pt-4 mt-2">
+                  <Label className="flex items-center gap-2 mb-3">
+                    <Camera className="w-4 h-4 text-orange-600" />
+                    Machine Images ({machineImages.length})
+                  </Label>
+                  {machineImages.length > 0 && (
+                    <div className="grid grid-cols-4 gap-2 mb-3">
+                      {machineImages.map((img, idx) => (
+                        <div key={idx} className="relative group rounded-lg overflow-hidden border bg-slate-50">
+                          <img src={img} alt={`Machine ${idx + 1}`} className="w-full h-16 object-cover" onError={(e) => { e.target.src = '/placeholder.png'; }} />
+                          <button onClick={() => deleteMachineImage(editMachine.machine_id, img)} className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                            <XCircle className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input type="file" id="machine-img-upload" accept="image/*" className="hidden" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) { uploadMachineImage(editMachine.machine_id, file); e.target.value = ''; }
+                    }} />
+                    <Button type="button" variant="outline" size="sm" disabled={uploadingImage} onClick={() => document.getElementById('machine-img-upload').click()} className="w-full">
+                      {uploadingImage ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Uploading...</> : <><Upload className="w-4 h-4 mr-2" />Upload Image</>}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
+              <Button onClick={saveMachine} disabled={saving} className="bg-orange-600 hover:bg-orange-700">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        
+        {/* Create Machine Dialog */}
+        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Machine</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-2 gap-4 py-4">
+              {/* Vendor Selection - Required */}
+              <div className="col-span-2">
+                <Label className="text-orange-600 font-medium">Select Vendor *</Label>
+                <Select value={machineForm.vendor_id || ""} onValueChange={(v) => setMachineForm(f => ({...f, vendor_id: v}))}>
+                  <SelectTrigger className="border-orange-200 focus:ring-orange-500"><SelectValue placeholder="Select vendor first" /></SelectTrigger>
+                  <SelectContent>
+                    {vendors?.filter(v => v.is_approved).map(v => (
+                      <SelectItem key={v.vendor_id} value={v.vendor_id}>{v.company_name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Machine Name */}
+              <div className="col-span-2">
+                <Label>Machine Name</Label>
+                <Input value={machineForm.name || ""} onChange={(e) => setMachineForm(f => ({...f, name: e.target.value}))} placeholder="e.g. Haas VF-2SS" />
+              </div>
+              
+              {/* Category */}
+              <div className="col-span-2">
+                <Label className="text-orange-600 font-medium">Machine Category *</Label>
+                <Select value={machineForm.machine_category || ""} onValueChange={(v) => setMachineForm(f => ({...f, machine_category: v, machine_type: ""}))}>
+                  <SelectTrigger className="border-orange-200 focus:ring-orange-500"><SelectValue placeholder="Select category" /></SelectTrigger>
+                  <SelectContent>
+                    {Object.keys(machineCategories).sort().map(cat => (
+                      <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Type */}
+              <div>
+                <Label>Machine Type</Label>
+                <Select value={machineForm.machine_type || ""} onValueChange={(v) => setMachineForm(f => ({...f, machine_type: v}))} disabled={!machineForm.machine_category}>
+                  <SelectTrigger><SelectValue placeholder={machineForm.machine_category ? "Select type" : "Select category first"} /></SelectTrigger>
+                  <SelectContent>
+                    {getMachineTypes().map(t => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Brand */}
+              <div>
+                <Label>Brand</Label>
+                <Input value={machineForm.brand || ""} onChange={(e) => setMachineForm(f => ({...f, brand: e.target.value}))} placeholder="e.g. Haas, DMG Mori" />
+              </div>
+              
+              {/* Model */}
+              <div>
+                <Label>Model</Label>
+                <Input value={machineForm.model || ""} onChange={(e) => setMachineForm(f => ({...f, model: e.target.value}))} placeholder="e.g. VF-2SS" />
+              </div>
+              
+              {/* Tolerance */}
+              <div>
+                <Label>Tolerance (mm)</Label>
+                <Input type="number" step="0.001" value={machineForm.tolerance || 0.01} onChange={(e) => setMachineForm(f => ({...f, tolerance: parseFloat(e.target.value) || 0}))} />
+              </div>
+              
+              {/* Dynamic Dimension Fields Based on Category */}
+              {machineForm.machine_category && getDimensionFields().length > 0 && (
+                <>
+                  <div className="col-span-2 border-t pt-4 mt-2">
+                    <p className="text-sm font-medium text-slate-700 mb-3">{machineForm.machine_category} Dimensions</p>
+                  </div>
+                  {getDimensionFields().map(field => (
+                    <div key={field.key}>
+                      <Label>{field.label}</Label>
+                      <Input 
+                        type="number" 
+                        step={field.key.includes("angle") ? "0.1" : "1"}
+                        value={machineForm[field.key] || 0} 
+                        onChange={(e) => setMachineForm(f => ({...f, [field.key]: parseFloat(e.target.value) || 0}))} 
+                      />
+                    </div>
+                  ))}
+                </>
+              )}
+              
+              {/* Materials */}
+              <div className="col-span-2 border-t pt-4 mt-2">
+                <Label>Materials (comma-separated)</Label>
+                <Input value={machineForm.materials || ""} onChange={(e) => setMachineForm(f => ({...f, materials: e.target.value}))} placeholder="Steel, Aluminum, Titanium, Brass" />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+              <Button onClick={createMachine} disabled={saving || !machineForm.vendor_id || !machineForm.machine_category} className="bg-orange-600 hover:bg-orange-700">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                Create Machine
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
+  );
+};
+
 // ============== MAIN ADMIN DASHBOARD ==============
 const AdminDashboard = () => {
   const { user } = useAuth();
@@ -2652,6 +3179,7 @@ const AdminDashboard = () => {
   const [drawings, setDrawings] = useState([]);
   const [ndas, setNdas] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [allMachines, setAllMachines] = useState([]);
 
   // Update tab when URL changes
   useEffect(() => {
@@ -2751,6 +3279,15 @@ const AdminDashboard = () => {
     }
   };
 
+  const fetchAllMachines = async () => {
+    try {
+      const res = await api.get("/admin/machines");
+      setAllMachines(res.data);
+    } catch (error) {
+      toast.error("Failed to load machines");
+    }
+  };
+
   // Tab change handler - fetch data for tab
   useEffect(() => {
     if (activeTab === "users" && users.length === 0) fetchUsers();
@@ -2764,6 +3301,10 @@ const AdminDashboard = () => {
       if (vendors.length === 0) fetchVendors();
     }
     if (activeTab === "vendors" && vendors.length === 0) fetchVendors();
+    if (activeTab === "machines") {
+      if (allMachines.length === 0) fetchAllMachines();
+      if (vendors.length === 0) fetchVendors();
+    }
   }, [activeTab]);
 
   // Action handlers
@@ -3012,6 +3553,15 @@ const AdminDashboard = () => {
                 count={stats?.total_vendors}
               />
             )}
+            {permittedTabs.includes('machines') && (
+              <TabButton 
+                active={activeTab === "machines"} 
+                onClick={() => handleTabChange("machines")} 
+                icon={Wrench} 
+                label="Machines"
+                count={allMachines.length || stats?.total_machines}
+              />
+            )}
             {permittedTabs.includes('rfqs') && (
               <TabButton 
                 active={activeTab === "rfqs"} 
@@ -3102,6 +3652,18 @@ const AdminDashboard = () => {
             canEditMachines={isAdmin || hasAnyPermission(['machines.edit'])}
             canDeleteMachines={isAdmin || hasAnyPermission(['machines.delete'])}
             canManageMachineImages={isAdmin || hasAnyPermission(['machines.manage_images'])}
+          />
+        )}
+        {activeTab === "machines" && permittedTabs.includes('machines') && (
+          <MachinesTab
+            machines={allMachines}
+            loading={loading}
+            onRefresh={fetchAllMachines}
+            vendors={vendors}
+            canCreate={isAdmin || hasAnyPermission(['machines.create'])}
+            canEdit={isAdmin || hasAnyPermission(['machines.edit'])}
+            canDelete={isAdmin || hasAnyPermission(['machines.delete'])}
+            canManageImages={isAdmin || hasAnyPermission(['machines.manage_images'])}
           />
         )}
         {activeTab === "rfqs" && permittedTabs.includes('rfqs') && (
