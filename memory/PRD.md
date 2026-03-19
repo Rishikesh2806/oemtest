@@ -929,6 +929,37 @@ GUPSHUP_APP_ID=escrow-payments-2  # Required for live templates
 }
 ```
 
+## Admin RFQ Details View & PDF Download (Implemented Mar 19, 2026)
+
+### Overview
+Admin users and permitted staff can view full RFQ details and download RFQs as professionally formatted PDFs.
+
+### Features:
+- **View Button (Eye icon)** in RFQs tab Actions column
+- **RFQ Details Dialog** with comprehensive information:
+  - Header: RFQ ID, Status, Created date
+  - Buyer Details: Name, Company, Email, Phone, Location
+  - RFQ Information: Part Name, Material, Quantity, Tolerance, Surface Finish, Deadline, Delivery Location
+  - Description/Specifications
+  - Technical Analysis (AI): Recommended Processes, Dimensions, Part Geometry, Complexity Score
+  - Attachments/Drawings with download links
+  - Matched Vendors list
+  - Quotes Received with vendor info and pricing
+- **Download PDF Button** generates A4 PDF with:
+  - OEMLinker branding header
+  - RFQ ID bar with status and date
+  - Buyer details section
+  - RFQ details section
+  - Technical specifications
+  - Attachments list with links
+  - Professional footer
+
+### Backend Endpoints:
+- `GET /api/admin/rfqs/{rfqId}` - Enhanced to return buyer_info, drawings, quotes, matched_vendors_details, ai_summary
+- `GET /api/admin/rfqs/{rfqId}/pdf` - Generates PDF using reportlab, returns as downloadable file
+
+### Test Report: /app/test_reports/iteration_29.json (100% pass - 18 backend tests + full UI verification)
+
 ## Admin RFQ-Vendor Manual Matching (Implemented Mar 19, 2026)
 
 ### Overview
