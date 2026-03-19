@@ -1371,28 +1371,77 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
                   <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
                     <Camera className="w-4 h-4 text-slate-400" /> Attachments ({viewRFQData.drawings.length})
                   </h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    {viewRFQData.drawings.map((drawing, i) => (
-                      <div key={i} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border">
-                        <div className="w-10 h-10 bg-orange-100 rounded flex items-center justify-center">
-                          <FileText className="w-5 h-5 text-orange-600" />
+                  <div className="space-y-3">
+                    {viewRFQData.drawings.map((drawing, i) => {
+                      const isImage = drawing.is_image || drawing.file_type?.startsWith('image/');
+                      const isPdf = drawing.is_pdf || drawing.file_type === 'application/pdf';
+                      const fileUrl = drawing.file_url || drawing.view_url || drawing.s3_url;
+                      
+                      return (
+                        <div key={i} className="bg-slate-50 rounded-lg border overflow-hidden">
+                          {/* Preview for images */}
+                          {isImage && fileUrl && (
+                            <div className="bg-slate-100 p-2 flex justify-center border-b">
+                              <img 
+                                src={fileUrl} 
+                                alt={drawing.filename || `Drawing ${i + 1}`}
+                                className="max-h-40 max-w-full object-contain rounded"
+                                onError={(e) => { e.target.style.display = 'none'; }}
+                              />
+                            </div>
+                          )}
+                          
+                          {/* Preview for PDFs using iframe */}
+                          {isPdf && fileUrl && (
+                            <div className="bg-slate-100 p-2 border-b">
+                              <iframe 
+                                src={fileUrl} 
+                                className="w-full h-48 border rounded"
+                                title={drawing.filename || `Drawing ${i + 1}`}
+                              />
+                            </div>
+                          )}
+                          
+                          {/* File info and actions */}
+                          <div className="flex items-center gap-3 p-3">
+                            <div className="w-10 h-10 bg-orange-100 rounded flex items-center justify-center flex-shrink-0">
+                              <FileText className="w-5 h-5 text-orange-600" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{drawing.filename || drawing.original_filename || `Drawing ${i + 1}`}</p>
+                              <p className="text-xs text-slate-500">
+                                {drawing.file_type || 'File'}
+                                {drawing.file_size && ` • ${(drawing.file_size / 1024).toFixed(1)} KB`}
+                              </p>
+                            </div>
+                            {fileUrl && (
+                              <div className="flex gap-2">
+                                <a 
+                                  href={fileUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded text-sm flex items-center gap-1"
+                                  data-testid={`view-drawing-${i}`}
+                                >
+                                  <Eye className="w-3.5 h-3.5" /> View
+                                </a>
+                                <a 
+                                  href={fileUrl} 
+                                  download={drawing.filename || `drawing_${i + 1}`}
+                                  className="px-3 py-1.5 bg-orange-50 text-orange-600 hover:bg-orange-100 rounded text-sm flex items-center gap-1"
+                                  data-testid={`download-drawing-${i}`}
+                                >
+                                  <FileCheck className="w-3.5 h-3.5" /> Download
+                                </a>
+                              </div>
+                            )}
+                            {!fileUrl && (
+                              <span className="text-xs text-red-500">File not available</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{drawing.filename || drawing.original_filename || `Drawing ${i + 1}`}</p>
-                          <p className="text-xs text-slate-500">{drawing.file_type || 'File'}</p>
-                        </div>
-                        {drawing.file_url && (
-                          <a 
-                            href={drawing.file_url} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-orange-600 hover:text-orange-700"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </a>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

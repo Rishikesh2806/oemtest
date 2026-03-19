@@ -1,0 +1,68 @@
+{
+  "summary": "Successfully tested RFQ Drawing URL access and PDF layout formatting. All 20 backend API tests pass (100%). Frontend testing confirms View and Download buttons use presigned S3 URLs, PDF generation produces properly formatted multi-page PDFs with page numbers and all required sections.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "RFQ Details Dialog",
+        "issues": ["Console warning: Missing Description or aria-describedby for DialogContent - accessibility improvement recommended but not blocking"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_drawing_urls_pdf_layout.py",
+    "/app/test_reports/pytest/drawing_urls_pdf_layout_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Drawing URLs correctly use get_presigned_url() to generate fresh S3 presigned URLs (valid 1 hour for API, 24 hours for PDF)",
+    "file_url, view_url, download_url fields all populated with same presigned URL",
+    "is_previewable, is_image, is_pdf flags correctly determine file type",
+    "PDF generation uses reportlab with proper A4 layout, page numbers in footer, HRFlowable dividers",
+    "PDF sections properly structured: Header, RFQ Info Bar, Buyer Details, RFQ Details, Description, Technical Analysis, Attachments",
+    "Long text wraps properly within PDF table cells",
+    "Frontend View button opens in new tab (target='_blank'), Download button has download attribute with filename"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_drawing_urls_pdf_layout.py"
+  ],
+  "success_rate": {
+    "backend": "100% - 20/20 tests passed",
+    "frontend": "100% - All UI features verified working"
+  },
+  "test_credentials": {
+    "admin_email": "admin@offoadex.com",
+    "admin_password": "admin123"
+  },
+  "seed_data_creation": "Test RFQ rfq_932de773568a used (has 1 drawing: roll crusher part 1.pdf)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Drawing URL and PDF layout features fully functional. GET /api/admin/rfqs/{rfqId} returns drawings with presigned S3 URLs containing file_url, view_url, download_url (all same presigned URL) plus is_previewable, is_image, is_pdf flags. Frontend shows View button (opens in new tab) and Download button (triggers download with correct filename). PDF endpoint generates properly formatted multi-page A4 PDF with: page numbers in footer, OEMLinker branding header, structured sections (Buyer Details, RFQ Details, Description, Technical Analysis, Attachments), proper text wrapping, and clickable download links for attachments.",
+  "features_tested": {
+    "drawing_has_file_url": "PASS - presigned S3 URL",
+    "drawing_has_view_url": "PASS - presigned S3 URL",
+    "drawing_has_download_url": "PASS - presigned S3 URL",
+    "drawing_has_is_previewable_flag": "PASS - boolean flag",
+    "drawing_has_is_image_flag": "PASS - boolean flag",
+    "drawing_has_is_pdf_flag": "PASS - boolean flag (true for PDF)",
+    "drawing_url_not_api_storage": "PASS - Uses direct S3 presigned URL, not /api/storage/",
+    "drawing_url_accessible": "PASS - S3 presigned URL downloads successfully",
+    "pdf_endpoint_returns_pdf": "PASS - application/pdf content type",
+    "pdf_has_content_disposition": "PASS - attachment; filename=RFQ_{rfqId}.pdf",
+    "pdf_has_valid_size": "PASS - 5.5KB for test RFQ",
+    "pdf_starts_with_pdf_header": "PASS - %PDF-1.4",
+    "pdf_has_page_numbers": "PASS - 'Page 1', 'Page 2' in footer",
+    "pdf_has_buyer_details_section": "PASS",
+    "pdf_has_rfq_details_section": "PASS",
+    "pdf_has_technical_analysis_section": "PASS - with text wrapping",
+    "pdf_has_attachments_section": "PASS - with download links",
+    "frontend_view_button": "PASS - data-testid='view-drawing-0', presigned S3 URL, target='_blank'",
+    "frontend_download_button": "PASS - data-testid='download-drawing-0', presigned S3 URL, download attribute with filename",
+    "frontend_download_pdf_button": "PASS - data-testid='download-pdf-btn'"
+  }
+}

@@ -7646,20 +7646,47 @@ async def admin_get_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
         {"_id": 0, "name": 1, "email": 1, "phone": 1, "company_name": 1, "city": 1, "state": 1, "country": 1}
     )
     
-    # Get drawings with file URLs
+    # Get drawings with fresh presigned URLs
     drawings = await db.drawings.find({"rfq_id": rfq_id}, {"_id": 0, "file_data": 0}).to_list(20)
     
     # Generate fresh presigned URLs for drawings
+    from app.services.s3_storage_service import get_presigned_url
     for drawing in drawings:
-        if drawing.get("file_url"):
-            try:
-                # If it's an S3 key, generate presigned URL
-                file_key = drawing.get("s3_key") or drawing.get("file_url", "").replace(f"https://oemlinker-storage.s3.ap-south-1.amazonaws.com/", "")
-                if file_key and not file_key.startswith("http"):
-                    from app.services.s3_storage_service import s3_storage_service
-                    drawing["file_url"] = await s3_storage_service.get_presigned_url(file_key, expiry=3600)
-            except Exception as e:
-                logger.warning(f"Failed to generate presigned URL for drawing: {e}")
+        try:
+            # Get the S3 path from the drawing
+            s3_path = drawing.get("s3_path")
+            
+            if s3_path:
+                # Generate fresh presigned URL (valid for 1 hour)
+                presigned_url = get_presigned_url(s3_path, expiration=3600)
+                drawing["file_url"] = presigned_url
+                drawing["view_url"] = presigned_url
+                drawing["download_url"] = presigned_url
+            elif drawing.get("s3_url"):
+                # Extract S3 key from full URL and generate presigned URL
+                s3_url = drawing.get("s3_url")
+                # Parse URL to get key: https://bucket.s3.region.amazonaws.com/path/to/file
+                if ".amazonaws.com/" in s3_url:
+                    s3_key = s3_url.split(".amazonaws.com/")[1]
+                    presigned_url = get_presigned_url(s3_key, expiration=3600)
+                    drawing["file_url"] = presigned_url
+                    drawing["view_url"] = presigned_url
+                    drawing["download_url"] = presigned_url
+                else:
+                    drawing["file_url"] = s3_url
+                    drawing["view_url"] = s3_url
+                    drawing["download_url"] = s3_url
+            
+            # Determine if file is previewable (image or PDF)
+            file_type = drawing.get("file_type", "").lower()
+            drawing["is_previewable"] = file_type in ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"]
+            drawing["is_image"] = file_type.startswith("image/")
+            drawing["is_pdf"] = file_type == "application/pdf"
+            
+        except Exception as e:
+            logger.warning(f"Failed to generate presigned URL for drawing {drawing.get('drawing_id')}: {e}")
+            # Fallback to stored URL
+            drawing["file_url"] = drawing.get("s3_url", "")
     
     # Get quotes
     quotes = await db.quotes.find({"rfq_id": rfq_id}, {"_id": 0}).to_list(50)
@@ -7706,7 +7733,7 @@ async def admin_get_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
 
 @api_router.get("/admin/rfqs/{rfq_id}/pdf")
 async def admin_generate_rfq_pdf(rfq_id: str, user: dict = Depends(get_current_user)):
-    """Generate and return RFQ as a PDF document"""
+    """Generate and return RFQ as a professionally formatted PDF document"""
     if not has_admin_access(user):
         from app.services.rbac_service import rbac_service
         has_permission = await rbac_service.check_permission(user["user_id"], "rfqs.view")
@@ -7723,230 +7750,331 @@ async def admin_generate_rfq_pdf(rfq_id: str, user: dict = Depends(get_current_u
         {"_id": 0, "name": 1, "email": 1, "phone": 1, "company_name": 1, "city": 1, "state": 1}
     )
     
-    # Get drawings
+    # Get drawings with presigned URLs
     drawings = await db.drawings.find({"rfq_id": rfq_id}, {"_id": 0, "file_data": 0}).to_list(20)
+    from app.services.s3_storage_service import get_presigned_url
+    for drawing in drawings:
+        s3_path = drawing.get("s3_path")
+        if s3_path:
+            try:
+                drawing["file_url"] = get_presigned_url(s3_path, expiration=86400)  # 24 hours for PDF links
+            except:
+                drawing["file_url"] = drawing.get("s3_url", "")
     
     # Get AI analysis
     ai_analysis = rfq.get("ai_analysis", {})
     
-    # Generate PDF
+    # Generate PDF using reportlab with improved layout
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.lib.units import inch, mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image as RLImage
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, KeepTogether
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
     from io import BytesIO
     
+    # Page dimensions
+    PAGE_WIDTH = A4[0]
+    PAGE_HEIGHT = A4[1]
+    MARGIN = 15 * mm
+    CONTENT_WIDTH = PAGE_WIDTH - (2 * MARGIN)
+    
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20*mm, leftMargin=20*mm, topMargin=20*mm, bottomMargin=20*mm)
+    
+    # Custom page template with header and footer
+    def add_page_number(canvas, doc):
+        canvas.saveState()
+        # Footer line
+        canvas.setStrokeColor(colors.HexColor('#e2e8f0'))
+        canvas.setLineWidth(0.5)
+        canvas.line(MARGIN, 15*mm, PAGE_WIDTH - MARGIN, 15*mm)
+        # Footer text
+        canvas.setFont('Helvetica', 8)
+        canvas.setFillColor(colors.HexColor('#94a3b8'))
+        canvas.drawString(MARGIN, 10*mm, f"Generated by OEMLinker • {datetime.now(timezone.utc).strftime('%d %b %Y %H:%M UTC')}")
+        canvas.drawRightString(PAGE_WIDTH - MARGIN, 10*mm, f"Page {doc.page}")
+        canvas.restoreState()
+    
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=A4, 
+        rightMargin=MARGIN, 
+        leftMargin=MARGIN, 
+        topMargin=MARGIN, 
+        bottomMargin=25*mm
+    )
+    
+    # Define colors
+    ORANGE = colors.HexColor('#f97316')
+    ORANGE_LIGHT = colors.HexColor('#fff7ed')
+    ORANGE_BORDER = colors.HexColor('#fed7aa')
+    SLATE_900 = colors.HexColor('#0f172a')
+    SLATE_700 = colors.HexColor('#334155')
+    SLATE_500 = colors.HexColor('#64748b')
+    SLATE_200 = colors.HexColor('#e2e8f0')
+    SLATE_100 = colors.HexColor('#f1f5f9')
+    BLUE_50 = colors.HexColor('#eff6ff')
+    BLUE_600 = colors.HexColor('#2563eb')
+    GREEN_50 = colors.HexColor('#f0fdf4')
+    GREEN_700 = colors.HexColor('#15803d')
     
     # Styles
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle(
-        'CustomTitle',
-        parent=styles['Heading1'],
-        fontSize=18,
-        textColor=colors.HexColor('#f97316'),
-        spaceAfter=12,
-        alignment=TA_CENTER
+    
+    logo_style = ParagraphStyle(
+        'Logo', fontSize=22, textColor=ORANGE, fontName='Helvetica-Bold', spaceAfter=0
     )
-    section_style = ParagraphStyle(
-        'SectionHeader',
-        parent=styles['Heading2'],
-        fontSize=12,
-        textColor=colors.HexColor('#1e293b'),
-        spaceBefore=15,
-        spaceAfter=8,
-        borderPadding=5,
-        backColor=colors.HexColor('#f8fafc')
+    subtitle_style = ParagraphStyle(
+        'Subtitle', fontSize=10, textColor=SLATE_500, spaceAfter=0
     )
-    normal_style = ParagraphStyle(
-        'CustomNormal',
-        parent=styles['Normal'],
-        fontSize=10,
-        textColor=colors.HexColor('#334155'),
-        spaceAfter=4
+    section_header_style = ParagraphStyle(
+        'SectionHeader', fontSize=11, textColor=SLATE_900, fontName='Helvetica-Bold',
+        spaceBefore=12, spaceAfter=6, leftIndent=0
     )
     label_style = ParagraphStyle(
-        'Label',
-        parent=styles['Normal'],
-        fontSize=9,
-        textColor=colors.HexColor('#64748b'),
-        spaceAfter=2
+        'Label', fontSize=9, textColor=SLATE_500, spaceAfter=2
+    )
+    value_style = ParagraphStyle(
+        'Value', fontSize=10, textColor=SLATE_700, spaceAfter=4, leading=14
+    )
+    value_bold_style = ParagraphStyle(
+        'ValueBold', fontSize=10, textColor=SLATE_900, fontName='Helvetica-Bold', spaceAfter=4
+    )
+    description_style = ParagraphStyle(
+        'Description', fontSize=9, textColor=SLATE_700, leading=13, 
+        spaceAfter=4, wordWrap='LTR', splitLongWords=True
+    )
+    link_style = ParagraphStyle(
+        'Link', fontSize=9, textColor=ORANGE
     )
     
     elements = []
     
-    # Header with logo placeholder and title
-    header_data = [
-        [Paragraph('<b>OEMLinker</b>', ParagraphStyle('Logo', fontSize=16, textColor=colors.HexColor('#f97316'))),
-         Paragraph(f'<b>Request for Quotation</b>', title_style)]
-    ]
-    header_table = Table(header_data, colWidths=[80*mm, 90*mm])
+    # ===== HEADER =====
+    header_left = Paragraph('<b>OEMLinker</b>', logo_style)
+    header_right_text = f'''<para align="right">
+        <b>REQUEST FOR QUOTATION</b><br/>
+        <font size="9" color="#64748b">{rfq_id}</font>
+    </para>'''
+    header_right = Paragraph(header_right_text, ParagraphStyle('HeaderRight', fontSize=14, textColor=SLATE_900, alignment=TA_RIGHT))
+    
+    header_table = Table([[header_left, header_right]], colWidths=[90*mm, 90*mm])
     header_table.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('ALIGN', (0, 0), (0, 0), 'LEFT'),
         ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
     ]))
     elements.append(header_table)
-    elements.append(Spacer(1, 5*mm))
+    elements.append(Spacer(1, 3*mm))
     
-    # RFQ ID and Date bar
+    # Header divider
+    elements.append(HRFlowable(width="100%", thickness=1, color=ORANGE, spaceBefore=2, spaceAfter=8))
+    
+    # ===== RFQ INFO BAR =====
     rfq_date = rfq.get("created_at", "")
     if rfq_date:
         try:
             rfq_date = datetime.fromisoformat(rfq_date.replace('Z', '+00:00')).strftime("%d %b %Y")
         except:
-            pass
+            rfq_date = "N/A"
     
-    info_data = [
-        [Paragraph(f'<b>RFQ ID:</b> {rfq_id}', normal_style),
-         Paragraph(f'<b>Date:</b> {rfq_date}', normal_style),
-         Paragraph(f'<b>Status:</b> {rfq.get("status", "N/A").upper()}', normal_style)]
-    ]
-    info_table = Table(info_data, colWidths=[60*mm, 50*mm, 60*mm])
+    status = rfq.get("status", "N/A").upper()
+    status_color = GREEN_700 if status in ["COMPLETED", "QUOTED"] else ORANGE if status == "MATCHING" else SLATE_700
+    
+    info_data = [[
+        Paragraph(f'<b>Date:</b> {rfq_date}', value_style),
+        Paragraph(f'<b>Status:</b> <font color="{status_color.hexval()}">{status}</font>', value_style),
+        Paragraph(f'<b>Material:</b> {rfq.get("material_type", "N/A")}', value_style)
+    ]]
+    info_table = Table(info_data, colWidths=[60*mm, 60*mm, 60*mm])
     info_table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#fff7ed')),
-        ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#1e293b')),
+        ('BACKGROUND', (0, 0), (-1, -1), ORANGE_LIGHT),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('TOPPADDING', (0, 0), (-1, -1), 8),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
-        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#fed7aa')),
+        ('BOX', (0, 0), (-1, -1), 0.5, ORANGE_BORDER),
     ]))
     elements.append(info_table)
     elements.append(Spacer(1, 8*mm))
     
-    # Buyer Details Section
-    elements.append(Paragraph('BUYER DETAILS', section_style))
+    # ===== BUYER DETAILS SECTION =====
+    elements.append(Paragraph('BUYER DETAILS', section_header_style))
+    elements.append(HRFlowable(width="100%", thickness=0.5, color=SLATE_200, spaceBefore=0, spaceAfter=6))
+    
     buyer_name = buyer.get("name", "N/A") if buyer else "N/A"
-    buyer_company = buyer.get("company_name", "") if buyer else ""
+    buyer_company = buyer.get("company_name", "N/A") if buyer else "N/A"
     buyer_email = buyer.get("email", "N/A") if buyer else "N/A"
     buyer_phone = buyer.get("phone", "N/A") if buyer else "N/A"
-    buyer_location = f"{buyer.get('city', '')}, {buyer.get('state', '')}" if buyer else "N/A"
+    buyer_city = buyer.get("city", "") if buyer else ""
+    buyer_state = buyer.get("state", "") if buyer else ""
+    buyer_location = f"{buyer_city}, {buyer_state}".strip(", ") or "N/A"
     
     buyer_data = [
-        ['Name:', buyer_name, 'Company:', buyer_company or 'N/A'],
-        ['Email:', buyer_email, 'Phone:', buyer_phone],
-        ['Location:', buyer_location.strip(', ') or 'N/A', '', '']
+        [Paragraph('Name', label_style), Paragraph(buyer_name, value_bold_style),
+         Paragraph('Company', label_style), Paragraph(buyer_company, value_bold_style)],
+        [Paragraph('Email', label_style), Paragraph(buyer_email, value_style),
+         Paragraph('Phone', label_style), Paragraph(buyer_phone, value_style)],
+        [Paragraph('Location', label_style), Paragraph(buyer_location, value_style), '', '']
     ]
-    buyer_table = Table(buyer_data, colWidths=[25*mm, 55*mm, 25*mm, 55*mm])
+    buyer_table = Table(buyer_data, colWidths=[25*mm, 60*mm, 25*mm, 60*mm])
     buyer_table.setStyle(TableStyle([
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#64748b')),
-        ('TEXTCOLOR', (2, 0), (2, -1), colors.HexColor('#64748b')),
-        ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#1e293b')),
-        ('TEXTCOLOR', (3, 0), (3, -1), colors.HexColor('#1e293b')),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
     ]))
     elements.append(buyer_table)
-    elements.append(Spacer(1, 5*mm))
+    elements.append(Spacer(1, 6*mm))
     
-    # RFQ Details Section
-    elements.append(Paragraph('RFQ DETAILS', section_style))
+    # ===== RFQ DETAILS SECTION =====
+    elements.append(Paragraph('RFQ DETAILS', section_header_style))
+    elements.append(HRFlowable(width="100%", thickness=0.5, color=SLATE_200, spaceBefore=0, spaceAfter=6))
     
-    rfq_details_data = [
-        ['Part Name:', rfq.get("title", "N/A")],
-        ['Material:', rfq.get("material_type", "N/A")],
-        ['Quantity:', str(rfq.get("quantity", "N/A"))],
-        ['Tolerance:', f'{rfq.get("tolerance", "N/A")} mm' if rfq.get("tolerance") else 'N/A'],
-        ['Surface Finish:', rfq.get("surface_finish", "N/A") or 'N/A'],
-        ['Deadline:', rfq.get("deadline", "As per RFQ") or 'As per RFQ'],
+    # Part name prominently
+    elements.append(Paragraph('Part Name / Title', label_style))
+    elements.append(Paragraph(f'<b>{rfq.get("title", "N/A")}</b>', 
+        ParagraphStyle('PartName', fontSize=14, textColor=SLATE_900, fontName='Helvetica-Bold', spaceAfter=8)))
+    
+    # Details grid
+    rfq_grid_data = [
+        [Paragraph('Quantity', label_style), Paragraph(str(rfq.get("quantity", "N/A")), value_bold_style),
+         Paragraph('Tolerance', label_style), Paragraph(f'{rfq.get("tolerance", "N/A")} mm' if rfq.get("tolerance") else 'N/A', value_style)],
+        [Paragraph('Surface Finish', label_style), Paragraph(rfq.get("surface_finish", "N/A") or 'N/A', value_style),
+         Paragraph('Deadline', label_style), Paragraph(rfq.get("deadline", "As per discussion") or 'As per discussion', value_style)]
     ]
-    rfq_table = Table(rfq_details_data, colWidths=[35*mm, 135*mm])
-    rfq_table.setStyle(TableStyle([
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#64748b')),
-        ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#1e293b')),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-        ('LINEBELOW', (0, 0), (-1, -2), 0.5, colors.HexColor('#e2e8f0')),
+    rfq_grid = Table(rfq_grid_data, colWidths=[30*mm, 55*mm, 30*mm, 55*mm])
+    rfq_grid.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
     ]))
-    elements.append(rfq_table)
-    elements.append(Spacer(1, 5*mm))
+    elements.append(rfq_grid)
     
-    # Description Section
-    if rfq.get("description"):
-        elements.append(Paragraph('DESCRIPTION', section_style))
-        desc_text = rfq.get("description", "").replace('\n', '<br/>')
-        elements.append(Paragraph(desc_text, normal_style))
-        elements.append(Spacer(1, 5*mm))
+    # Delivery location
+    delivery_loc = rfq.get("delivery_location") or rfq.get("delivery_address", "")
+    if delivery_loc:
+        elements.append(Spacer(1, 3*mm))
+        elements.append(Paragraph('Delivery Location', label_style))
+        elements.append(Paragraph(delivery_loc, value_style))
     
-    # Technical Specifications (from AI Analysis)
-    if ai_analysis:
-        elements.append(Paragraph('TECHNICAL SPECIFICATIONS', section_style))
+    elements.append(Spacer(1, 6*mm))
+    
+    # ===== DESCRIPTION / SPECIFICATIONS =====
+    description = rfq.get("description", "").strip()
+    if description:
+        elements.append(Paragraph('DESCRIPTION / SPECIFICATIONS', section_header_style))
+        elements.append(HRFlowable(width="100%", thickness=0.5, color=SLATE_200, spaceBefore=0, spaceAfter=6))
         
-        specs_data = []
+        # Wrap long text properly
+        desc_text = description.replace('\n', '<br/>')
+        desc_para = Paragraph(desc_text, description_style)
         
-        # Dimensions
-        dims = ai_analysis.get("overall_dimensions", {})
-        if dims:
-            dim_str = []
-            if dims.get("length"): dim_str.append(f"L: {dims['length']}mm")
-            if dims.get("width"): dim_str.append(f"W: {dims['width']}mm")
-            if dims.get("height"): dim_str.append(f"H: {dims['height']}mm")
-            if dims.get("diameter"): dim_str.append(f"Ø: {dims['diameter']}mm")
-            if dim_str:
-                specs_data.append(['Overall Dimensions:', ' x '.join(dim_str)])
+        # Put in a bordered box
+        desc_table = Table([[desc_para]], colWidths=[CONTENT_WIDTH - 4*mm])
+        desc_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), SLATE_100),
+            ('BOX', (0, 0), (-1, -1), 0.5, SLATE_200),
+            ('TOPPADDING', (0, 0), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+            ('LEFTPADDING', (0, 0), (-1, -1), 8),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ]))
+        elements.append(desc_table)
+        elements.append(Spacer(1, 6*mm))
+    
+    # ===== TECHNICAL ANALYSIS (AI) =====
+    if ai_analysis and (ai_analysis.get("recommended_processes") or ai_analysis.get("overall_dimensions") or ai_analysis.get("part_geometry")):
+        elements.append(Paragraph('TECHNICAL ANALYSIS', section_header_style))
+        elements.append(HRFlowable(width="100%", thickness=0.5, color=SLATE_200, spaceBefore=0, spaceAfter=6))
+        
+        tech_content = []
         
         # Recommended Processes
         processes = ai_analysis.get("recommended_processes", [])
         if processes:
-            specs_data.append(['Recommended Processes:', ', '.join(processes[:5])])
+            proc_text = ', '.join(processes[:6])
+            tech_content.append([Paragraph('Recommended Processes', label_style), Paragraph(proc_text, value_style)])
+        
+        # Dimensions
+        dims = ai_analysis.get("overall_dimensions", {})
+        if dims:
+            dim_parts = []
+            if dims.get("length"): dim_parts.append(f"L: {dims['length']}mm")
+            if dims.get("width"): dim_parts.append(f"W: {dims['width']}mm")
+            if dims.get("height"): dim_parts.append(f"H: {dims['height']}mm")
+            if dims.get("diameter"): dim_parts.append(f"Ø: {dims['diameter']}mm")
+            if dim_parts:
+                tech_content.append([Paragraph('Dimensions', label_style), Paragraph(' × '.join(dim_parts), value_style)])
         
         # Part Geometry
         geometry = ai_analysis.get("part_geometry", "")
         if geometry:
-            specs_data.append(['Part Geometry:', geometry])
+            tech_content.append([Paragraph('Part Geometry', label_style), Paragraph(geometry, value_style)])
         
         # Complexity
         complexity = ai_analysis.get("complexity_score", 0)
         if complexity:
-            specs_data.append(['Complexity Score:', f'{complexity}/10'])
+            tech_content.append([Paragraph('Complexity', label_style), Paragraph(f'{complexity}/10', value_style)])
         
-        if specs_data:
-            specs_table = Table(specs_data, colWidths=[45*mm, 125*mm])
-            specs_table.setStyle(TableStyle([
-                ('FONTSIZE', (0, 0), (-1, -1), 9),
-                ('TEXTCOLOR', (0, 0), (0, -1), colors.HexColor('#64748b')),
-                ('TEXTCOLOR', (1, 0), (1, -1), colors.HexColor('#1e293b')),
+        if tech_content:
+            tech_table = Table(tech_content, colWidths=[45*mm, CONTENT_WIDTH - 49*mm])
+            tech_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), BLUE_50),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
                 ('TOPPADDING', (0, 0), (-1, -1), 4),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#bfdbfe')),
             ]))
-            elements.append(specs_table)
-        elements.append(Spacer(1, 5*mm))
+            elements.append(tech_table)
+        elements.append(Spacer(1, 6*mm))
     
-    # Attachments Section
+    # ===== ATTACHMENTS / DRAWINGS =====
     if drawings:
-        elements.append(Paragraph('ATTACHMENTS', section_style))
+        elements.append(Paragraph(f'ATTACHMENTS ({len(drawings)})', section_header_style))
+        elements.append(HRFlowable(width="100%", thickness=0.5, color=SLATE_200, spaceBefore=0, spaceAfter=6))
+        
         for i, drawing in enumerate(drawings, 1):
-            drawing_name = drawing.get("filename", drawing.get("original_filename", f"Drawing {i}"))
-            drawing_url = drawing.get("file_url", "N/A")
-            elements.append(Paragraph(f'{i}. {drawing_name}', normal_style))
-            if drawing_url and drawing_url != "N/A":
-                elements.append(Paragraph(f'   <link href="{drawing_url}"><font color="#f97316">Download Link</font></link>', 
-                    ParagraphStyle('Link', parent=normal_style, fontSize=8, textColor=colors.HexColor('#64748b'))))
-        elements.append(Spacer(1, 5*mm))
+            filename = drawing.get("filename", drawing.get("original_filename", f"Drawing {i}"))
+            file_type = drawing.get("file_type", "File")
+            file_size = drawing.get("file_size", 0)
+            file_size_str = f"{file_size / 1024:.1f} KB" if file_size > 0 else ""
+            file_url = drawing.get("file_url", "")
+            
+            # Create attachment row
+            attach_text = f'<b>{i}. {filename}</b>'
+            if file_size_str:
+                attach_text += f' <font size="8" color="#64748b">({file_size_str})</font>'
+            
+            elements.append(Paragraph(attach_text, value_style))
+            
+            if file_url:
+                # Truncate long URLs for display
+                display_url = file_url[:80] + "..." if len(file_url) > 80 else file_url
+                elements.append(Paragraph(
+                    f'<link href="{file_url}"><font color="#f97316" size="8">View/Download: {display_url}</font></link>',
+                    ParagraphStyle('AttachLink', fontSize=8, textColor=SLATE_500, leftIndent=10)
+                ))
+            elements.append(Spacer(1, 2*mm))
+        
+        elements.append(Spacer(1, 4*mm))
     
-    # Delivery Location
-    delivery_location = rfq.get("delivery_location") or rfq.get("delivery_address", "")
-    if delivery_location:
-        elements.append(Paragraph('DELIVERY LOCATION', section_style))
-        elements.append(Paragraph(delivery_location, normal_style))
-        elements.append(Spacer(1, 5*mm))
+    # ===== NOTES =====
+    notes = rfq.get("notes", "").strip()
+    if notes:
+        elements.append(Paragraph('ADDITIONAL NOTES', section_header_style))
+        elements.append(HRFlowable(width="100%", thickness=0.5, color=SLATE_200, spaceBefore=0, spaceAfter=6))
+        notes_text = notes.replace('\n', '<br/>')
+        elements.append(Paragraph(notes_text, description_style))
+        elements.append(Spacer(1, 6*mm))
     
-    # Footer
+    # ===== FOOTER SPACER =====
     elements.append(Spacer(1, 10*mm))
-    footer_style = ParagraphStyle('Footer', fontSize=8, textColor=colors.HexColor('#94a3b8'), alignment=TA_CENTER)
-    elements.append(Paragraph('─' * 80, footer_style))
-    elements.append(Paragraph(f'Generated by OEMLinker • {datetime.now(timezone.utc).strftime("%d %b %Y %H:%M UTC")}', footer_style))
-    elements.append(Paragraph('www.oemlinker.com • Connecting OEMs with Trusted Vendors', footer_style))
     
-    # Build PDF
-    doc.build(elements)
+    # Build PDF with page numbers
+    doc.build(elements, onFirstPage=add_page_number, onLaterPages=add_page_number)
     buffer.seek(0)
     
     # Return as downloadable file
