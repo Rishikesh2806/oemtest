@@ -929,6 +929,33 @@ GUPSHUP_APP_ID=escrow-payments-2  # Required for live templates
 }
 ```
 
+## RFQ Drawing Access & PDF Layout Fix (Implemented Mar 19, 2026)
+
+### Overview
+Fixed drawing access to use direct S3 presigned URLs and improved PDF generation with professional layout.
+
+### Drawing Access Fixes:
+- **Presigned S3 URLs**: Drawings now use `get_presigned_url()` for fresh S3 URLs (1 hour for API, 24 hours for PDF)
+- **Multiple URL fields**: Each drawing has `file_url`, `view_url`, `download_url`
+- **File type detection**: `is_previewable`, `is_image`, `is_pdf` flags added
+- **Preview support**: Images show inline preview, PDFs show iframe preview
+- **View/Download buttons**: Separate buttons - View opens in new tab, Download triggers file download
+
+### PDF Layout Improvements:
+- **Page numbers**: Footer shows "Page X" with generation timestamp
+- **OEMLinker branding**: Header with logo and "REQUEST FOR QUOTATION" title
+- **RFQ Info Bar**: Orange-bordered bar with Date, Status, Material
+- **Structured sections** with HRFlowable dividers:
+  - Buyer Details (Name, Company, Email, Phone, Location)
+  - RFQ Details (Part Name, Quantity, Tolerance, Surface Finish, Deadline, Delivery)
+  - Description/Specifications (wrapped text in bordered box)
+  - Technical Analysis (blue background, AI recommendations)
+  - Attachments (numbered list with download links)
+- **Text wrapping**: Long text properly wraps within table cells
+- **A4 format**: 15mm margins, professional typography
+
+### Test Report: /app/test_reports/iteration_30.json (100% pass - 20 backend tests + full UI verification)
+
 ## Admin RFQ Details View & PDF Download (Implemented Mar 19, 2026)
 
 ### Overview
