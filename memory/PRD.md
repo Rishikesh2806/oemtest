@@ -929,6 +929,52 @@ GUPSHUP_APP_ID=escrow-payments-2  # Required for live templates
 }
 ```
 
+## Admin RFQ-Vendor Manual Matching (Implemented Mar 19, 2026)
+
+### Overview
+Admin users and permitted staff can manually match RFQs to one or more vendors and notify both parties.
+
+### Features:
+- **Match Vendors Button** in RFQs tab - opens dialog to search and select vendors
+- **Vendor Search Dialog** with search by name, filter by capability/category
+- **Multi-select** - match multiple vendors at once
+- **Already Matched Badge** - shows vendors already matched to avoid duplicates
+- **View Matches** - click on vendor count to see all matched vendors with status
+- **Remove Match** - unmatch vendors from RFQ
+- **Notifications** - sends WhatsApp (if configured), email, and in-app notifications to vendors and buyer
+- **Activity Logging** - tracks all match/unmatch actions with user info
+
+### Backend Endpoints:
+- `POST /api/admin/rfq/{rfqId}/match-vendors` - Match vendors to RFQ
+- `GET /api/admin/rfq/{rfqId}/matches` - Get all matched vendors with status
+- `DELETE /api/admin/rfq/{rfqId}/match/{vendorId}` - Remove vendor match
+- `PUT /api/admin/rfq/{rfqId}/match/{vendorId}/status` - Update match status
+- `GET /api/admin/vendors/search` - Search vendors for matching (with machine info)
+
+### Database Schema (rfq_vendor_matches):
+```json
+{
+  "match_id": "match_xxx",
+  "rfq_id": "rfq_xxx",
+  "vendor_id": "vendor_xxx",
+  "matched_by": "admin_001",
+  "matched_by_name": "Admin User",
+  "status": "matched|viewed|responded|quoted",
+  "match_type": "manual|auto",
+  "created_at": "ISO timestamp",
+  "updated_at": "ISO timestamp"
+}
+```
+
+### RBAC Permissions:
+- `rfqs.match_vendors` - Required for matching/unmatching vendors
+
+### Notifications Sent:
+- **Vendor**: WhatsApp message with magic link, email with RFQ details, in-app notification
+- **Buyer**: Email confirming X vendors matched, in-app notification
+
+### Test Report: /app/test_reports/iteration_28.json (100% pass - 21 backend tests + full UI verification)
+
 ## Admin Machine Management (Implemented Mar 19, 2026)
 
 ### Overview
