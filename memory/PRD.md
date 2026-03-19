@@ -929,6 +929,59 @@ GUPSHUP_APP_ID=escrow-payments-2  # Required for live templates
 }
 ```
 
+## Admin Machine Management (Implemented Mar 19, 2026)
+
+### Overview
+Admin users and permitted staff can create, edit, and delete machines for any vendor directly from the Admin Dashboard.
+
+### Features:
+- **Machines Tab** in Admin Dashboard with "Add Machine" button
+- **Create Machine Dialog** with vendor selection, category-based form fields
+- **Activity Logging** for all machine CRUD operations
+- **Max 5 images per machine** limit enforced
+- **RBAC Permissions**: `machines.view`, `machines.create`, `machines.edit`, `machines.delete`, `machines.manage_images`
+
+### Backend Endpoints:
+- `GET /api/admin/machines` - List all machines (optional vendor_id filter)
+- `POST /api/admin/machines` - Create machine with activity log
+- `GET /api/admin/machines/{id}` - Get machine details
+- `PUT /api/admin/machines/{id}` - Update machine with activity log
+- `DELETE /api/admin/machines/{id}` - Delete machine with activity log
+- `POST /api/admin/machines/{id}/images` - Upload machine image (max 5)
+- `DELETE /api/admin/machines/{id}/images` - Delete machine image
+- `GET /api/admin/activity-logs` - General activity logs
+- `GET /api/admin/activity-logs/machines` - Machine-specific activity logs
+
+### Machine Fields:
+- `vendor_id` (required), `name`, `machine_category` (required), `machine_type`
+- `brand`, `model`, `tolerance`, `materials`
+- Category-specific dimension fields (max_x, max_y, max_z, max_diameter, etc.)
+- `created_by`, `created_at`, `updated_by`, `updated_at`
+- `images` (array of S3 presigned URLs, max 5)
+
+### Activity Log Schema:
+```json
+{
+  "activity_id": "act_xxx",
+  "type": "machine_created|machine_updated|machine_deleted",
+  "action": "create|update|delete",
+  "entity_type": "machine",
+  "entity_id": "machine_xxx",
+  "vendor_id": "vendor_xxx",
+  "user_id": "admin_001",
+  "user_name": "Admin User",
+  "details": {
+    "machine_name": "...",
+    "machine_category": "...",
+    "vendor_name": "...",
+    "updated_fields": []  // For updates only
+  },
+  "created_at": "ISO timestamp"
+}
+```
+
+### Test Report: /app/test_reports/iteration_27.json (100% pass - 17 backend tests)
+
 ## Database Collections
 - users, user_sessions, vendors, machines
 - rfqs, drawings, quotes, orders
@@ -936,6 +989,7 @@ GUPSHUP_APP_ID=escrow-payments-2  # Required for live templates
 - notifications, ratings
 - data_deletion_requests
 - magic_link_tokens (for magic link auth)
+- **activity_logs** (NEW - for machine and other activity tracking)
 
 
 
