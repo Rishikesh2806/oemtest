@@ -15,8 +15,10 @@ import { toast } from "sonner";
 import { 
   Users, FileText, Package, DollarSign, Building2, Wrench, FileCheck,
   CheckCircle2, XCircle, Loader2, Search, Plus, Edit, Trash2,
-  Eye, Send, AlertCircle, RefreshCw, ChevronRight, Clock, Camera, Upload
+  Eye, Send, AlertCircle, RefreshCw, ChevronRight, Clock, Camera, Upload,
+  Link, X, CheckCircle
 } from "lucide-react";
+import { Checkbox } from "../components/ui/checkbox";
 
 // Tab configuration with required permissions
 const TAB_CONFIG = {
@@ -590,11 +592,21 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
 };
 
 // ============== RFQs TAB ==============
-const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit = true, canDelete = true }) => {
+const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit = true, canDelete = true, canMatchVendors = true }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [editRFQ, setEditRFQ] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [matchRFQ, setMatchRFQ] = useState(null);
+  const [matchDialogOpen, setMatchDialogOpen] = useState(false);
+  const [vendorSearch, setVendorSearch] = useState("");
+  const [vendorCategory, setVendorCategory] = useState("all");
+  const [availableVendors, setAvailableVendors] = useState([]);
+  const [selectedVendors, setSelectedVendors] = useState([]);
+  const [matchedVendors, setMatchedVendors] = useState([]);
+  const [loadingVendors, setLoadingVendors] = useState(false);
+  const [matchingInProgress, setMatchingInProgress] = useState(false);
+  const [viewMatchesRFQ, setViewMatchesRFQ] = useState(null);
   
   const filteredRFQs = rfqs.filter(r => {
     const matchesSearch = r.title?.toLowerCase().includes(search.toLowerCase()) ||
@@ -618,6 +630,98 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
     await onUpdateRFQ(editRFQ.rfq_id, editForm);
     setEditRFQ(null);
   };
+  
+  // Open match vendors dialog
+  const openMatchDialog = async (rfq) => {
+    setMatchRFQ(rfq);
+    setSelectedVendors([]);
+    setMatchDialogOpen(true);
+    await loadVendors();
+    await loadMatchedVendors(rfq.rfq_id);
+  };
+  
+  // Load vendors for matching
+  const loadVendors = async (searchTerm = "", category = "") => {
+    setLoadingVendors(true);
+    try {
+      const params = new URLSearchParams();
+      if (searchTerm) params.append("search", searchTerm);
+      if (category && category !== "all") params.append("category", category);
+      params.append("approved_only", "true");
+      
+      const res = await api.get(`/admin/vendors/search?${params.toString()}`);
+      setAvailableVendors(res.data.vendors || []);
+    } catch (error) {
+      toast.error("Failed to load vendors");
+    } finally {
+      setLoadingVendors(false);
+    }
+  };
+  
+  // Load matched vendors for an RFQ
+  const loadMatchedVendors = async (rfqId) => {
+    try {
+      const res = await api.get(`/admin/rfq/${rfqId}/matches`);
+      setMatchedVendors(res.data.matches || []);
+    } catch (error) {
+      console.error("Failed to load matched vendors:", error);
+      setMatchedVendors([]);
+    }
+  };
+  
+  // Toggle vendor selection
+  const toggleVendorSelection = (vendor) => {
+    setSelectedVendors(prev => {
+      const exists = prev.find(v => v.vendor_id === vendor.vendor_id);
+      if (exists) {
+        return prev.filter(v => v.vendor_id !== vendor.vendor_id);
+      }
+      return [...prev, vendor];
+    });
+  };
+  
+  // Match selected vendors
+  const handleMatchVendors = async () => {
+    if (selectedVendors.length === 0) {
+      toast.error("Please select at least one vendor");
+      return;
+    }
+    
+    setMatchingInProgress(true);
+    try {
+      const vendorIds = selectedVendors.map(v => v.vendor_id);
+      await api.post(`/admin/rfq/${matchRFQ.rfq_id}/match-vendors`, { vendor_ids: vendorIds });
+      toast.success(`Successfully matched ${selectedVendors.length} vendor(s)`);
+      setMatchDialogOpen(false);
+      setSelectedVendors([]);
+      onRefresh();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to match vendors");
+    } finally {
+      setMatchingInProgress(false);
+    }
+  };
+  
+  // Remove a match
+  const handleRemoveMatch = async (vendorId) => {
+    try {
+      await api.delete(`/admin/rfq/${viewMatchesRFQ.rfq_id}/match/${vendorId}`);
+      toast.success("Match removed");
+      await loadMatchedVendors(viewMatchesRFQ.rfq_id);
+    } catch (error) {
+      toast.error("Failed to remove match");
+    }
+  };
+  
+  // Handle vendor search
+  useEffect(() => {
+    if (matchDialogOpen) {
+      const timeoutId = setTimeout(() => {
+        loadVendors(vendorSearch, vendorCategory);
+      }, 300);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [vendorSearch, vendorCategory, matchDialogOpen]);
 
   return (
     <div className="space-y-4">
@@ -660,11 +764,10 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">RFQ</th>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Buyer</th>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Material</th>
+                <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Matched</th>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Status</th>
                 <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Created</th>
-                {(canEdit || canDelete) && (
-                  <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
-                )}
+                <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -683,31 +786,50 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
                     </div>
                   </td>
                   <td className="p-4 text-slate-600">{rfq.material_type}</td>
+                  <td className="p-4">
+                    <button 
+                      className="flex items-center gap-1 text-sm text-orange-600 hover:underline"
+                      onClick={() => { setViewMatchesRFQ(rfq); loadMatchedVendors(rfq.rfq_id); }}
+                      data-testid={`view-matches-${rfq.rfq_id}`}
+                    >
+                      <Users className="w-4 h-4" />
+                      {rfq.matched_vendors?.length || 0} vendors
+                    </button>
+                  </td>
                   <td className="p-4"><StatusBadge status={rfq.status} /></td>
                   <td className="p-4 text-sm text-slate-500">
                     {new Date(rfq.created_at).toLocaleDateString()}
                   </td>
-                  {(canEdit || canDelete) && (
-                    <td className="p-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        {canEdit && (
-                          <Button variant="ghost" size="sm" onClick={() => handleEdit(rfq)}>
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {canDelete && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="text-red-600 hover:bg-red-50"
-                            onClick={() => onDeleteRFQ(rfq.rfq_id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  )}
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-2">
+                      {canMatchVendors && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => openMatchDialog(rfq)}
+                          className="text-orange-600 border-orange-200 hover:bg-orange-50"
+                          data-testid={`match-vendors-${rfq.rfq_id}`}
+                        >
+                          <Link className="w-4 h-4 mr-1" /> Match
+                        </Button>
+                      )}
+                      {canEdit && (
+                        <Button variant="ghost" size="sm" onClick={() => handleEdit(rfq)}>
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      )}
+                      {canDelete && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-red-600 hover:bg-red-50"
+                          onClick={() => onDeleteRFQ(rfq.rfq_id)}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -771,6 +893,255 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
               Save Changes
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Match Vendors Dialog */}
+      <Dialog open={matchDialogOpen} onOpenChange={setMatchDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link className="w-5 h-5 text-orange-600" />
+              Match Vendors to RFQ
+            </DialogTitle>
+            {matchRFQ && (
+              <p className="text-sm text-slate-500">
+                {matchRFQ.title} • {matchRFQ.material_type} • Qty: {matchRFQ.quantity}
+              </p>
+            )}
+          </DialogHeader>
+          
+          <div className="flex gap-4 overflow-hidden flex-1">
+            {/* Left: Vendor Search */}
+            <div className="flex-1 flex flex-col border-r pr-4">
+              <div className="space-y-3 mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input 
+                    placeholder="Search vendors by name..."
+                    value={vendorSearch}
+                    onChange={(e) => setVendorSearch(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <Select value={vendorCategory} onValueChange={setVendorCategory}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Filter by capability" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    <SelectItem value="CNC">CNC Machining</SelectItem>
+                    <SelectItem value="VMC">VMC</SelectItem>
+                    <SelectItem value="HMC">HMC</SelectItem>
+                    <SelectItem value="Lathe">Lathe</SelectItem>
+                    <SelectItem value="Milling">Milling</SelectItem>
+                    <SelectItem value="Casting">Casting</SelectItem>
+                    <SelectItem value="Forging">Forging</SelectItem>
+                    <SelectItem value="Sheet Metal">Sheet Metal</SelectItem>
+                    <SelectItem value="Grinding">Grinding</SelectItem>
+                    <SelectItem value="Welding">Welding</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto space-y-2 max-h-[400px]">
+                {loadingVendors ? (
+                  <div className="text-center py-8 text-slate-500">
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                    Loading vendors...
+                  </div>
+                ) : availableVendors.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500">No vendors found</div>
+                ) : (
+                  availableVendors.map(vendor => {
+                    const isSelected = selectedVendors.some(v => v.vendor_id === vendor.vendor_id);
+                    const isAlreadyMatched = matchedVendors.some(m => m.vendor_id === vendor.vendor_id);
+                    
+                    return (
+                      <div 
+                        key={vendor.vendor_id}
+                        className={`p-3 rounded-lg border cursor-pointer transition-all ${
+                          isAlreadyMatched ? 'bg-green-50 border-green-200 opacity-60' :
+                          isSelected ? 'bg-orange-50 border-orange-300' : 'bg-white border-slate-200 hover:border-orange-200'
+                        }`}
+                        onClick={() => !isAlreadyMatched && toggleVendorSelection(vendor)}
+                        data-testid={`vendor-${vendor.vendor_id}`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-slate-900">{vendor.company_name}</p>
+                              {isAlreadyMatched && (
+                                <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded">Already Matched</span>
+                              )}
+                              {vendor.is_approved && !isAlreadyMatched && (
+                                <CheckCircle className="w-4 h-4 text-green-500" />
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500">{vendor.city}, {vendor.state}</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {vendor.machine_categories?.slice(0, 3).map(cat => (
+                                <span key={cat} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">{cat}</span>
+                              ))}
+                              {vendor.machines_count > 0 && (
+                                <span className="text-xs text-slate-500">{vendor.machines_count} machines</span>
+                              )}
+                            </div>
+                          </div>
+                          {!isAlreadyMatched && (
+                            <Checkbox 
+                              checked={isSelected}
+                              className="mt-1"
+                              onCheckedChange={() => toggleVendorSelection(vendor)}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+            
+            {/* Right: Selected Vendors */}
+            <div className="w-64 flex flex-col">
+              <h4 className="font-medium text-slate-900 mb-3 flex items-center gap-2">
+                <Users className="w-4 h-4 text-orange-600" />
+                Selected ({selectedVendors.length})
+              </h4>
+              
+              <div className="flex-1 overflow-y-auto space-y-2 max-h-[400px]">
+                {selectedVendors.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-4">Select vendors from the list</p>
+                ) : (
+                  selectedVendors.map(vendor => (
+                    <div key={vendor.vendor_id} className="p-2 bg-orange-50 rounded border border-orange-200 flex justify-between items-center">
+                      <div>
+                        <p className="text-sm font-medium text-slate-900">{vendor.company_name}</p>
+                        <p className="text-xs text-slate-500">{vendor.city}</p>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => toggleVendorSelection(vendor)}
+                        className="text-slate-400 hover:text-red-500"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter className="border-t pt-4 mt-4">
+            <Button variant="outline" onClick={() => setMatchDialogOpen(false)}>Cancel</Button>
+            <Button 
+              onClick={handleMatchVendors} 
+              disabled={selectedVendors.length === 0 || matchingInProgress}
+              className="bg-orange-600 hover:bg-orange-700"
+              data-testid="confirm-match-btn"
+            >
+              {matchingInProgress ? (
+                <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Matching...</>
+              ) : (
+                <><Link className="w-4 h-4 mr-2" /> Match {selectedVendors.length} Vendor(s)</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* View Matched Vendors Dialog */}
+      <Dialog open={!!viewMatchesRFQ} onOpenChange={() => setViewMatchesRFQ(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="w-5 h-5 text-orange-600" />
+              Matched Vendors
+            </DialogTitle>
+            {viewMatchesRFQ && (
+              <p className="text-sm text-slate-500">{viewMatchesRFQ.title}</p>
+            )}
+          </DialogHeader>
+          
+          <div className="space-y-3 mt-4">
+            {matchedVendors.length === 0 ? (
+              <div className="text-center py-8 text-slate-500">
+                <Users className="w-12 h-12 mx-auto mb-2 text-slate-300" />
+                <p>No vendors matched yet</p>
+                {canMatchVendors && (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="mt-4"
+                    onClick={() => { setViewMatchesRFQ(null); openMatchDialog(viewMatchesRFQ); }}
+                  >
+                    <Plus className="w-4 h-4 mr-1" /> Match Vendors
+                  </Button>
+                )}
+              </div>
+            ) : (
+              matchedVendors.map(match => (
+                <div key={match.vendor_id} className="p-4 border rounded-lg bg-white">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-slate-900">{match.vendor_info?.company_name || "Unknown Vendor"}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded ${
+                          match.status === 'quoted' ? 'bg-green-100 text-green-700' :
+                          match.status === 'viewed' ? 'bg-blue-100 text-blue-700' :
+                          match.status === 'responded' ? 'bg-purple-100 text-purple-700' :
+                          'bg-slate-100 text-slate-600'
+                        }`}>
+                          {match.status?.toUpperCase()}
+                        </span>
+                        {match.match_type === 'manual' && (
+                          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded">Manual</span>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-500">{match.vendor_info?.city}, {match.vendor_info?.state}</p>
+                      {match.has_quoted && match.quote_info && (
+                        <div className="mt-2 p-2 bg-green-50 rounded text-sm">
+                          <span className="font-medium text-green-700">
+                            Quote: ₹{match.quote_info.total_price?.toLocaleString('en-IN')}
+                          </span>
+                          <span className="text-green-600 ml-2">({match.quote_info.status})</span>
+                        </div>
+                      )}
+                      <p className="text-xs text-slate-400 mt-1">
+                        Matched: {new Date(match.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                    {canMatchVendors && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="text-red-500 hover:bg-red-50"
+                        onClick={() => handleRemoveMatch(match.vendor_id)}
+                        data-testid={`remove-match-${match.vendor_id}`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          
+          {matchedVendors.length > 0 && canMatchVendors && (
+            <div className="border-t pt-4 mt-4">
+              <Button 
+                variant="outline" 
+                onClick={() => { setViewMatchesRFQ(null); openMatchDialog(viewMatchesRFQ); }}
+                className="w-full"
+              >
+                <Plus className="w-4 h-4 mr-1" /> Add More Vendors
+              </Button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
@@ -3675,6 +4046,7 @@ const AdminDashboard = () => {
             onDeleteRFQ={deleteRFQ}
             canEdit={isAdmin || hasAnyPermission(['rfqs.edit'])}
             canDelete={isAdmin || hasAnyPermission(['rfqs.delete'])}
+            canMatchVendors={isAdmin || hasAnyPermission(['rfqs.match_vendors'])}
           />
         )}
         {activeTab === "quotes" && permittedTabs.includes('quotes') && (

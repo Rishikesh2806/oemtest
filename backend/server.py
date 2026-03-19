@@ -7688,6 +7688,496 @@ async def admin_delete_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
     
     return {"message": "RFQ deleted successfully"}
 
+
+# ============== ADMIN - MANUAL RFQ-VENDOR MATCHING ==============
+
+@api_router.post("/admin/rfq/{rfq_id}/match-vendors")
+async def admin_manual_match_vendors(
+    rfq_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Manually match one or more vendors to an RFQ.
+    Creates match records and sends notifications to both vendors and buyer.
+    """
+    # Check for admin access OR specific permission
+    if not has_admin_access(user):
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "rfqs.match_vendors")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied. Requires 'rfqs.match_vendors' permission.")
+    
+    body = await request.json()
+    vendor_ids = body.get("vendor_ids", [])
+    
+    if not vendor_ids:
+        raise HTTPException(status_code=400, detail="vendor_ids array is required")
+    
+    # Validate RFQ exists
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Get buyer info
+    buyer = await db.users.find_one({"user_id": rfq.get("buyer_id")}, {"_id": 0})
+    
+    # Validate all vendor IDs exist
+    valid_vendors = []
+    for vid in vendor_ids:
+        vendor = await db.vendors.find_one({"vendor_id": vid}, {"_id": 0})
+        if vendor:
+            valid_vendors.append(vendor)
+        else:
+            logger.warning(f"Vendor {vid} not found during manual match")
+    
+    if not valid_vendors:
+        raise HTTPException(status_code=400, detail="No valid vendors found")
+    
+    # Create match records
+    matches_created = []
+    now = datetime.now(timezone.utc).isoformat()
+    
+    for vendor in valid_vendors:
+        match_record = {
+            "match_id": f"match_{uuid.uuid4().hex[:12]}",
+            "rfq_id": rfq_id,
+            "vendor_id": vendor["vendor_id"],
+            "matched_by": user["user_id"],
+            "matched_by_name": user.get("name", user.get("email", "Unknown")),
+            "status": "matched",  # matched, viewed, responded, quoted
+            "match_type": "manual",  # manual vs auto
+            "created_at": now,
+            "updated_at": now
+        }
+        
+        # Check if already matched
+        existing = await db.rfq_vendor_matches.find_one({
+            "rfq_id": rfq_id,
+            "vendor_id": vendor["vendor_id"]
+        })
+        
+        if not existing:
+            await db.rfq_vendor_matches.insert_one(match_record)
+            matches_created.append(match_record)
+            
+            # Also add to matched_vendors array in RFQ for backward compatibility
+            match_info = {
+                "vendor_id": vendor["vendor_id"],
+                "company_name": vendor.get("company_name", "Unknown"),
+                "suitability_score": 100,  # Manual match = 100% score
+                "match_type": "manual",
+                "matched_by": user["user_id"],
+                "matched_at": now
+            }
+            await db.rfqs.update_one(
+                {"rfq_id": rfq_id},
+                {"$addToSet": {"matched_vendors": match_info}}
+            )
+    
+    # Send notifications to vendors
+    notified_vendors = 0
+    for vendor in valid_vendors:
+        try:
+            # Send email notification
+            await send_vendor_match_notification_email(vendor, rfq, buyer)
+            
+            # Send WhatsApp notification if configured
+            if whatsapp_service.is_configured() and vendor.get("phone"):
+                await send_vendor_match_whatsapp(vendor, rfq)
+            
+            # Create in-app notification
+            notification = {
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": vendor.get("user_id"),
+                "type": "rfq_match",
+                "title": "New RFQ Match",
+                "message": f"You have been matched to a new RFQ: {rfq.get('title', 'Untitled')}",
+                "data": {
+                    "rfq_id": rfq_id,
+                    "rfq_title": rfq.get("title"),
+                    "match_type": "manual"
+                },
+                "is_read": False,
+                "created_at": now
+            }
+            await db.notifications.insert_one(notification)
+            notified_vendors += 1
+        except Exception as e:
+            logger.error(f"Failed to notify vendor {vendor['vendor_id']}: {e}")
+    
+    # Send notification to buyer
+    if buyer:
+        try:
+            await send_buyer_match_notification_email(buyer, rfq, len(valid_vendors))
+            
+            # Create in-app notification for buyer
+            buyer_notification = {
+                "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+                "user_id": buyer.get("user_id"),
+                "type": "rfq_vendors_matched",
+                "title": "Vendors Matched to Your RFQ",
+                "message": f"Your RFQ '{rfq.get('title', 'Untitled')}' has been matched with {len(valid_vendors)} vendor(s). You will receive quotations soon.",
+                "data": {
+                    "rfq_id": rfq_id,
+                    "vendor_count": len(valid_vendors)
+                },
+                "is_read": False,
+                "created_at": now
+            }
+            await db.notifications.insert_one(buyer_notification)
+        except Exception as e:
+            logger.error(f"Failed to notify buyer: {e}")
+    
+    # Log activity
+    activity_log = {
+        "activity_id": f"act_{uuid.uuid4().hex[:12]}",
+        "type": "rfq_vendors_matched",
+        "action": "manual_match",
+        "entity_type": "rfq",
+        "entity_id": rfq_id,
+        "user_id": user["user_id"],
+        "user_name": user.get("name", user.get("email", "Unknown")),
+        "details": {
+            "rfq_title": rfq.get("title"),
+            "vendor_count": len(valid_vendors),
+            "vendor_ids": [v["vendor_id"] for v in valid_vendors],
+            "vendor_names": [v.get("company_name", "Unknown") for v in valid_vendors]
+        },
+        "created_at": now
+    }
+    await db.activity_logs.insert_one(activity_log)
+    
+    logger.info(f"Manual match: {len(matches_created)} vendors matched to RFQ {rfq_id} by {user['user_id']}")
+    
+    return {
+        "success": True,
+        "matches_created": len(matches_created),
+        "vendors_notified": notified_vendors,
+        "message": f"Successfully matched {len(valid_vendors)} vendor(s) to RFQ"
+    }
+
+
+@api_router.get("/admin/rfq/{rfq_id}/matches")
+async def admin_get_rfq_matches(rfq_id: str, user: dict = Depends(get_current_user)):
+    """Get all vendors matched to an RFQ with their status"""
+    # Check for admin access OR specific permission
+    if not has_admin_access(user):
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "rfqs.view")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Validate RFQ exists
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Get all matches from rfq_vendor_matches collection
+    matches = await db.rfq_vendor_matches.find({"rfq_id": rfq_id}, {"_id": 0}).to_list(100)
+    
+    # Enrich with vendor info and quote status
+    enriched_matches = []
+    for match in matches:
+        vendor = await db.vendors.find_one({"vendor_id": match["vendor_id"]}, {"_id": 0})
+        quote = await db.quotes.find_one({"rfq_id": rfq_id, "vendor_id": match["vendor_id"]}, {"_id": 0})
+        
+        enriched_match = {
+            **match,
+            "vendor_info": {
+                "company_name": vendor.get("company_name") if vendor else "Unknown",
+                "city": vendor.get("city") if vendor else "",
+                "state": vendor.get("state") if vendor else "",
+                "phone": vendor.get("phone") if vendor else "",
+                "is_approved": vendor.get("is_approved") if vendor else False
+            } if vendor else None,
+            "has_quoted": quote is not None,
+            "quote_info": {
+                "quote_id": quote.get("quote_id"),
+                "total_price": quote.get("total_price"),
+                "status": quote.get("status"),
+                "created_at": quote.get("created_at")
+            } if quote else None
+        }
+        enriched_matches.append(enriched_match)
+    
+    # Also check matched_vendors from RFQ (for backward compatibility with auto-matches)
+    matched_vendors = rfq.get("matched_vendors", [])
+    existing_vendor_ids = {m["vendor_id"] for m in matches}
+    
+    for mv in matched_vendors:
+        if mv.get("vendor_id") not in existing_vendor_ids:
+            vendor = await db.vendors.find_one({"vendor_id": mv["vendor_id"]}, {"_id": 0})
+            quote = await db.quotes.find_one({"rfq_id": rfq_id, "vendor_id": mv["vendor_id"]}, {"_id": 0})
+            
+            enriched_match = {
+                "match_id": f"legacy_{mv['vendor_id']}",
+                "rfq_id": rfq_id,
+                "vendor_id": mv["vendor_id"],
+                "status": "quoted" if quote else "matched",
+                "match_type": mv.get("match_type", "auto"),
+                "suitability_score": mv.get("suitability_score", 0),
+                "created_at": mv.get("matched_at", rfq.get("created_at")),
+                "vendor_info": {
+                    "company_name": vendor.get("company_name") if vendor else mv.get("company_name", "Unknown"),
+                    "city": vendor.get("city") if vendor else "",
+                    "state": vendor.get("state") if vendor else "",
+                    "phone": vendor.get("phone") if vendor else "",
+                    "is_approved": vendor.get("is_approved") if vendor else False
+                } if vendor else None,
+                "has_quoted": quote is not None,
+                "quote_info": {
+                    "quote_id": quote.get("quote_id"),
+                    "total_price": quote.get("total_price"),
+                    "status": quote.get("status"),
+                    "created_at": quote.get("created_at")
+                } if quote else None
+            }
+            enriched_matches.append(enriched_match)
+    
+    return {
+        "rfq_id": rfq_id,
+        "matches": enriched_matches,
+        "total_matched": len(enriched_matches),
+        "total_quoted": len([m for m in enriched_matches if m.get("has_quoted")])
+    }
+
+
+@api_router.delete("/admin/rfq/{rfq_id}/match/{vendor_id}")
+async def admin_remove_rfq_match(rfq_id: str, vendor_id: str, user: dict = Depends(get_current_user)):
+    """Remove a vendor match from an RFQ"""
+    # Check for admin access OR specific permission
+    if not has_admin_access(user):
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "rfqs.match_vendors")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied. Requires 'rfqs.match_vendors' permission.")
+    
+    # Validate RFQ exists
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Remove from rfq_vendor_matches collection
+    result = await db.rfq_vendor_matches.delete_one({"rfq_id": rfq_id, "vendor_id": vendor_id})
+    
+    # Also remove from matched_vendors array in RFQ
+    await db.rfqs.update_one(
+        {"rfq_id": rfq_id},
+        {"$pull": {"matched_vendors": {"vendor_id": vendor_id}}}
+    )
+    
+    # Log activity
+    vendor = await db.vendors.find_one({"vendor_id": vendor_id}, {"_id": 0, "company_name": 1})
+    activity_log = {
+        "activity_id": f"act_{uuid.uuid4().hex[:12]}",
+        "type": "rfq_vendor_unmatched",
+        "action": "unmatch",
+        "entity_type": "rfq",
+        "entity_id": rfq_id,
+        "user_id": user["user_id"],
+        "user_name": user.get("name", user.get("email", "Unknown")),
+        "details": {
+            "rfq_title": rfq.get("title"),
+            "vendor_id": vendor_id,
+            "vendor_name": vendor.get("company_name", "Unknown") if vendor else "Unknown"
+        },
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.activity_logs.insert_one(activity_log)
+    
+    return {
+        "success": True,
+        "message": "Vendor match removed successfully"
+    }
+
+
+@api_router.put("/admin/rfq/{rfq_id}/match/{vendor_id}/status")
+async def admin_update_match_status(
+    rfq_id: str,
+    vendor_id: str,
+    request: Request,
+    user: dict = Depends(get_current_user)
+):
+    """Update the status of a vendor match (e.g., viewed, responded)"""
+    if not has_admin_access(user):
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "rfqs.match_vendors")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    body = await request.json()
+    new_status = body.get("status")
+    
+    if new_status not in ["matched", "viewed", "responded", "quoted"]:
+        raise HTTPException(status_code=400, detail="Invalid status. Must be: matched, viewed, responded, quoted")
+    
+    result = await db.rfq_vendor_matches.update_one(
+        {"rfq_id": rfq_id, "vendor_id": vendor_id},
+        {"$set": {"status": new_status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    return {"success": True, "message": "Match status updated"}
+
+
+@api_router.get("/admin/vendors/search")
+async def admin_search_vendors_for_matching(
+    user: dict = Depends(get_current_user),
+    search: Optional[str] = None,
+    category: Optional[str] = None,
+    city: Optional[str] = None,
+    state: Optional[str] = None,
+    approved_only: bool = True,
+    limit: int = 50
+):
+    """Search vendors for manual RFQ matching"""
+    if not has_admin_access(user):
+        from app.services.rbac_service import rbac_service
+        has_permission = await rbac_service.check_permission(user["user_id"], "rfqs.match_vendors")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    query = {}
+    if approved_only:
+        query["is_approved"] = True
+    if search:
+        query["$or"] = [
+            {"company_name": {"$regex": search, "$options": "i"}},
+            {"description": {"$regex": search, "$options": "i"}}
+        ]
+    if city:
+        query["city"] = {"$regex": city, "$options": "i"}
+    if state:
+        query["state"] = {"$regex": state, "$options": "i"}
+    
+    vendors = await db.vendors.find(query, {"_id": 0}).limit(limit).to_list(limit)
+    
+    # Enrich with machine info
+    enriched_vendors = []
+    for vendor in vendors:
+        machines = await db.machines.find(
+            {"vendor_id": vendor["vendor_id"]}, 
+            {"_id": 0, "machine_category": 1, "machine_type": 1}
+        ).to_list(50)
+        
+        # Filter by category if specified
+        if category:
+            matching_machines = [m for m in machines if category.lower() in (m.get("machine_category", "") or "").lower()]
+            if not matching_machines:
+                continue
+        
+        vendor["machines_count"] = len(machines)
+        vendor["machine_categories"] = list(set(m.get("machine_category") for m in machines if m.get("machine_category")))
+        vendor["machine_types"] = list(set(m.get("machine_type") for m in machines if m.get("machine_type")))[:10]
+        enriched_vendors.append(vendor)
+    
+    return {
+        "vendors": enriched_vendors,
+        "total": len(enriched_vendors)
+    }
+
+
+# Helper functions for notifications
+async def send_vendor_match_notification_email(vendor: dict, rfq: dict, buyer: dict):
+    """Send email notification to vendor about new RFQ match"""
+    try:
+        from app.services.notification_service import notification_service
+        
+        vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
+        if not vendor_user or not vendor_user.get("email"):
+            return
+        
+        data = {
+            "rfq_id": rfq.get("rfq_id"),
+            "rfq_title": rfq.get("title", "New RFQ"),
+            "material_type": rfq.get("material_type", "N/A"),
+            "quantity": rfq.get("quantity", "As Required"),
+            "tolerance": rfq.get("tolerance", "N/A"),
+            "deadline": rfq.get("deadline", "As per RFQ"),
+            "buyer_name": buyer.get("name", "Buyer") if buyer else "Buyer",
+            "match_score": 100,
+            "app_url": f"https://oemlinker.com/vendor/rfq/{rfq.get('rfq_id')}"
+        }
+        
+        await notification_service.send_notification(
+            channel="email",
+            recipient=vendor_user["email"],
+            notification_type="rfq_match",
+            data=data
+        )
+    except Exception as e:
+        logger.error(f"Failed to send vendor match email: {e}")
+
+
+async def send_vendor_match_whatsapp(vendor: dict, rfq: dict):
+    """Send WhatsApp notification to vendor about new RFQ match"""
+    try:
+        phone = vendor.get("phone", "").strip()
+        if not phone:
+            return
+        
+        company_name = vendor.get("company_name", "Partner")
+        part_name = rfq.get("title", "New Part")[:50]
+        quantity = str(rfq.get("quantity", "As Required"))
+        
+        # Generate magic link
+        redirect_path = f"/vendor/rfq/{rfq['rfq_id']}"
+        magic_link_result = await generate_magic_link_for_vendor(phone, redirect_path)
+        
+        if magic_link_result.get("success"):
+            rfq_link = f"https://oemlinker.com/magic-login?token={magic_link_result['token']}"
+        else:
+            rfq_link = f"https://oemlinker.com/vendor/rfq/{rfq['rfq_id']}"
+        
+        message = f"""🔔 *New RFQ Match!*
+
+Hello *{company_name}*,
+
+You have been matched to a new RFQ opportunity.
+
+📋 *{part_name}*
+📦 Quantity: {quantity}
+🎯 Match Score: 100%
+
+👉 *View & Quote:*
+{rfq_link}
+
+_Team OEMLinker_"""
+        
+        await whatsapp_service.send_text_message(phone, message)
+        logger.info(f"WhatsApp notification sent to vendor {vendor['vendor_id']}")
+    except Exception as e:
+        logger.error(f"Failed to send vendor match WhatsApp: {e}")
+
+
+async def send_buyer_match_notification_email(buyer: dict, rfq: dict, vendor_count: int):
+    """Send email notification to buyer about vendors matched to their RFQ"""
+    try:
+        from app.services.notification_service import notification_service
+        
+        if not buyer or not buyer.get("email"):
+            return
+        
+        data = {
+            "rfq_id": rfq.get("rfq_id"),
+            "rfq_title": rfq.get("title", "Your RFQ"),
+            "matched_count": vendor_count,
+            "app_url": f"https://oemlinker.com/buyer/rfqs/{rfq.get('rfq_id')}"
+        }
+        
+        await notification_service.send_notification(
+            channel="email",
+            recipient=buyer["email"],
+            notification_type="rfq_vendor_matched",
+            data=data
+        )
+    except Exception as e:
+        logger.error(f"Failed to send buyer match email: {e}")
+
+
 # ============== ADMIN - QUOTE MANAGEMENT ==============
 
 @api_router.get("/admin/quotes")
