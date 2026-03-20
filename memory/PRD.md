@@ -982,6 +982,62 @@ AI-powered RFQ analysis with intelligent vendor matching and enhanced quotation 
 
 ### Test Report: /app/test_reports/iteration_31.json (100% pass - 23 backend tests + full UI verification)
 
+## Item-wise Vendor Quotation System (Implemented Mar 20, 2026)
+
+### Overview
+Enhanced the quotation system to support item-wise (per drawing) quotations for multi-part RFQs. Vendors can now quote each drawing/item separately with individual cost breakdowns.
+
+### Features:
+- **Item-wise Mode**: Automatically activates when RFQ has multiple drawings
+- **Per-item Cost Breakdown**: Each item has material cost, labour cost, and additional costs
+- **Material Toggle per Item**: Buyer-provided material can be specified per item
+- **Expandable Item Cards**: UI shows collapsible cards for each item
+- **Grand Total Calculation**: Automatic sum of all item costs
+
+### Backend Endpoints:
+- `POST /api/vendor/quotation/itemwise` - Submit item-wise quotation with items array
+- `GET /api/rfqs/{rfq_id}/items` - Get RFQ drawings/items for quoting
+- `GET /api/rfq/{rfq_id}/quotations` - Enhanced to include is_itemwise flag and items array
+
+### Data Model (QuoteItem):
+```json
+{
+  "item_id": "drawing_abc123",
+  "drawing_id": "drawing_abc123",
+  "title": "Shaft Component A",
+  "material_provided_by_buyer": false,
+  "material_cost": 5000,
+  "labour_cost": 3000,
+  "additional_costs": {"heat_treatment": 500},
+  "total_cost": 8500,
+  "remarks": "Premium steel used"
+}
+```
+
+### Quote Response (is_itemwise: true):
+```json
+{
+  "quote_id": "quote_xxx",
+  "rfq_id": "rfq_yyy",
+  "is_itemwise": true,
+  "items": [...],
+  "total_cost": 26000,
+  "items_count": 3,
+  "comparison_summary": {
+    "itemwise_quotes": 2,
+    "flat_quotes": 1
+  }
+}
+```
+
+### Frontend Components Updated:
+- **VendorQuotationForm.jsx**: Fetches items from API, displays expandable form per drawing, auto-switches to item-wise mode
+- **QuotationComparison.jsx**: Shows "item-wise" badge, expandable item breakdown in comparison table
+- **QuoteDetailModal.jsx**: Displays item-wise cost breakdown when viewing quote details
+- **RFQDetail.jsx**: Uses VendorQuotationForm in Submit Quote dialog
+
+### Test Report: /app/test_reports/iteration_32.json (100% backend, 90% frontend)
+
 ## RFQ Drawing Access & PDF Layout Fix (Implemented Mar 19, 2026)
 
 ### Overview

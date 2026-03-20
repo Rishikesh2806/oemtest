@@ -212,6 +212,122 @@ const QuoteDetailModal = ({ quoteId, open, onOpenChange, onQuoteUpdated, rfqId }
               </TabsList>
 
               <TabsContent value="details" className="space-y-4 mt-4">
+                {/* Cost Breakdown - Item-wise */}
+                {quote.is_itemwise && quote.items && quote.items.length > 0 && (
+                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <DollarSign className="w-4 h-4 text-blue-600" />
+                      <span className="font-medium text-blue-800">Item-wise Cost Breakdown ({quote.items.length} items)</span>
+                    </div>
+                    <div className="space-y-3">
+                      {quote.items.map((item, idx) => {
+                        const itemAdditional = item.additional_costs ? 
+                          Object.values(item.additional_costs).reduce((a, b) => a + b, 0) : 0;
+                        return (
+                          <div key={item.item_id || idx} className="p-3 bg-white rounded border border-blue-100">
+                            <div className="flex justify-between items-start">
+                              <div>
+                                <p className="font-medium text-slate-800">
+                                  {idx + 1}. {item.title || `Item ${idx + 1}`}
+                                </p>
+                                {item.remarks && (
+                                  <p className="text-xs text-slate-500 mt-1">{item.remarks}</p>
+                                )}
+                              </div>
+                              <span className="font-bold text-slate-900">
+                                ₹{(item.total_cost || 0).toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 mt-2 text-xs text-slate-600">
+                              <div>
+                                <span className="text-slate-400">Material:</span>{' '}
+                                {item.material_provided_by_buyer ? 'Buyer' : `₹${(item.material_cost || 0).toLocaleString('en-IN')}`}
+                              </div>
+                              <div>
+                                <span className="text-slate-400">Labour:</span>{' '}
+                                ₹{(item.labour_cost || 0).toLocaleString('en-IN')}
+                              </div>
+                              <div>
+                                <span className="text-slate-400">Additional:</span>{' '}
+                                {itemAdditional > 0 ? `₹${itemAdditional.toLocaleString('en-IN')}` : '-'}
+                              </div>
+                            </div>
+                            {item.additional_costs && Object.keys(item.additional_costs).length > 0 && (
+                              <div className="mt-2 pt-2 border-t border-blue-100">
+                                <p className="text-xs text-slate-400 mb-1">Additional Costs:</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {Object.entries(item.additional_costs).map(([key, value]) => (
+                                    <span key={key} className="text-xs px-2 py-0.5 bg-blue-50 text-blue-700 rounded">
+                                      {key.replace(/_/g, ' ')}: ₹{value.toLocaleString('en-IN')}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="mt-3 pt-3 border-t border-blue-200 flex justify-between items-center">
+                      <span className="font-medium text-blue-800">Grand Total</span>
+                      <span className="text-xl font-bold text-blue-800">
+                        ₹{(quote.total_cost || quote.price || 0).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cost Breakdown - Flat Quote */}
+                {!quote.is_itemwise && (quote.material_cost || quote.machining_cost) && (
+                  <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                    <div className="flex items-center gap-2 mb-3">
+                      <DollarSign className="w-4 h-4 text-green-600" />
+                      <span className="font-medium text-green-800">Cost Breakdown</span>
+                    </div>
+                    <div className="space-y-2">
+                      {quote.material_provided_by_buyer ? (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-600">Material</span>
+                          <span className="italic text-slate-400">Provided by buyer</span>
+                        </div>
+                      ) : quote.material_cost > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-600">Material Cost</span>
+                          <span className="font-medium">₹{quote.material_cost?.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                      {quote.machining_cost > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-600">Labour/Machining Cost</span>
+                          <span className="font-medium">₹{quote.machining_cost?.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                      {quote.additional_costs && Object.keys(quote.additional_costs).length > 0 && (
+                        <>
+                          <div className="border-t border-green-200 pt-2 mt-2">
+                            <p className="text-xs text-slate-500 mb-1">Additional Costs:</p>
+                          </div>
+                          {Object.entries(quote.additional_costs).map(([key, value]) => (
+                            <div key={key} className="flex justify-between text-sm">
+                              <span className="text-slate-600 capitalize">{key.replace(/_/g, ' ')}</span>
+                              <span className="font-medium">₹{value?.toLocaleString('en-IN')}</span>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                      <div className="border-t border-green-200 pt-2 mt-2 flex justify-between">
+                        <span className="font-medium text-green-800">Total</span>
+                        <span className="text-lg font-bold text-green-800">
+                          ₹{(quote.total_cost || quote.price || 0).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    </div>
+                    {quote.cost_breakdown_remarks && (
+                      <p className="text-xs text-slate-500 mt-2 italic">{quote.cost_breakdown_remarks}</p>
+                    )}
+                  </div>
+                )}
+
                 {/* Payment Terms */}
                 <div className="p-4 bg-slate-50 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
