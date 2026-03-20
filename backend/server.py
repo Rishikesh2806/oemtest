@@ -1087,7 +1087,7 @@ class Quote(BaseModel):
     quote_id: str
     rfq_id: str
     vendor_id: str
-    price: float
+    price: float  # Legacy: total price (backward compatibility)
     currency: str = "INR"
     lead_time_days: int
     notes: Optional[str] = None
@@ -1095,17 +1095,66 @@ class Quote(BaseModel):
     payment_terms_notes: Optional[str] = None
     is_selected: bool = False
     status: str = "pending"  # pending, accepted, rejected, expired
+    # Enhanced quotation fields
+    material_provided_by_buyer: bool = False  # If true, buyer provides raw material
+    material_cost: Optional[float] = None  # Cost of raw material (if vendor provides)
+    machining_cost: float = 0  # Cost of machining/labor
+    additional_costs: Optional[Dict[str, float]] = None  # Heat treatment, finishing, etc.
+    total_cost: float = 0  # Auto-calculated: material + machining + additional
+    cost_breakdown_remarks: Optional[str] = None  # Detailed breakdown explanation
     created_at: str
     expires_at: str
 
 class QuoteCreate(BaseModel):
     rfq_id: str
-    price: float
+    price: float = 0  # Legacy field, will be auto-calculated
     currency: str = "INR"
     lead_time_days: int
     notes: Optional[str] = None
     proposed_payment_terms: Optional[str] = PaymentTerms.NET_30
     payment_terms_notes: Optional[str] = None
+    # Enhanced quotation fields
+    material_provided_by_buyer: bool = False
+    material_cost: Optional[float] = None
+    machining_cost: float = 0
+    additional_costs: Optional[Dict[str, float]] = None  # e.g., {"heat_treatment": 500, "surface_finish": 200}
+    cost_breakdown_remarks: Optional[str] = None
+
+# RFQ Line Item for Multi-Drawing RFQs
+class RFQLineItem(BaseModel):
+    line_item_id: str
+    rfq_id: str  # Parent RFQ
+    drawing_id: str
+    title: str
+    quantity: int = 1
+    process_detected: Optional[str] = None  # machining, casting, forging, fabrication
+    raw_material_provided: bool = False
+    material_type: Optional[str] = None
+    tolerance: Optional[float] = None
+    ai_analysis: Optional[Dict[str, Any]] = None
+    matched_vendors: List[str] = []  # Vendor IDs matched for this line item
+    status: str = "pending"  # pending, analyzing, matched, quoted
+
+# AI Analysis Result
+class AIAnalysisResult(BaseModel):
+    process_detected: str  # machining, casting, forging, fabrication, multi
+    processes_required: List[str] = []  # All processes needed
+    raw_material_provided: bool = False
+    material_type: Optional[str] = None
+    tolerance: Optional[float] = None
+    complexity_score: int = 5  # 1-10
+    recommended_machine_categories: List[str] = []
+    notes: Optional[str] = None
+
+# Vendor Match Result
+class VendorMatchResult(BaseModel):
+    vendor_id: str
+    company_name: str
+    suitability_score: int  # 0-100
+    matched_capabilities: List[str] = []
+    match_reason: str
+    is_excluded: bool = False
+    exclusion_reason: Optional[str] = None
 
 # Notification Types
 class NotificationType:
@@ -6108,6 +6157,512 @@ async def submit_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
     
     return {"message": "RFQ submitted to vendors", "status": RFQStatus.SUBMITTED}
 
+
+# ============== ENHANCED RFQ ANALYSIS & DISTRIBUTION ==============
+
+@api_router.post("/rfq/analyze-and-match")
+async def analyze_and_match_rfq(request: Request, user: dict = Depends(get_current_user)):
+    """
+    Analyze RFQ drawings using AI and match with suitable vendors.
+    Supports multi-drawing RFQs with intelligent process detection.
+    """
+    body = await request.json()
+    rfq_id = body.get("rfq_id")
+    
+    if not rfq_id:
+        raise HTTPException(status_code=400, detail="rfq_id is required")
+    
+    # Get RFQ
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Verify ownership or admin access
+    is_owner = rfq.get("buyer_id") == user["user_id"]
+    is_admin = has_admin_access(user)
+    if not is_owner and not is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Get drawings for this RFQ
+    drawings = await db.drawings.find({"rfq_id": rfq_id}, {"_id": 0, "file_data": 0}).to_list(20)
+    
+    # Analyze RFQ and update AI analysis
+    ai_analysis = rfq.get("ai_analysis") or {}
+    
+    # Detect process requirements based on AI analysis and RFQ data
+    process_detection = detect_process_requirements(rfq, ai_analysis)
+    
+    # Update RFQ with process detection
+    await db.rfqs.update_one(
+        {"rfq_id": rfq_id},
+        {"$set": {
+            "process_detected": process_detection["primary_process"],
+            "processes_required": process_detection["all_processes"],
+            "raw_material_provided": process_detection["raw_material_provided"],
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    # Get all approved vendors
+    vendors = await db.vendors.find({"is_approved": True}, {"_id": 0}).to_list(200)
+    
+    # Match vendors based on process requirements
+    matched_vendors = []
+    rejected_vendors = []
+    
+    for vendor in vendors:
+        # Get vendor machines
+        machines = await db.machines.find(
+            {"vendor_id": vendor["vendor_id"], "is_active": True}, 
+            {"_id": 0}
+        ).to_list(50)
+        
+        vendor_categories = list(set(m.get("machine_category", "") for m in machines))
+        
+        # Determine if vendor matches the process requirements
+        match_result = evaluate_vendor_match(
+            vendor, 
+            machines, 
+            vendor_categories,
+            process_detection,
+            rfq
+        )
+        
+        if match_result["is_match"]:
+            matched_vendors.append({
+                "vendor_id": vendor["vendor_id"],
+                "company_name": vendor.get("company_name", "Unknown"),
+                "city": vendor.get("city", ""),
+                "state": vendor.get("state", ""),
+                "suitability_score": match_result["score"],
+                "matched_capabilities": match_result["capabilities"],
+                "match_reason": match_result["reason"],
+                "match_type": "auto"
+            })
+        else:
+            rejected_vendors.append({
+                "vendor_id": vendor["vendor_id"],
+                "company_name": vendor.get("company_name", "Unknown"),
+                "rejection_reason": match_result["rejection_reason"]
+            })
+    
+    # Sort by score
+    matched_vendors.sort(key=lambda x: x["suitability_score"], reverse=True)
+    
+    # Update RFQ with matched vendors
+    await db.rfqs.update_one(
+        {"rfq_id": rfq_id},
+        {"$set": {
+            "matched_vendors": matched_vendors[:20],  # Top 20 matches
+            "status": RFQStatus.MATCHING if matched_vendors else rfq.get("status"),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    # Log activity
+    activity_log = {
+        "activity_id": f"act_{uuid.uuid4().hex[:12]}",
+        "type": "rfq_analyzed",
+        "action": "analyze_and_match",
+        "entity_type": "rfq",
+        "entity_id": rfq_id,
+        "user_id": user["user_id"],
+        "details": {
+            "rfq_title": rfq.get("title"),
+            "process_detected": process_detection["primary_process"],
+            "vendors_matched": len(matched_vendors),
+            "vendors_rejected": len(rejected_vendors)
+        },
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.activity_logs.insert_one(activity_log)
+    
+    return {
+        "rfq_id": rfq_id,
+        "process_detection": process_detection,
+        "matched_vendors": matched_vendors,
+        "rejected_vendors": rejected_vendors[:10],  # First 10 rejections
+        "total_matched": len(matched_vendors),
+        "total_rejected": len(rejected_vendors)
+    }
+
+
+def detect_process_requirements(rfq: dict, ai_analysis: dict) -> dict:
+    """
+    Detect required processes based on RFQ data and AI analysis.
+    Returns process type and whether raw material is provided.
+    """
+    # Keywords for different processes
+    casting_keywords = ["casting", "cast", "foundry", "sand cast", "die cast", "investment cast", "mould", "molten"]
+    forging_keywords = ["forging", "forge", "forged", "hot working", "drop forge", "press forge"]
+    machining_keywords = ["machining", "cnc", "turning", "milling", "drilling", "boring", "grinding", "lathe", "vmc", "hmc"]
+    fabrication_keywords = ["fabrication", "welding", "sheet metal", "laser cut", "plasma", "bending", "rolling"]
+    
+    # Check supply type
+    supply_type = rfq.get("supply_type", "vendor_material")
+    raw_material_provided = supply_type == "buyer_material"
+    
+    # Combine all text for keyword matching
+    text = f"{rfq.get('title', '')} {rfq.get('description', '')} {rfq.get('material_type', '')}".lower()
+    
+    # Also check AI recommended processes
+    recommended_processes = ai_analysis.get("recommended_processes", [])
+    ai_text = " ".join(recommended_processes).lower()
+    combined_text = f"{text} {ai_text}"
+    
+    # Detect processes
+    processes = []
+    primary_process = "machining"  # Default
+    
+    if any(kw in combined_text for kw in casting_keywords):
+        processes.append("casting")
+        primary_process = "casting"
+    
+    if any(kw in combined_text for kw in forging_keywords):
+        processes.append("forging")
+        if "casting" not in processes:
+            primary_process = "forging"
+    
+    if any(kw in combined_text for kw in fabrication_keywords):
+        processes.append("fabrication")
+        if not processes:
+            primary_process = "fabrication"
+    
+    if any(kw in combined_text for kw in machining_keywords) or raw_material_provided:
+        processes.append("machining")
+        # If raw material is provided, machining is primary
+        if raw_material_provided:
+            primary_process = "machining"
+    
+    # If no process detected, default to machining
+    if not processes:
+        processes = ["machining"]
+    
+    # If raw material is provided, exclude casting and forging
+    if raw_material_provided:
+        processes = [p for p in processes if p not in ["casting", "forging"]]
+        if not processes:
+            processes = ["machining"]
+        primary_process = "machining"
+    
+    return {
+        "primary_process": primary_process,
+        "all_processes": processes,
+        "raw_material_provided": raw_material_provided,
+        "material_type": rfq.get("material_type"),
+        "notes": f"Detected from RFQ analysis. Supply type: {supply_type}"
+    }
+
+
+def evaluate_vendor_match(vendor: dict, machines: list, vendor_categories: list, process_detection: dict, rfq: dict) -> dict:
+    """
+    Evaluate if a vendor matches the RFQ requirements.
+    """
+    primary_process = process_detection["primary_process"]
+    all_processes = process_detection["all_processes"]
+    raw_material_provided = process_detection["raw_material_provided"]
+    
+    # Map processes to required machine categories
+    process_to_categories = {
+        "casting": ["Casting"],
+        "forging": ["Forging"],
+        "machining": ["CNC Turning/Lathe", "VMC (Vertical Machining Center)", "HMC (Horizontal Machining Center)", 
+                     "5-Axis Machining", "Milling", "Grinding", "Boring", "Drilling", "VTL (Vertical Turret Lathe)"],
+        "fabrication": ["Sheet Metal", "Welding", "Laser Cutting"]
+    }
+    
+    # Check if vendor has capability for required processes
+    required_categories = []
+    for proc in all_processes:
+        required_categories.extend(process_to_categories.get(proc, []))
+    
+    # Find matching capabilities
+    matched_capabilities = []
+    for cat in vendor_categories:
+        if cat in required_categories or any(req.lower() in cat.lower() for req in required_categories):
+            matched_capabilities.append(cat)
+    
+    # If raw material is provided, only match machining vendors
+    if raw_material_provided:
+        if any(cat in process_to_categories["casting"] for cat in vendor_categories):
+            # Vendor is casting-focused, not suitable for machining-only jobs
+            if not matched_capabilities:
+                return {
+                    "is_match": False,
+                    "score": 0,
+                    "capabilities": [],
+                    "reason": "",
+                    "rejection_reason": "Raw material provided - only machining vendors needed, vendor is casting-focused"
+                }
+        if any(cat in process_to_categories["forging"] for cat in vendor_categories):
+            if not matched_capabilities:
+                return {
+                    "is_match": False,
+                    "score": 0,
+                    "capabilities": [],
+                    "reason": "",
+                    "rejection_reason": "Raw material provided - only machining vendors needed, vendor is forging-focused"
+                }
+    
+    # No matching capabilities
+    if not matched_capabilities:
+        return {
+            "is_match": False,
+            "score": 0,
+            "capabilities": [],
+            "reason": "",
+            "rejection_reason": f"No matching capabilities for {primary_process}"
+        }
+    
+    # Calculate score
+    score = 50  # Base score
+    
+    # Bonus for multiple matching capabilities
+    score += len(matched_capabilities) * 10
+    
+    # Cap at 100
+    score = min(score, 100)
+    
+    return {
+        "is_match": True,
+        "score": score,
+        "capabilities": matched_capabilities[:5],
+        "reason": f"Matched for {primary_process}: {', '.join(matched_capabilities[:3])}",
+        "rejection_reason": None
+    }
+
+
+@api_router.get("/rfq/{rfq_id}/vendors")
+async def get_rfq_matched_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
+    """Get all vendors matched to an RFQ with their status"""
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Verify ownership or admin access
+    is_owner = rfq.get("buyer_id") == user["user_id"]
+    is_admin = has_admin_access(user)
+    if not is_owner and not is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    matched_vendors = rfq.get("matched_vendors", [])
+    
+    # Enrich with quote status
+    for mv in matched_vendors:
+        quote = await db.quotes.find_one(
+            {"rfq_id": rfq_id, "vendor_id": mv["vendor_id"]},
+            {"_id": 0, "quote_id": 1, "total_cost": 1, "status": 1}
+        )
+        mv["has_quoted"] = quote is not None
+        mv["quote_info"] = {
+            "quote_id": quote.get("quote_id"),
+            "total_cost": quote.get("total_cost"),
+            "status": quote.get("status")
+        } if quote else None
+    
+    return {
+        "rfq_id": rfq_id,
+        "process_detected": rfq.get("process_detected"),
+        "raw_material_provided": rfq.get("raw_material_provided", False),
+        "matched_vendors": matched_vendors,
+        "total_matched": len(matched_vendors)
+    }
+
+
+@api_router.get("/rfq/{rfq_id}/quotations")
+async def get_rfq_quotations(rfq_id: str, user: dict = Depends(get_current_user)):
+    """Get all quotations for an RFQ with cost breakdown comparison"""
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Verify ownership or admin access
+    is_owner = rfq.get("buyer_id") == user["user_id"]
+    is_admin = has_admin_access(user)
+    if not is_owner and not is_admin:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Get all quotes for this RFQ
+    quotes = await db.quotes.find({"rfq_id": rfq_id}, {"_id": 0}).to_list(50)
+    
+    # Enrich with vendor info
+    quotations = []
+    for quote in quotes:
+        vendor = await db.vendors.find_one(
+            {"vendor_id": quote["vendor_id"]},
+            {"_id": 0, "company_name": 1, "city": 1, "state": 1, "rating": 1}
+        )
+        
+        quotations.append({
+            "quote_id": quote.get("quote_id"),
+            "vendor_id": quote.get("vendor_id"),
+            "vendor_name": vendor.get("company_name", "Unknown") if vendor else "Unknown",
+            "vendor_location": f"{vendor.get('city', '')}, {vendor.get('state', '')}" if vendor else "",
+            "vendor_rating": vendor.get("rating", 0) if vendor else 0,
+            "material_provided_by_buyer": quote.get("material_provided_by_buyer", False),
+            "material_cost": quote.get("material_cost", 0),
+            "machining_cost": quote.get("machining_cost", 0),
+            "additional_costs": quote.get("additional_costs", {}),
+            "total_cost": quote.get("total_cost") or quote.get("price", 0),
+            "lead_time_days": quote.get("lead_time_days"),
+            "currency": quote.get("currency", "INR"),
+            "notes": quote.get("notes"),
+            "cost_breakdown_remarks": quote.get("cost_breakdown_remarks"),
+            "status": quote.get("status"),
+            "is_selected": quote.get("is_selected", False),
+            "created_at": quote.get("created_at")
+        })
+    
+    # Sort by total cost
+    quotations.sort(key=lambda x: x["total_cost"])
+    
+    # Find lowest costs
+    lowest_total = min([q["total_cost"] for q in quotations]) if quotations else 0
+    lowest_machining = min([q["machining_cost"] for q in quotations]) if quotations else 0
+    
+    return {
+        "rfq_id": rfq_id,
+        "rfq_title": rfq.get("title"),
+        "quotations": quotations,
+        "total_quotes": len(quotations),
+        "comparison_summary": {
+            "lowest_total_cost": lowest_total,
+            "lowest_machining_cost": lowest_machining,
+            "average_total_cost": sum(q["total_cost"] for q in quotations) / len(quotations) if quotations else 0,
+            "quotes_with_material": len([q for q in quotations if not q["material_provided_by_buyer"]]),
+            "quotes_without_material": len([q for q in quotations if q["material_provided_by_buyer"]])
+        }
+    }
+
+
+@api_router.post("/vendor/quotation")
+async def submit_vendor_quotation(request: Request, user: dict = Depends(get_current_user)):
+    """
+    Submit a quotation with detailed cost breakdown.
+    Vendors can specify material, machining, and additional costs separately.
+    """
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=403, detail="Vendor profile required")
+    
+    body = await request.json()
+    rfq_id = body.get("rfq_id")
+    
+    if not rfq_id:
+        raise HTTPException(status_code=400, detail="rfq_id is required")
+    
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Check if vendor already quoted
+    existing_quote = await db.quotes.find_one({
+        "rfq_id": rfq_id,
+        "vendor_id": vendor["vendor_id"]
+    })
+    if existing_quote:
+        raise HTTPException(status_code=400, detail="You have already submitted a quotation for this RFQ")
+    
+    # Extract quotation details
+    material_provided_by_buyer = body.get("material_provided_by_buyer", False)
+    material_cost = float(body.get("material_cost", 0)) if not material_provided_by_buyer else 0
+    machining_cost = float(body.get("machining_cost", 0))
+    additional_costs = body.get("additional_costs", {})
+    
+    # Validate machining cost
+    if machining_cost <= 0:
+        raise HTTPException(status_code=400, detail="Machining cost is required and must be greater than 0")
+    
+    # Validate material cost if buyer not providing
+    if not material_provided_by_buyer and material_cost <= 0:
+        raise HTTPException(status_code=400, detail="Material cost is required when vendor provides material")
+    
+    # Calculate total
+    additional_costs_total = sum(float(v) for v in additional_costs.values()) if additional_costs else 0
+    total_cost = material_cost + machining_cost + additional_costs_total
+    
+    quote_id = f"quote_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    quote_doc = {
+        "quote_id": quote_id,
+        "rfq_id": rfq_id,
+        "vendor_id": vendor["vendor_id"],
+        "price": total_cost,  # Legacy field
+        "total_price": total_cost,
+        "currency": body.get("currency", "INR"),
+        "lead_time_days": int(body.get("lead_time_days", 7)),
+        "notes": body.get("notes"),
+        "proposed_payment_terms": body.get("proposed_payment_terms", "net_30"),
+        "payment_terms_notes": body.get("payment_terms_notes"),
+        "is_selected": False,
+        "status": "pending",
+        # Enhanced fields
+        "material_provided_by_buyer": material_provided_by_buyer,
+        "material_cost": material_cost,
+        "machining_cost": machining_cost,
+        "additional_costs": additional_costs,
+        "total_cost": total_cost,
+        "cost_breakdown_remarks": body.get("cost_breakdown_remarks"),
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(days=14)).isoformat()
+    }
+    
+    await db.quotes.insert_one(quote_doc)
+    
+    # Update RFQ status
+    await db.rfqs.update_one(
+        {"rfq_id": rfq_id},
+        {"$set": {"status": RFQStatus.QUOTED, "updated_at": now.isoformat()}}
+    )
+    
+    # Notify buyer
+    buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
+    if buyer and buyer.get("email"):
+        email_data = {
+            "buyer_name": buyer.get("name", "Buyer"),
+            "rfq_title": rfq.get("title", "Your RFQ"),
+            "vendor_name": vendor.get("company_name", "Vendor"),
+            "price": f"{total_cost:.2f}",
+            "lead_time": body.get("lead_time_days", 7),
+            "app_url": f"https://oemlinker.com/buyer/rfq/{rfq_id}"
+        }
+        subject, html = get_email_template("quote_received", email_data)
+        asyncio.create_task(send_email_async(buyer["email"], subject, html))
+    
+    # Create in-app notification
+    await create_notification(
+        user_id=rfq["buyer_id"],
+        notification_type=NotificationType.QUOTE_RECEIVED,
+        title=f"New Quote from {vendor.get('company_name', 'Vendor')}",
+        message=f"₹{total_cost:,.2f} for {rfq.get('title', 'your RFQ')[:30]} - {body.get('lead_time_days', 7)} days",
+        data={
+            "rfq_id": rfq_id,
+            "quote_id": quote_id,
+            "vendor_name": vendor.get("company_name"),
+            "total_cost": total_cost,
+            "material_cost": material_cost,
+            "machining_cost": machining_cost,
+            "link": f"/buyer/rfq/{rfq_id}"
+        }
+    )
+    
+    logger.info(f"Quotation submitted: {quote_id} for RFQ {rfq_id} by vendor {vendor['vendor_id']}")
+    
+    return {
+        "success": True,
+        "quote_id": quote_id,
+        "total_cost": total_cost,
+        "cost_breakdown": {
+            "material_cost": material_cost,
+            "machining_cost": machining_cost,
+            "additional_costs": additional_costs,
+            "additional_costs_total": additional_costs_total
+        },
+        "message": "Quotation submitted successfully"
+    }
+
+
 # ============== QUOTE ROUTES ==============
 
 @api_router.get("/payment-terms")
@@ -6132,11 +6687,22 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     quote_id = f"quote_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc)
     
+    # Calculate total cost from breakdown
+    material_cost = quote.material_cost or 0 if not quote.material_provided_by_buyer else 0
+    machining_cost = quote.machining_cost or 0
+    additional_costs = quote.additional_costs or {}
+    additional_costs_total = sum(additional_costs.values()) if additional_costs else 0
+    total_cost = material_cost + machining_cost + additional_costs_total
+    
+    # Use total_cost as price for backward compatibility
+    final_price = quote.price if quote.price > 0 else total_cost
+    
     quote_doc = {
         "quote_id": quote_id,
         "rfq_id": quote.rfq_id,
         "vendor_id": vendor["vendor_id"],
-        "price": quote.price,
+        "price": final_price,  # Legacy field
+        "total_price": total_cost,  # New calculated total
         "currency": quote.currency,
         "lead_time_days": quote.lead_time_days,
         "notes": quote.notes,
@@ -6144,6 +6710,13 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
         "payment_terms_notes": quote.payment_terms_notes,
         "is_selected": False,
         "status": "pending",
+        # Enhanced quotation fields
+        "material_provided_by_buyer": quote.material_provided_by_buyer,
+        "material_cost": material_cost,
+        "machining_cost": machining_cost,
+        "additional_costs": additional_costs,
+        "total_cost": total_cost,
+        "cost_breakdown_remarks": quote.cost_breakdown_remarks,
         "created_at": now.isoformat(),
         "expires_at": (now + timedelta(days=14)).isoformat()
     }

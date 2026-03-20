@@ -4,6 +4,7 @@ import { useAuth, api } from "../App";
 import { usePermissions } from "../hooks/usePermissions";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import PermittedActions from "../components/PermittedActions";
+import QuotationComparison from "../components/QuotationComparison";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -16,7 +17,7 @@ import {
   Users, FileText, Package, DollarSign, Building2, Wrench, FileCheck,
   CheckCircle2, XCircle, Loader2, Search, Plus, Edit, Trash2,
   Eye, Send, AlertCircle, RefreshCw, ChevronRight, Clock, Camera, Upload,
-  Link, X, CheckCircle
+  Link, X, CheckCircle, BarChart3, Zap
 } from "lucide-react";
 import { Checkbox } from "../components/ui/checkbox";
 
@@ -611,6 +612,7 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
   const [viewRFQData, setViewRFQData] = useState(null);
   const [loadingRFQDetails, setLoadingRFQDetails] = useState(false);
   const [downloadingPDF, setDownloadingPDF] = useState(false);
+  const [quotationCompareRFQ, setQuotationCompareRFQ] = useState(null);
   
   const filteredRFQs = rfqs.filter(r => {
     const matchesSearch = r.title?.toLowerCase().includes(search.toLowerCase()) ||
@@ -1484,15 +1486,74 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
                       <div key={i} className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
                         <div>
                           <p className="text-sm font-medium">{quote.vendor_info?.company_name || 'Unknown Vendor'}</p>
-                          <p className="text-xs text-slate-500">Lead time: {quote.lead_time_days} days</p>
+                          <p className="text-xs text-slate-500">
+                            Lead time: {quote.lead_time_days} days
+                            {quote.material_provided_by_buyer && " • Buyer provides material"}
+                          </p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-green-700">₹{quote.total_price?.toLocaleString('en-IN') || quote.price?.toLocaleString('en-IN')}</p>
+                          <p className="font-bold text-green-700">₹{quote.total_cost?.toLocaleString('en-IN') || quote.total_price?.toLocaleString('en-IN') || quote.price?.toLocaleString('en-IN')}</p>
+                          {quote.machining_cost > 0 && (
+                            <p className="text-xs text-slate-500">Machining: ₹{quote.machining_cost?.toLocaleString('en-IN')}</p>
+                          )}
                           <StatusBadge status={quote.status} />
                         </div>
                       </div>
                     ))}
                   </div>
+                  
+                  {/* Compare Quotations Button */}
+                  <Button 
+                    variant="outline" 
+                    className="w-full mt-3 border-orange-200 text-orange-600 hover:bg-orange-50"
+                    onClick={() => {
+                      setViewRFQ(null);
+                      setViewRFQData(null);
+                      // Open quotation comparison in a new state
+                      setQuotationCompareRFQ(viewRFQData);
+                    }}
+                    data-testid="compare-quotations-btn"
+                  >
+                    <BarChart3 className="w-4 h-4 mr-2" /> Compare All Quotations
+                  </Button>
+                </div>
+              )}
+              
+              {/* AI Analysis Actions */}
+              {canMatchVendors && (
+                <div className="border-t pt-4 mt-4">
+                  <h4 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-slate-400" /> AI Actions
+                  </h4>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          toast.info("Analyzing RFQ and matching vendors...");
+                          const res = await api.post("/rfq/analyze-and-match", { rfq_id: viewRFQData.rfq_id });
+                          toast.success(`Matched ${res.data.total_matched} vendors!`);
+                          // Refresh RFQ data
+                          const updated = await api.get(`/admin/rfqs/${viewRFQData.rfq_id}`);
+                          setViewRFQData(updated.data);
+                          onRefresh();
+                        } catch (error) {
+                          toast.error(error.response?.data?.detail || "Analysis failed");
+                        }
+                      }}
+                      className="flex-1"
+                      data-testid="ai-analyze-match-btn"
+                    >
+                      <Zap className="w-4 h-4 mr-1 text-orange-600" /> AI Analyze & Match
+                    </Button>
+                  </div>
+                  {viewRFQData.process_detected && (
+                    <p className="text-xs text-slate-500 mt-2">
+                      Detected process: <span className="font-medium capitalize">{viewRFQData.process_detected}</span>
+                      {viewRFQData.raw_material_provided && " • Raw material provided by buyer"}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -1501,6 +1562,37 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
               <AlertCircle className="w-12 h-12 mx-auto mb-2 text-slate-300" />
               <p>Failed to load RFQ details</p>
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      
+      {/* Quotation Comparison Dialog */}
+      <Dialog open={!!quotationCompareRFQ} onOpenChange={() => setQuotationCompareRFQ(null)}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-orange-600" />
+              Quotation Comparison
+            </DialogTitle>
+            {quotationCompareRFQ && (
+              <p className="text-sm text-slate-500">{quotationCompareRFQ.title}</p>
+            )}
+          </DialogHeader>
+          {quotationCompareRFQ && (
+            <QuotationComparison 
+              rfqId={quotationCompareRFQ.rfq_id} 
+              isAdmin={true}
+              onQuoteSelect={async (quoteId) => {
+                try {
+                  await api.post(`/quotes/${quoteId}/select`);
+                  toast.success("Quote selected!");
+                  setQuotationCompareRFQ(null);
+                  onRefresh();
+                } catch (error) {
+                  toast.error("Failed to select quote");
+                }
+              }}
+            />
           )}
         </DialogContent>
       </Dialog>
