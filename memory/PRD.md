@@ -929,6 +929,59 @@ GUPSHUP_APP_ID=escrow-payments-2  # Required for live templates
 }
 ```
 
+## RFQ Distribution & Advanced Quotation System (Implemented Mar 20, 2026)
+
+### Overview
+AI-powered RFQ analysis with intelligent vendor matching and enhanced quotation system with cost breakdown.
+
+### AI-Based RFQ Analysis:
+- **Process Detection**: Analyzes RFQ text and AI analysis for keywords (casting, forging, machining, fabrication)
+- **detect_process_requirements()**: Returns primary_process, all_processes, raw_material_provided, material_type
+- **Keywords**: casting (cast, foundry, mould), forging (forge, hot working), machining (CNC, turning, milling), fabrication (welding, sheet metal)
+
+### Vendor Matching Engine:
+- **evaluate_vendor_match()**: Matches vendors based on machine categories
+- **Process-to-Category Mapping**: Maps detected processes to required machine categories
+- **Exclusion Logic**: When raw material is provided by buyer, casting/forging vendors are excluded
+- **Scoring**: Base score 50, +10 per matching capability, capped at 100
+
+### Enhanced Quotation System:
+**Quote Fields:**
+- `material_provided_by_buyer` (boolean)
+- `material_cost` (required if vendor provides material)
+- `machining_cost` (always required)
+- `additional_costs` (dict: e.g., {"heat_treatment": 2000, "surface_finish": 1500})
+- `total_cost` (auto-calculated: material + machining + additional)
+- `cost_breakdown_remarks`
+
+**Validation:**
+- machining_cost > 0 required
+- material_cost > 0 required when material_provided_by_buyer = false
+
+### Backend Endpoints:
+- `POST /api/rfq/analyze-and-match` - AI process detection + vendor matching
+- `GET /api/rfq/{rfqId}/vendors` - Get matched vendors with quote status
+- `GET /api/rfq/{rfqId}/quotations` - Get quotations with cost breakdown comparison
+- `POST /api/vendor/quotation` - Submit quotation with cost breakdown
+
+### Frontend Components:
+- **QuotationComparison**: Table view with columns: Vendor, Material, Machining, Additional, Total, Lead Time, Actions
+- **VendorQuotationForm**: Form with material toggle, cost breakdown fields, total calculation
+- **RFQ Details Dialog**: Shows quotes with cost breakdown, "Compare All Quotations" button, "AI Analyze & Match" button
+
+### Comparison Summary:
+```json
+{
+  "lowest_total_cost": 1500,
+  "lowest_machining_cost": 1500,
+  "average_total_cost": 14250,
+  "quotes_with_material": 1,
+  "quotes_without_material": 1
+}
+```
+
+### Test Report: /app/test_reports/iteration_31.json (100% pass - 23 backend tests + full UI verification)
+
 ## RFQ Drawing Access & PDF Layout Fix (Implemented Mar 19, 2026)
 
 ### Overview
