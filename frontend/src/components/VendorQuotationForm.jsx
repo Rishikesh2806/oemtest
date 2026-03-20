@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { api } from "../App";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
@@ -10,11 +10,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { toast } from "sonner";
 import { 
   DollarSign, Package, Plus, Trash2, Loader2, Calculator, 
-  HelpCircle, CheckCircle2, Info
+  HelpCircle, CheckCircle2, Info, FileText, ChevronDown, ChevronUp,
+  Image as ImageIcon
 } from "lucide-react";
 
 const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => {
   const [loading, setLoading] = useState(false);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [items, setItems] = useState([]);
+  const [isItemwiseMode, setIsItemwiseMode] = useState(false);
+  const [expandedItems, setExpandedItems] = useState({});
+  
+  // Single item form state (for non-itemwise mode)
   const [materialProvidedByBuyer, setMaterialProvidedByBuyer] = useState(
     existingQuote?.material_provided_by_buyer || rfq?.raw_material_provided || false
   );
@@ -30,11 +37,109 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
   const [costBreakdownRemarks, setCostBreakdownRemarks] = useState(existingQuote?.cost_breakdown_remarks || "");
   const [paymentTerms, setPaymentTerms] = useState(existingQuote?.proposed_payment_terms || "net_30");
 
-  // Calculate totals
+  // Item-wise quotation state
+  const [itemQuotes, setItemQuotes] = useState({});
+
+  useEffect(() => {
+    if (rfq?.rfq_id) {
+      fetchRFQItems();
+    }
+  }, [rfq?.rfq_id]);
+
+  const fetchRFQItems = async () => {
+    setLoadingItems(true);
+    try {
+      const res = await api.get(`/rfqs/${rfq.rfq_id}/items`);
+      const fetchedItems = res.data.items || [];
+      setItems(fetchedItems);
+      
+      // Initialize item quotes
+      const initialQuotes = {};
+      fetchedItems.forEach(item => {
+        initialQuotes[item.item_id] = {
+          material_provided_by_buyer: res.data.raw_material_provided || false,
+          material_cost: "",
+          labour_cost: "",
+          additional_costs: [],
+          remarks: ""
+        };
+      });
+      setItemQuotes(initialQuotes);
+      
+      // If multiple items, default to itemwise mode
+      if (fetchedItems.length > 1) {
+        setIsItemwiseMode(true);
+        // Expand first item by default
+        setExpandedItems({ [fetchedItems[0]?.item_id]: true });
+      }
+    } catch (error) {
+      console.error("Failed to fetch RFQ items:", error);
+    } finally {
+      setLoadingItems(false);
+    }
+  };
+
+  // Calculate totals for single item mode
   const materialCostNum = parseFloat(materialCost) || 0;
   const machiningCostNum = parseFloat(machiningCost) || 0;
   const additionalCostsTotal = additionalCosts.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0);
   const totalCost = (materialProvidedByBuyer ? 0 : materialCostNum) + machiningCostNum + additionalCostsTotal;
+
+  // Calculate grand total for item-wise mode
+  const calculateItemTotal = (itemId) => {
+    const quote = itemQuotes[itemId];
+    if (!quote) return 0;
+    const material = quote.material_provided_by_buyer ? 0 : (parseFloat(quote.material_cost) || 0);
+    const labour = parseFloat(quote.labour_cost) || 0;
+    const additional = quote.additional_costs.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0);
+    return material + labour + additional;
+  };
+
+  const grandTotal = isItemwiseMode 
+    ? Object.keys(itemQuotes).reduce((sum, itemId) => sum + calculateItemTotal(itemId), 0)
+    : totalCost;
+
+  const toggleItemExpand = (itemId) => {
+    setExpandedItems(prev => ({ ...prev, [itemId]: !prev[itemId] }));
+  };
+
+  const updateItemQuote = (itemId, field, value) => {
+    setItemQuotes(prev => ({
+      ...prev,
+      [itemId]: { ...prev[itemId], [field]: value }
+    }));
+  };
+
+  const addItemAdditionalCost = (itemId) => {
+    setItemQuotes(prev => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        additional_costs: [...(prev[itemId]?.additional_costs || []), { name: "", cost: "" }]
+      }
+    }));
+  };
+
+  const removeItemAdditionalCost = (itemId, index) => {
+    setItemQuotes(prev => ({
+      ...prev,
+      [itemId]: {
+        ...prev[itemId],
+        additional_costs: prev[itemId]?.additional_costs.filter((_, i) => i !== index)
+      }
+    }));
+  };
+
+  const updateItemAdditionalCost = (itemId, index, field, value) => {
+    setItemQuotes(prev => {
+      const updated = [...(prev[itemId]?.additional_costs || [])];
+      updated[index] = { ...updated[index], [field]: value };
+      return {
+        ...prev,
+        [itemId]: { ...prev[itemId], additional_costs: updated }
+      };
+    });
+  };
 
   const addAdditionalCost = () => {
     setAdditionalCosts([...additionalCosts, { name: "", cost: "" }]);
@@ -51,14 +156,30 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
   };
 
   const validateForm = () => {
-    if (!machiningCost || parseFloat(machiningCost) <= 0) {
-      toast.error("Machining cost is required and must be greater than 0");
-      return false;
+    if (isItemwiseMode) {
+      // Validate each item
+      for (const item of items) {
+        const quote = itemQuotes[item.item_id];
+        if (!quote?.labour_cost || parseFloat(quote.labour_cost) <= 0) {
+          toast.error(`Labour cost is required for item: ${item.title}`);
+          return false;
+        }
+        if (!quote?.material_provided_by_buyer && (!quote?.material_cost || parseFloat(quote.material_cost) <= 0)) {
+          toast.error(`Material cost is required for item: ${item.title}`);
+          return false;
+        }
+      }
+    } else {
+      if (!machiningCost || parseFloat(machiningCost) <= 0) {
+        toast.error("Machining cost is required and must be greater than 0");
+        return false;
+      }
+      if (!materialProvidedByBuyer && (!materialCost || parseFloat(materialCost) <= 0)) {
+        toast.error("Material cost is required when you are providing the material");
+        return false;
+      }
     }
-    if (!materialProvidedByBuyer && (!materialCost || parseFloat(materialCost) <= 0)) {
-      toast.error("Material cost is required when you are providing the material");
-      return false;
-    }
+    
     if (!leadTimeDays || parseInt(leadTimeDays) <= 0) {
       toast.error("Lead time is required");
       return false;
@@ -72,26 +193,59 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
 
     setLoading(true);
     try {
-      const additionalCostsObj = {};
-      additionalCosts.forEach(item => {
-        if (item.name && item.cost) {
-          additionalCostsObj[item.name.toLowerCase().replace(/\s+/g, '_')] = parseFloat(item.cost);
-        }
-      });
+      if (isItemwiseMode) {
+        // Item-wise quotation
+        const itemsPayload = items.map(item => {
+          const quote = itemQuotes[item.item_id];
+          const additionalCostsObj = {};
+          (quote?.additional_costs || []).forEach(cost => {
+            if (cost.name && cost.cost) {
+              additionalCostsObj[cost.name.toLowerCase().replace(/\s+/g, '_')] = parseFloat(cost.cost);
+            }
+          });
 
-      const payload = {
-        rfq_id: rfq.rfq_id,
-        material_provided_by_buyer: materialProvidedByBuyer,
-        material_cost: materialProvidedByBuyer ? 0 : parseFloat(materialCost),
-        machining_cost: parseFloat(machiningCost),
-        additional_costs: additionalCostsObj,
-        lead_time_days: parseInt(leadTimeDays),
-        notes: notes,
-        cost_breakdown_remarks: costBreakdownRemarks,
-        proposed_payment_terms: paymentTerms
-      };
+          return {
+            item_id: item.item_id,
+            drawing_id: item.drawing_id,
+            title: item.title,
+            material_provided_by_buyer: quote?.material_provided_by_buyer || false,
+            material_cost: quote?.material_provided_by_buyer ? 0 : parseFloat(quote?.material_cost || 0),
+            labour_cost: parseFloat(quote?.labour_cost || 0),
+            additional_costs: additionalCostsObj,
+            remarks: quote?.remarks || ""
+          };
+        });
 
-      await api.post("/vendor/quotation", payload);
+        await api.post("/vendor/quotation/itemwise", {
+          rfq_id: rfq.rfq_id,
+          items: itemsPayload,
+          lead_time_days: parseInt(leadTimeDays),
+          notes: notes,
+          cost_breakdown_remarks: costBreakdownRemarks,
+          proposed_payment_terms: paymentTerms
+        });
+      } else {
+        // Single/flat quotation
+        const additionalCostsObj = {};
+        additionalCosts.forEach(item => {
+          if (item.name && item.cost) {
+            additionalCostsObj[item.name.toLowerCase().replace(/\s+/g, '_')] = parseFloat(item.cost);
+          }
+        });
+
+        await api.post("/vendor/quotation", {
+          rfq_id: rfq.rfq_id,
+          material_provided_by_buyer: materialProvidedByBuyer,
+          material_cost: materialProvidedByBuyer ? 0 : parseFloat(materialCost),
+          machining_cost: parseFloat(machiningCost),
+          additional_costs: additionalCostsObj,
+          lead_time_days: parseInt(leadTimeDays),
+          notes: notes,
+          cost_breakdown_remarks: costBreakdownRemarks,
+          proposed_payment_terms: paymentTerms
+        });
+      }
+
       toast.success("Quotation submitted successfully!");
       if (onSubmitSuccess) {
         onSubmitSuccess();
@@ -103,6 +257,348 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
     }
   };
 
+  // Single item form (non-itemwise mode)
+  const renderSingleItemForm = () => (
+    <div className="space-y-4">
+      {/* RFQ Summary */}
+      <div className="p-4 bg-slate-50 rounded-lg">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div>
+            <p className="text-slate-500">Material</p>
+            <p className="font-medium">{rfq?.material_type || "N/A"}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Quantity</p>
+            <p className="font-medium">{rfq?.quantity || "N/A"}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Tolerance</p>
+            <p className="font-medium">{rfq?.tolerance ? `${rfq.tolerance} mm` : "N/A"}</p>
+          </div>
+          <div>
+            <p className="text-slate-500">Process</p>
+            <p className="font-medium capitalize">{rfq?.process_detected || "Machining"}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Material Supply Toggle */}
+      <div className="flex items-center justify-between p-4 bg-orange-50 rounded-lg border border-orange-200">
+        <div className="flex items-center gap-3">
+          <Package className="w-5 h-5 text-orange-600" />
+          <div>
+            <p className="font-medium text-slate-900">Buyer provides raw material</p>
+            <p className="text-sm text-slate-500">Toggle ON if buyer will supply the raw material</p>
+          </div>
+        </div>
+        <Switch
+          checked={materialProvidedByBuyer}
+          onCheckedChange={setMaterialProvidedByBuyer}
+          data-testid="material-toggle"
+        />
+      </div>
+
+      {/* Cost Breakdown */}
+      <div className="space-y-4">
+        <h4 className="font-medium text-slate-700 flex items-center gap-2">
+          <Calculator className="w-4 h-4" /> Cost Breakdown
+        </h4>
+
+        {/* Material Cost */}
+        {!materialProvidedByBuyer && (
+          <div>
+            <Label htmlFor="materialCost" className="flex items-center gap-1">
+              Material Cost (₹) <span className="text-red-500">*</span>
+              <HelpCircle className="w-3 h-3 text-slate-400" />
+            </Label>
+            <Input
+              id="materialCost"
+              type="number"
+              placeholder="e.g., 15000"
+              value={materialCost}
+              onChange={(e) => setMaterialCost(e.target.value)}
+              className="mt-1"
+              required={!materialProvidedByBuyer}
+              data-testid="material-cost-input"
+            />
+            <p className="text-xs text-slate-500 mt-1">Cost of raw material if you're providing it</p>
+          </div>
+        )}
+
+        {/* Machining Cost */}
+        <div>
+          <Label htmlFor="machiningCost" className="flex items-center gap-1">
+            Machining / Labor Cost (₹) <span className="text-red-500">*</span>
+          </Label>
+          <Input
+            id="machiningCost"
+            type="number"
+            placeholder="e.g., 8500"
+            value={machiningCost}
+            onChange={(e) => setMachiningCost(e.target.value)}
+            className="mt-1"
+            required
+            data-testid="machining-cost-input"
+          />
+          <p className="text-xs text-slate-500 mt-1">Cost of machining, labor, and manufacturing</p>
+        </div>
+
+        {/* Additional Costs */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <Label>Additional Costs (Optional)</Label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addAdditionalCost}
+              data-testid="add-additional-cost"
+            >
+              <Plus className="w-4 h-4 mr-1" /> Add Cost
+            </Button>
+          </div>
+          
+          {additionalCosts.length > 0 ? (
+            <div className="space-y-2">
+              {additionalCosts.map((item, index) => (
+                <div key={index} className="flex gap-2 items-center">
+                  <Input
+                    placeholder="e.g., Heat Treatment"
+                    value={item.name}
+                    onChange={(e) => updateAdditionalCost(index, 'name', e.target.value)}
+                    className="flex-1"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Cost (₹)"
+                    value={item.cost}
+                    onChange={(e) => updateAdditionalCost(index, 'cost', e.target.value)}
+                    className="w-32"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeAdditionalCost(index)}
+                    className="text-red-500 hover:bg-red-50"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400 p-3 bg-slate-50 rounded">
+              Add heat treatment, surface finishing, or other additional costs
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Item-wise form (for multiple drawings)
+  const renderItemwiseForm = () => (
+    <div className="space-y-4">
+      {/* Items Header */}
+      <div className="flex items-center justify-between">
+        <h4 className="font-medium text-slate-700 flex items-center gap-2">
+          <FileText className="w-4 h-4" /> Quote per Drawing/Item ({items.length} items)
+        </h4>
+        <span className="text-xs text-slate-500">Expand each item to enter costs</span>
+      </div>
+
+      {/* Items List */}
+      <div className="space-y-3">
+        {items.map((item, idx) => {
+          const quote = itemQuotes[item.item_id] || {};
+          const isExpanded = expandedItems[item.item_id];
+          const itemTotal = calculateItemTotal(item.item_id);
+
+          return (
+            <Card 
+              key={item.item_id} 
+              className={`border ${isExpanded ? 'border-orange-300' : 'border-slate-200'}`}
+              data-testid={`item-card-${item.item_id}`}
+            >
+              {/* Item Header */}
+              <div 
+                className="p-4 cursor-pointer flex items-center justify-between"
+                onClick={() => toggleItemExpand(item.item_id)}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+                    {item.drawing_url ? (
+                      <ImageIcon className="w-5 h-5 text-slate-500" />
+                    ) : (
+                      <FileText className="w-5 h-5 text-slate-500" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">
+                      Item {idx + 1}: {item.title || item.filename || `Drawing ${idx + 1}`}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {item.material_type && `Material: ${item.material_type}`}
+                      {item.quantity && ` | Qty: ${item.quantity}`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-4">
+                  {itemTotal > 0 && (
+                    <span className="text-sm font-medium text-green-700">
+                      ₹{itemTotal.toLocaleString('en-IN')}
+                    </span>
+                  )}
+                  {isExpanded ? (
+                    <ChevronUp className="w-5 h-5 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-slate-400" />
+                  )}
+                </div>
+              </div>
+
+              {/* Item Details (Expanded) */}
+              {isExpanded && (
+                <CardContent className="pt-0 border-t">
+                  <div className="space-y-4 pt-4">
+                    {/* Drawing Preview */}
+                    {item.drawing_url && (
+                      <div className="mb-4">
+                        <a 
+                          href={item.drawing_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-sm text-orange-600 hover:underline flex items-center gap-1"
+                        >
+                          <ImageIcon className="w-4 h-4" /> View Drawing
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Material Toggle */}
+                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <Package className="w-4 h-4 text-slate-600" />
+                        <span className="text-sm">Buyer provides material for this item</span>
+                      </div>
+                      <Switch
+                        checked={quote.material_provided_by_buyer || false}
+                        onCheckedChange={(val) => updateItemQuote(item.item_id, 'material_provided_by_buyer', val)}
+                        data-testid={`material-toggle-${item.item_id}`}
+                      />
+                    </div>
+
+                    {/* Material Cost */}
+                    {!quote.material_provided_by_buyer && (
+                      <div>
+                        <Label className="text-xs">Material Cost (₹) *</Label>
+                        <Input
+                          type="number"
+                          placeholder="e.g., 5000"
+                          value={quote.material_cost || ""}
+                          onChange={(e) => updateItemQuote(item.item_id, 'material_cost', e.target.value)}
+                          className="mt-1"
+                          data-testid={`material-cost-${item.item_id}`}
+                        />
+                      </div>
+                    )}
+
+                    {/* Labour Cost */}
+                    <div>
+                      <Label className="text-xs">Labour / Machining Cost (₹) *</Label>
+                      <Input
+                        type="number"
+                        placeholder="e.g., 3000"
+                        value={quote.labour_cost || ""}
+                        onChange={(e) => updateItemQuote(item.item_id, 'labour_cost', e.target.value)}
+                        className="mt-1"
+                        data-testid={`labour-cost-${item.item_id}`}
+                      />
+                    </div>
+
+                    {/* Additional Costs */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <Label className="text-xs">Additional Costs</Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => addItemAdditionalCost(item.item_id)}
+                          className="h-6 text-xs"
+                        >
+                          <Plus className="w-3 h-3 mr-1" /> Add
+                        </Button>
+                      </div>
+                      {(quote.additional_costs || []).map((cost, costIdx) => (
+                        <div key={costIdx} className="flex gap-2 items-center mb-2">
+                          <Input
+                            placeholder="e.g., Heat Treatment"
+                            value={cost.name}
+                            onChange={(e) => updateItemAdditionalCost(item.item_id, costIdx, 'name', e.target.value)}
+                            className="flex-1 h-8 text-sm"
+                          />
+                          <Input
+                            type="number"
+                            placeholder="₹"
+                            value={cost.cost}
+                            onChange={(e) => updateItemAdditionalCost(item.item_id, costIdx, 'cost', e.target.value)}
+                            className="w-24 h-8 text-sm"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeItemAdditionalCost(item.item_id, costIdx)}
+                            className="h-8 text-red-500"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Item Remarks */}
+                    <div>
+                      <Label className="text-xs">Remarks for this item</Label>
+                      <Textarea
+                        placeholder="Any specific notes for this drawing..."
+                        value={quote.remarks || ""}
+                        onChange={(e) => updateItemQuote(item.item_id, 'remarks', e.target.value)}
+                        className="mt-1"
+                        rows={2}
+                      />
+                    </div>
+
+                    {/* Item Total */}
+                    <div className="p-3 bg-green-50 rounded-lg flex justify-between items-center">
+                      <span className="text-sm font-medium text-green-700">Item Total</span>
+                      <span className="text-lg font-bold text-green-700">
+                        ₹{itemTotal.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  if (loadingItems) {
+    return (
+      <Card className="border-slate-200">
+        <CardContent className="py-12 flex items-center justify-center">
+          <Loader2 className="w-6 h-6 animate-spin text-orange-600" />
+          <span className="ml-2 text-slate-500">Loading RFQ items...</span>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="border-slate-200">
       <CardHeader>
@@ -112,152 +608,52 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
         </CardTitle>
         <CardDescription>
           Provide detailed cost breakdown for: <span className="font-medium">{rfq?.title}</span>
+          {items.length > 1 && (
+            <span className="ml-2 text-orange-600 font-medium">({items.length} items)</span>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* RFQ Summary */}
-          <div className="p-4 bg-slate-50 rounded-lg">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <p className="text-slate-500">Material</p>
-                <p className="font-medium">{rfq?.material_type || "N/A"}</p>
-              </div>
-              <div>
-                <p className="text-slate-500">Quantity</p>
-                <p className="font-medium">{rfq?.quantity || "N/A"}</p>
-              </div>
-              <div>
-                <p className="text-slate-500">Tolerance</p>
-                <p className="font-medium">{rfq?.tolerance ? `${rfq.tolerance} mm` : "N/A"}</p>
-              </div>
-              <div>
-                <p className="text-slate-500">Process</p>
-                <p className="font-medium capitalize">{rfq?.process_detected || "Machining"}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Material Supply Toggle */}
-          <div className="flex items-center justify-between p-4 bg-orange-50 rounded-lg border border-orange-200">
-            <div className="flex items-center gap-3">
-              <Package className="w-5 h-5 text-orange-600" />
-              <div>
-                <p className="font-medium text-slate-900">Buyer provides raw material</p>
-                <p className="text-sm text-slate-500">Toggle ON if buyer will supply the raw material</p>
-              </div>
-            </div>
-            <Switch
-              checked={materialProvidedByBuyer}
-              onCheckedChange={setMaterialProvidedByBuyer}
-              data-testid="material-toggle"
-            />
-          </div>
-
-          {/* Cost Breakdown */}
-          <div className="space-y-4">
-            <h4 className="font-medium text-slate-700 flex items-center gap-2">
-              <Calculator className="w-4 h-4" /> Cost Breakdown
-            </h4>
-
-            {/* Material Cost */}
-            {!materialProvidedByBuyer && (
-              <div>
-                <Label htmlFor="materialCost" className="flex items-center gap-1">
-                  Material Cost (₹) <span className="text-red-500">*</span>
-                  <HelpCircle className="w-3 h-3 text-slate-400" />
-                </Label>
-                <Input
-                  id="materialCost"
-                  type="number"
-                  placeholder="e.g., 15000"
-                  value={materialCost}
-                  onChange={(e) => setMaterialCost(e.target.value)}
-                  className="mt-1"
-                  required={!materialProvidedByBuyer}
-                  data-testid="material-cost-input"
-                />
-                <p className="text-xs text-slate-500 mt-1">Cost of raw material if you're providing it</p>
-              </div>
-            )}
-
-            {/* Machining Cost */}
-            <div>
-              <Label htmlFor="machiningCost" className="flex items-center gap-1">
-                Machining / Labor Cost (₹) <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="machiningCost"
-                type="number"
-                placeholder="e.g., 8500"
-                value={machiningCost}
-                onChange={(e) => setMachiningCost(e.target.value)}
-                className="mt-1"
-                required
-                data-testid="machining-cost-input"
-              />
-              <p className="text-xs text-slate-500 mt-1">Cost of machining, labor, and manufacturing</p>
-            </div>
-
-            {/* Additional Costs */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label>Additional Costs (Optional)</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addAdditionalCost}
-                  data-testid="add-additional-cost"
-                >
-                  <Plus className="w-4 h-4 mr-1" /> Add Cost
-                </Button>
-              </div>
-              
-              {additionalCosts.length > 0 ? (
-                <div className="space-y-2">
-                  {additionalCosts.map((item, index) => (
-                    <div key={index} className="flex gap-2 items-center">
-                      <Input
-                        placeholder="e.g., Heat Treatment"
-                        value={item.name}
-                        onChange={(e) => updateAdditionalCost(index, 'name', e.target.value)}
-                        className="flex-1"
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Cost (₹)"
-                        value={item.cost}
-                        onChange={(e) => updateAdditionalCost(index, 'cost', e.target.value)}
-                        className="w-32"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeAdditionalCost(index)}
-                        className="text-red-500 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-400 p-3 bg-slate-50 rounded">
-                  Add heat treatment, surface finishing, or other additional costs
-                </p>
-              )}
-            </div>
-
-            {/* Total Display */}
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex justify-between items-center">
-                <span className="font-medium text-green-700">Total Cost</span>
-                <span className="text-2xl font-bold text-green-700" data-testid="total-cost">
-                  ₹{totalCost.toLocaleString('en-IN')}
+          {/* Mode Toggle (only if multiple items) */}
+          {items.length > 1 && (
+            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-200">
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 text-blue-600" />
+                <span className="text-sm text-blue-800">
+                  This RFQ has {items.length} drawings. Quote each item separately for accurate pricing.
                 </span>
               </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-blue-600">Item-wise</span>
+                <Switch
+                  checked={isItemwiseMode}
+                  onCheckedChange={setIsItemwiseMode}
+                  data-testid="itemwise-toggle"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Form Content */}
+          {isItemwiseMode ? renderItemwiseForm() : renderSingleItemForm()}
+
+          {/* Grand Total Display */}
+          <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+            <div className="flex justify-between items-center">
+              <span className="font-medium text-green-700">
+                {isItemwiseMode ? 'Grand Total (All Items)' : 'Total Cost'}
+              </span>
+              <span className="text-2xl font-bold text-green-700" data-testid="total-cost">
+                ₹{grandTotal.toLocaleString('en-IN')}
+              </span>
+            </div>
+            {isItemwiseMode && (
+              <p className="text-xs text-green-600 mt-2">
+                Includes {items.length} items with individual cost breakdowns
+              </p>
+            )}
+            {!isItemwiseMode && (
               <div className="text-xs text-green-600 mt-2 space-y-1">
                 {!materialProvidedByBuyer && materialCostNum > 0 && (
                   <p>Material: ₹{materialCostNum.toLocaleString('en-IN')}</p>
@@ -272,7 +668,7 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
                   <p>Additional: ₹{additionalCostsTotal.toLocaleString('en-IN')}</p>
                 )}
               </div>
-            </div>
+            )}
           </div>
 
           {/* Lead Time */}
@@ -347,7 +743,7 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
             {loading ? (
               <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Submitting...</>
             ) : (
-              <><CheckCircle2 className="w-4 h-4 mr-2" /> Submit Quotation</>
+              <><CheckCircle2 className="w-4 h-4 mr-2" /> Submit {isItemwiseMode ? 'Item-wise ' : ''}Quotation</>
             )}
           </Button>
         </form>

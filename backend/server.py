@@ -1096,12 +1096,15 @@ class Quote(BaseModel):
     is_selected: bool = False
     status: str = "pending"  # pending, accepted, rejected, expired
     # Enhanced quotation fields
-    material_provided_by_buyer: bool = False  # If true, buyer provides raw material
+    material_provided_by_buyer: bool = False  # If true, buyer provides raw material (legacy, for single-item RFQs)
     material_cost: Optional[float] = None  # Cost of raw material (if vendor provides)
     machining_cost: float = 0  # Cost of machining/labor
     additional_costs: Optional[Dict[str, float]] = None  # Heat treatment, finishing, etc.
     total_cost: float = 0  # Auto-calculated: material + machining + additional
     cost_breakdown_remarks: Optional[str] = None  # Detailed breakdown explanation
+    # Item-wise quotation fields
+    is_itemwise: bool = False  # True if quote has item-wise breakdown
+    items: Optional[List[Dict[str, Any]]] = None  # Item-wise quotation details
     created_at: str
     expires_at: str
 
@@ -1120,7 +1123,43 @@ class QuoteCreate(BaseModel):
     additional_costs: Optional[Dict[str, float]] = None  # e.g., {"heat_treatment": 500, "surface_finish": 200}
     cost_breakdown_remarks: Optional[str] = None
 
-# RFQ Line Item for Multi-Drawing RFQs
+# Quotation Item for per-drawing quotation
+class QuotationItem(BaseModel):
+    item_id: str  # References RFQ item / drawing
+    drawing_id: Optional[str] = None
+    title: Optional[str] = None
+    material_provided_by_buyer: bool = False
+    material_cost: float = 0  # Cost of raw material (if vendor provides)
+    labour_cost: float = 0  # Machining / labor cost
+    additional_costs: Optional[Dict[str, float]] = None  # {"heat_treatment": 500, "finishing": 200}
+    total_cost: float = 0  # Auto-calculated
+    remarks: Optional[str] = None
+
+# Item-wise Quotation Request
+class ItemwiseQuotationCreate(BaseModel):
+    rfq_id: str
+    currency: str = "INR"
+    lead_time_days: int
+    notes: Optional[str] = None
+    proposed_payment_terms: Optional[str] = PaymentTerms.NET_30
+    payment_terms_notes: Optional[str] = None
+    items: List[QuotationItem]  # Per-item quotation details
+
+# RFQ Item for Multi-Drawing RFQs
+class RFQItem(BaseModel):
+    item_id: str
+    drawing_id: Optional[str] = None
+    drawing_url: Optional[str] = None
+    filename: Optional[str] = None
+    title: str
+    material_type: Optional[str] = None
+    quantity: int = 1
+    specifications: Optional[str] = None
+    tolerance: Optional[float] = None
+    process_detected: Optional[str] = None
+    ai_analysis: Optional[Dict[str, Any]] = None
+
+# RFQ Line Item for Multi-Drawing RFQs (keeping for backward compatibility)
 class RFQLineItem(BaseModel):
     line_item_id: str
     rfq_id: str  # Parent RFQ
@@ -3080,7 +3119,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://manufacturing-hub-49.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-9.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -4952,7 +4991,7 @@ async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list
     from app.services.whatsapp_service import send_image_message
     
     # Use the actual deployed URL
-    BASE_URL = os.environ.get("APP_URL", "https://manufacturing-hub-49.preview.emergentagent.com")
+    BASE_URL = os.environ.get("APP_URL", "https://rfq-marketplace-9.preview.emergentagent.com")
     
     # Small delay to let template message send first
     await asyncio.sleep(2)
@@ -6002,7 +6041,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://manufacturing-hub-49.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-9.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -6471,7 +6510,8 @@ async def get_rfq_matched_vendors(rfq_id: str, user: dict = Depends(get_current_
 
 @api_router.get("/rfq/{rfq_id}/quotations")
 async def get_rfq_quotations(rfq_id: str, user: dict = Depends(get_current_user)):
-    """Get all quotations for an RFQ with cost breakdown comparison"""
+    """Get all quotations for an RFQ with cost breakdown comparison.
+    Supports both flat and item-wise quotations."""
     rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
     if not rfq:
         raise HTTPException(status_code=404, detail="RFQ not found")
@@ -6487,22 +6527,46 @@ async def get_rfq_quotations(rfq_id: str, user: dict = Depends(get_current_user)
     
     # Enrich with vendor info
     quotations = []
+    has_itemwise_quotes = False
+    
     for quote in quotes:
         vendor = await db.vendors.find_one(
             {"vendor_id": quote["vendor_id"]},
             {"_id": 0, "company_name": 1, "city": 1, "state": 1, "rating": 1}
         )
         
-        quotations.append({
+        is_itemwise = quote.get("is_itemwise", False)
+        if is_itemwise:
+            has_itemwise_quotes = True
+        
+        # Calculate totals for item-wise quotes
+        if is_itemwise and quote.get("items"):
+            total_material = sum(item.get("material_cost", 0) for item in quote["items"])
+            total_labour = sum(item.get("labour_cost", 0) for item in quote["items"])
+            total_additional = sum(
+                sum(item.get("additional_costs", {}).values()) 
+                for item in quote["items"]
+            )
+        else:
+            total_material = quote.get("material_cost", 0)
+            total_labour = quote.get("machining_cost", 0)
+            total_additional = sum(quote.get("additional_costs", {}).values()) if quote.get("additional_costs") else 0
+        
+        quotation_data = {
             "quote_id": quote.get("quote_id"),
             "vendor_id": quote.get("vendor_id"),
             "vendor_name": vendor.get("company_name", "Unknown") if vendor else "Unknown",
             "vendor_location": f"{vendor.get('city', '')}, {vendor.get('state', '')}" if vendor else "",
             "vendor_rating": vendor.get("rating", 0) if vendor else 0,
+            "is_itemwise": is_itemwise,
+            "items": quote.get("items", []) if is_itemwise else [],
+            "items_count": len(quote.get("items", [])) if is_itemwise else 0,
             "material_provided_by_buyer": quote.get("material_provided_by_buyer", False),
-            "material_cost": quote.get("material_cost", 0),
-            "machining_cost": quote.get("machining_cost", 0),
+            "material_cost": total_material,
+            "machining_cost": total_labour,
+            "labour_cost": total_labour,  # Alias for clarity
             "additional_costs": quote.get("additional_costs", {}),
+            "additional_costs_total": total_additional,
             "total_cost": quote.get("total_cost") or quote.get("price", 0),
             "lead_time_days": quote.get("lead_time_days"),
             "currency": quote.get("currency", "INR"),
@@ -6511,7 +6575,8 @@ async def get_rfq_quotations(rfq_id: str, user: dict = Depends(get_current_user)
             "status": quote.get("status"),
             "is_selected": quote.get("is_selected", False),
             "created_at": quote.get("created_at")
-        })
+        }
+        quotations.append(quotation_data)
     
     # Sort by total cost
     quotations.sort(key=lambda x: x["total_cost"])
@@ -6525,12 +6590,15 @@ async def get_rfq_quotations(rfq_id: str, user: dict = Depends(get_current_user)
         "rfq_title": rfq.get("title"),
         "quotations": quotations,
         "total_quotes": len(quotations),
+        "has_itemwise_quotes": has_itemwise_quotes,
         "comparison_summary": {
             "lowest_total_cost": lowest_total,
             "lowest_machining_cost": lowest_machining,
             "average_total_cost": sum(q["total_cost"] for q in quotations) / len(quotations) if quotations else 0,
             "quotes_with_material": len([q for q in quotations if not q["material_provided_by_buyer"]]),
-            "quotes_without_material": len([q for q in quotations if q["material_provided_by_buyer"]])
+            "quotes_without_material": len([q for q in quotations if q["material_provided_by_buyer"]]),
+            "itemwise_quotes": len([q for q in quotations if q["is_itemwise"]]),
+            "flat_quotes": len([q for q in quotations if not q["is_itemwise"]])
         }
     }
 
@@ -6663,6 +6731,225 @@ async def submit_vendor_quotation(request: Request, user: dict = Depends(get_cur
     }
 
 
+@api_router.post("/vendor/quotation/itemwise")
+async def submit_itemwise_quotation(request: Request, user: dict = Depends(get_current_user)):
+    """
+    Submit an item-wise quotation for RFQs with multiple drawings.
+    Each drawing/item gets its own cost breakdown.
+    """
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=403, detail="Vendor profile required")
+    
+    body = await request.json()
+    rfq_id = body.get("rfq_id")
+    items = body.get("items", [])
+    
+    if not rfq_id:
+        raise HTTPException(status_code=400, detail="rfq_id is required")
+    
+    if not items or len(items) == 0:
+        raise HTTPException(status_code=400, detail="At least one item quotation is required")
+    
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Check if vendor already quoted
+    existing_quote = await db.quotes.find_one({
+        "rfq_id": rfq_id,
+        "vendor_id": vendor["vendor_id"]
+    })
+    if existing_quote:
+        raise HTTPException(status_code=400, detail="You have already submitted a quotation for this RFQ")
+    
+    # Process and validate each item
+    processed_items = []
+    grand_total = 0
+    
+    for item in items:
+        item_id = item.get("item_id") or item.get("drawing_id")
+        if not item_id:
+            raise HTTPException(status_code=400, detail="Each item must have an item_id or drawing_id")
+        
+        material_provided_by_buyer = item.get("material_provided_by_buyer", False)
+        material_cost = float(item.get("material_cost", 0)) if not material_provided_by_buyer else 0
+        labour_cost = float(item.get("labour_cost", 0))
+        additional_costs = item.get("additional_costs", {})
+        
+        # Validate labour cost
+        if labour_cost <= 0:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Labour/machining cost is required for item {item.get('title', item_id)}"
+            )
+        
+        # Validate material cost if vendor provides material
+        if not material_provided_by_buyer and material_cost <= 0:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Material cost is required for item {item.get('title', item_id)} when vendor provides material"
+            )
+        
+        # Calculate item total
+        additional_total = sum(float(v) for v in additional_costs.values()) if additional_costs else 0
+        item_total = material_cost + labour_cost + additional_total
+        grand_total += item_total
+        
+        processed_items.append({
+            "item_id": item_id,
+            "drawing_id": item.get("drawing_id"),
+            "title": item.get("title", ""),
+            "material_provided_by_buyer": material_provided_by_buyer,
+            "material_cost": material_cost,
+            "labour_cost": labour_cost,
+            "additional_costs": additional_costs,
+            "total_cost": item_total,
+            "remarks": item.get("remarks", "")
+        })
+    
+    quote_id = f"quote_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc)
+    
+    quote_doc = {
+        "quote_id": quote_id,
+        "rfq_id": rfq_id,
+        "vendor_id": vendor["vendor_id"],
+        "price": grand_total,  # Legacy field
+        "total_price": grand_total,
+        "currency": body.get("currency", "INR"),
+        "lead_time_days": int(body.get("lead_time_days", 7)),
+        "notes": body.get("notes"),
+        "proposed_payment_terms": body.get("proposed_payment_terms", "net_30"),
+        "payment_terms_notes": body.get("payment_terms_notes"),
+        "is_selected": False,
+        "status": "pending",
+        # Item-wise fields
+        "is_itemwise": True,
+        "items": processed_items,
+        "total_cost": grand_total,
+        "cost_breakdown_remarks": body.get("cost_breakdown_remarks"),
+        "created_at": now.isoformat(),
+        "expires_at": (now + timedelta(days=14)).isoformat()
+    }
+    
+    await db.quotes.insert_one(quote_doc)
+    
+    # Update RFQ status
+    await db.rfqs.update_one(
+        {"rfq_id": rfq_id},
+        {"$set": {"status": RFQStatus.QUOTED, "updated_at": now.isoformat()}}
+    )
+    
+    # Notify buyer
+    buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
+    if buyer and buyer.get("email"):
+        email_data = {
+            "buyer_name": buyer.get("name", "Buyer"),
+            "rfq_title": rfq.get("title", "Your RFQ"),
+            "vendor_name": vendor.get("company_name", "Vendor"),
+            "price": f"{grand_total:.2f}",
+            "lead_time": body.get("lead_time_days", 7),
+            "app_url": f"https://oemlinker.com/buyer/rfq/{rfq_id}"
+        }
+        subject, html = get_email_template("quote_received", email_data)
+        asyncio.create_task(send_email_async(buyer["email"], subject, html))
+    
+    # Create in-app notification
+    await create_notification(
+        user_id=rfq["buyer_id"],
+        notification_type=NotificationType.QUOTE_RECEIVED,
+        title=f"Item-wise Quote from {vendor.get('company_name', 'Vendor')}",
+        message=f"₹{grand_total:,.2f} for {len(processed_items)} items in {rfq.get('title', 'your RFQ')[:30]}",
+        data={
+            "rfq_id": rfq_id,
+            "quote_id": quote_id,
+            "vendor_name": vendor.get("company_name"),
+            "total_cost": grand_total,
+            "items_count": len(processed_items),
+            "link": f"/buyer/rfq/{rfq_id}"
+        }
+    )
+    
+    logger.info(f"Item-wise quotation submitted: {quote_id} for RFQ {rfq_id} with {len(processed_items)} items")
+    
+    return {
+        "success": True,
+        "quote_id": quote_id,
+        "total_cost": grand_total,
+        "items_count": len(processed_items),
+        "items": processed_items,
+        "message": "Item-wise quotation submitted successfully"
+    }
+
+
+@api_router.get("/rfqs/{rfq_id}/items")
+async def get_rfq_items_for_quoting(rfq_id: str, user: dict = Depends(get_current_user)):
+    """
+    Get RFQ drawings/items for vendor quoting.
+    Returns each drawing as an item with details for quotation.
+    """
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Get all drawings for this RFQ
+    drawings = await db.drawings.find(
+        {"rfq_id": rfq_id},
+        {"_id": 0}
+    ).to_list(100)
+    
+    items = []
+    for idx, drawing in enumerate(drawings, 1):
+        # Get presigned URL for drawing
+        drawing_url = None
+        if drawing.get("s3_path"):
+            from app.services.s3_storage_service import get_presigned_url
+            drawing_url = get_presigned_url(drawing["s3_path"], expiration=3600)
+        
+        item = {
+            "item_id": drawing.get("drawing_id"),
+            "drawing_id": drawing.get("drawing_id"),
+            "item_number": idx,
+            "title": drawing.get("filename") or f"Item {idx}",
+            "filename": drawing.get("filename"),
+            "file_type": drawing.get("file_type"),
+            "drawing_url": drawing_url,
+            "material_type": rfq.get("material_type"),
+            "quantity": rfq.get("quantity", 1),
+            "tolerance": rfq.get("tolerance"),
+            "ai_analysis": drawing.get("ai_analysis"),
+            "raw_material_provided": rfq.get("supply_type") == "buyer_material"
+        }
+        items.append(item)
+    
+    # If no drawings, create a single item from RFQ itself
+    if not items:
+        items.append({
+            "item_id": f"{rfq_id}_main",
+            "drawing_id": None,
+            "item_number": 1,
+            "title": rfq.get("title", "Main Item"),
+            "filename": None,
+            "file_type": None,
+            "drawing_url": None,
+            "material_type": rfq.get("material_type"),
+            "quantity": rfq.get("quantity", 1),
+            "tolerance": rfq.get("tolerance"),
+            "ai_analysis": rfq.get("ai_analysis"),
+            "raw_material_provided": rfq.get("supply_type") == "buyer_material"
+        })
+    
+    return {
+        "rfq_id": rfq_id,
+        "rfq_title": rfq.get("title"),
+        "total_items": len(items),
+        "items": items,
+        "supply_type": rfq.get("supply_type", "vendor_material"),
+        "raw_material_provided": rfq.get("supply_type") == "buyer_material"
+    }
+
+
 # ============== QUOTE ROUTES ==============
 
 @api_router.get("/payment-terms")
@@ -6730,7 +7017,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://manufacturing-hub-49.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-9.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -6992,7 +7279,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://manufacturing-hub-49.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://rfq-marketplace-9.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -7285,7 +7572,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://manufacturing-hub-49.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-9.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -7426,7 +7713,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://manufacturing-hub-49.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-9.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(

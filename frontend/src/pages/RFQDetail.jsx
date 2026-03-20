@@ -19,6 +19,7 @@ import {
 import QuoteComparison from "../components/quotes/QuoteComparison";
 import QuoteDetailModal from "../components/QuoteDetailModal";
 import VendorNegotiationPanel from "../components/VendorNegotiationPanel";
+import VendorQuotationForm from "../components/VendorQuotationForm";
 
 const PAYMENT_TERMS = [
   { value: "net_30", label: "Net 30 Days" },
@@ -253,106 +254,18 @@ const RFQDetail = () => {
                       <Send className="w-4 h-4 mr-2" /> Submit Quote
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-md">
+                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                      <DialogTitle>Submit Your Quote</DialogTitle>
+                      <DialogTitle>Submit Your Quotation</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4 mt-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                            Price (₹) *
-                          </Label>
-                          <Input
-                            type="number"
-                            step="0.01"
-                            value={quoteForm.price}
-                            onChange={(e) => setQuoteForm(prev => ({ ...prev, price: e.target.value }))}
-                            placeholder="0.00"
-                            className="mt-1"
-                            data-testid="quote-price-input"
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                            Lead Time (Days) *
-                          </Label>
-                          <Input
-                            type="number"
-                            min={1}
-                            value={quoteForm.lead_time_days}
-                            onChange={(e) => setQuoteForm(prev => ({ ...prev, lead_time_days: e.target.value }))}
-                            placeholder="10"
-                            className="mt-1"
-                            data-testid="quote-leadtime-input"
-                          />
-                        </div>
-                      </div>
-                      
-                      {/* Payment Terms */}
-                      <div>
-                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                          <CreditCard className="w-3 h-3 inline mr-1" /> Proposed Payment Terms *
-                        </Label>
-                        <Select
-                          value={quoteForm.proposed_payment_terms}
-                          onValueChange={(value) => setQuoteForm(prev => ({ ...prev, proposed_payment_terms: value }))}
-                        >
-                          <SelectTrigger className="mt-1" data-testid="quote-payment-terms">
-                            <SelectValue placeholder="Select payment terms" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {PAYMENT_TERMS.map((term) => (
-                              <SelectItem key={term.value} value={term.value}>{term.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {rfq.preferred_payment_terms && (
-                          <p className="text-xs text-slate-500 mt-1">
-                            Buyer prefers: {getPaymentTermLabel(rfq.preferred_payment_terms)}
-                          </p>
-                        )}
-                      </div>
-                      
-                      {quoteForm.proposed_payment_terms === "custom" && (
-                        <div>
-                          <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                            Custom Payment Terms
-                          </Label>
-                          <Input
-                            value={quoteForm.payment_terms_notes}
-                            onChange={(e) => setQuoteForm(prev => ({ ...prev, payment_terms_notes: e.target.value }))}
-                            placeholder="Describe your payment terms..."
-                            className="mt-1"
-                          />
-                        </div>
-                      )}
-                      
-                      <div>
-                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                          Notes
-                        </Label>
-                        <Textarea
-                          value={quoteForm.notes}
-                          onChange={(e) => setQuoteForm(prev => ({ ...prev, notes: e.target.value }))}
-                          placeholder="Additional details about your quote..."
-                          className="mt-1"
-                          rows={2}
-                          data-testid="quote-notes-input"
-                        />
-                      </div>
-                      <Button
-                        onClick={submitQuote}
-                        disabled={submittingQuote}
-                        className="w-full bg-orange-600 hover:bg-orange-700"
-                        data-testid="confirm-quote-btn"
-                      >
-                        {submittingQuote ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <>Submit Quote</>
-                        )}
-                      </Button>
+                    <div className="mt-4">
+                      <VendorQuotationForm 
+                        rfq={rfq} 
+                        onSubmitSuccess={() => {
+                          setQuoteDialogOpen(false);
+                          fetchRFQData();
+                        }} 
+                      />
                     </div>
                   </DialogContent>
                 </Dialog>

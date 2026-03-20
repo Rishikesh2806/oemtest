@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { toast } from "sonner";
 import { 
   DollarSign, Building2, Clock, CheckCircle2, ArrowUpDown, 
-  TrendingUp, Star, Loader2, Info, Package
+  TrendingUp, Star, Loader2, Info, Package, FileText,
+  ChevronDown, ChevronUp, Layers
 } from "lucide-react";
 
 const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
@@ -16,6 +17,7 @@ const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
   const [sortBy, setSortBy] = useState("total_cost");
   const [selectedQuote, setSelectedQuote] = useState(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [expandedItemwise, setExpandedItemwise] = useState({});
 
   useEffect(() => {
     if (rfqId) {
@@ -52,6 +54,10 @@ const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
     if (onQuoteSelect) {
       onQuoteSelect(quoteId);
     }
+  };
+
+  const toggleItemwiseExpand = (quoteId) => {
+    setExpandedItemwise(prev => ({ ...prev, [quoteId]: !prev[quoteId] }));
   };
 
   if (loading) {
@@ -96,7 +102,7 @@ const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
         </Card>
         <Card className="border-blue-200 bg-blue-50">
           <CardContent className="pt-4 pb-4">
-            <p className="text-xs text-blue-600 uppercase mb-1">Lowest Machining</p>
+            <p className="text-xs text-blue-600 uppercase mb-1">Lowest Labour</p>
             <p className="text-2xl font-bold text-blue-700">
               ₹{data.comparison_summary.lowest_machining_cost?.toLocaleString('en-IN')}
             </p>
@@ -113,10 +119,18 @@ const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
       </div>
 
       {/* Sort Controls */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">
-          {data.comparison_summary.quotes_with_material} quotes include material, {data.comparison_summary.quotes_without_material} buyer-supplied material
-        </p>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2 text-sm text-slate-500">
+          <span>
+            {data.comparison_summary.quotes_with_material} quotes include material, {data.comparison_summary.quotes_without_material} buyer-supplied
+          </span>
+          {data.has_itemwise_quotes && (
+            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium flex items-center gap-1">
+              <Layers className="w-3 h-3" />
+              {data.comparison_summary.itemwise_quotes} item-wise
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <ArrowUpDown className="w-4 h-4 text-slate-400" />
           <Select value={sortBy} onValueChange={setSortBy}>
@@ -125,7 +139,7 @@ const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="total_cost">Total Cost (Low to High)</SelectItem>
-              <SelectItem value="machining_cost">Machining Cost</SelectItem>
+              <SelectItem value="machining_cost">Labour Cost</SelectItem>
               <SelectItem value="lead_time">Lead Time</SelectItem>
               <SelectItem value="rating">Vendor Rating</SelectItem>
             </SelectContent>
@@ -142,7 +156,7 @@ const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
                 <tr>
                   <th className="text-left p-4 text-xs font-bold uppercase text-slate-500">Vendor</th>
                   <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Material</th>
-                  <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Machining</th>
+                  <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Labour</th>
                   <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Additional</th>
                   <th className="text-right p-4 text-xs font-bold uppercase text-slate-500">Total</th>
                   <th className="text-center p-4 text-xs font-bold uppercase text-slate-500">Lead Time</th>
@@ -152,99 +166,186 @@ const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
               <tbody className="divide-y divide-slate-100">
                 {sortedQuotations.map((quote, index) => {
                   const isLowest = quote.total_cost === data.comparison_summary.lowest_total_cost;
-                  const additionalTotal = quote.additional_costs ? 
-                    Object.values(quote.additional_costs).reduce((a, b) => a + b, 0) : 0;
+                  const additionalTotal = quote.additional_costs_total || 
+                    (quote.additional_costs ? Object.values(quote.additional_costs).reduce((a, b) => a + b, 0) : 0);
+                  const isExpanded = expandedItemwise[quote.quote_id];
                   
                   return (
-                    <tr 
-                      key={quote.quote_id} 
-                      className={`hover:bg-slate-50 ${isLowest ? 'bg-green-50' : ''}`}
-                      data-testid={`quote-row-${quote.quote_id}`}
-                    >
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          {isLowest && (
-                            <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
-                              Best Price
+                    <>
+                      <tr 
+                        key={quote.quote_id} 
+                        className={`hover:bg-slate-50 ${isLowest ? 'bg-green-50' : ''}`}
+                        data-testid={`quote-row-${quote.quote_id}`}
+                      >
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                {isLowest && (
+                                  <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
+                                    Best Price
+                                  </span>
+                                )}
+                                {quote.is_itemwise && (
+                                  <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full font-medium flex items-center gap-1">
+                                    <Layers className="w-3 h-3" />
+                                    {quote.items_count} items
+                                  </span>
+                                )}
+                              </div>
+                              <p className="font-medium text-slate-900 mt-1">{quote.vendor_name}</p>
+                              <p className="text-xs text-slate-500">{quote.vendor_location}</p>
+                              {quote.vendor_rating > 0 && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                                  <span className="text-xs text-slate-600">{quote.vendor_rating.toFixed(1)}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4 text-right">
+                          {quote.material_provided_by_buyer ? (
+                            <span className="text-xs text-slate-400 italic">Buyer provides</span>
+                          ) : (
+                            <span className="font-medium text-slate-900">
+                              ₹{quote.material_cost?.toLocaleString('en-IN')}
                             </span>
                           )}
-                          <div>
-                            <p className="font-medium text-slate-900">{quote.vendor_name}</p>
-                            <p className="text-xs text-slate-500">{quote.vendor_location}</p>
-                            {quote.vendor_rating > 0 && (
-                              <div className="flex items-center gap-1 mt-1">
-                                <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
-                                <span className="text-xs text-slate-600">{quote.vendor_rating.toFixed(1)}</span>
-                              </div>
+                        </td>
+                        <td className="p-4 text-right">
+                          <span className="font-medium text-slate-900">
+                            ₹{(quote.labour_cost || quote.machining_cost)?.toLocaleString('en-IN')}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right">
+                          {additionalTotal > 0 ? (
+                            <button 
+                              className="text-orange-600 hover:underline text-sm"
+                              onClick={() => openDetails(quote)}
+                            >
+                              ₹{additionalTotal.toLocaleString('en-IN')}
+                            </button>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
+                        <td className="p-4 text-right">
+                          <span className={`text-lg font-bold ${isLowest ? 'text-green-700' : 'text-slate-900'}`}>
+                            ₹{quote.total_cost?.toLocaleString('en-IN')}
+                          </span>
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <Clock className="w-4 h-4 text-slate-400" />
+                            <span className="text-slate-700">{quote.lead_time_days} days</span>
+                          </div>
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            {quote.is_itemwise && (
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => toggleItemwiseExpand(quote.quote_id)}
+                                data-testid={`expand-items-${quote.quote_id}`}
+                              >
+                                {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                              </Button>
+                            )}
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => openDetails(quote)}
+                              data-testid={`view-quote-${quote.quote_id}`}
+                            >
+                              <Info className="w-4 h-4" />
+                            </Button>
+                            {!quote.is_selected && (
+                              <Button 
+                                size="sm"
+                                className="bg-orange-600 hover:bg-orange-700"
+                                onClick={() => handleSelectQuote(quote.quote_id)}
+                                data-testid={`select-quote-${quote.quote_id}`}
+                              >
+                                <CheckCircle2 className="w-4 h-4 mr-1" /> Select
+                              </Button>
+                            )}
+                            {quote.is_selected && (
+                              <span className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full font-medium">
+                                Selected
+                              </span>
                             )}
                           </div>
-                        </div>
-                      </td>
-                      <td className="p-4 text-right">
-                        {quote.material_provided_by_buyer ? (
-                          <span className="text-xs text-slate-400 italic">Buyer provides</span>
-                        ) : (
-                          <span className="font-medium text-slate-900">
-                            ₹{quote.material_cost?.toLocaleString('en-IN')}
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-4 text-right">
-                        <span className="font-medium text-slate-900">
-                          ₹{quote.machining_cost?.toLocaleString('en-IN')}
-                        </span>
-                      </td>
-                      <td className="p-4 text-right">
-                        {additionalTotal > 0 ? (
-                          <button 
-                            className="text-orange-600 hover:underline text-sm"
-                            onClick={() => openDetails(quote)}
-                          >
-                            ₹{additionalTotal.toLocaleString('en-IN')}
-                          </button>
-                        ) : (
-                          <span className="text-slate-400">-</span>
-                        )}
-                      </td>
-                      <td className="p-4 text-right">
-                        <span className={`text-lg font-bold ${isLowest ? 'text-green-700' : 'text-slate-900'}`}>
-                          ₹{quote.total_cost?.toLocaleString('en-IN')}
-                        </span>
-                      </td>
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <Clock className="w-4 h-4 text-slate-400" />
-                          <span className="text-slate-700">{quote.lead_time_days} days</span>
-                        </div>
-                      </td>
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => openDetails(quote)}
-                            data-testid={`view-quote-${quote.quote_id}`}
-                          >
-                            <Info className="w-4 h-4" />
-                          </Button>
-                          {!quote.is_selected && (
-                            <Button 
-                              size="sm"
-                              className="bg-orange-600 hover:bg-orange-700"
-                              onClick={() => handleSelectQuote(quote.quote_id)}
-                              data-testid={`select-quote-${quote.quote_id}`}
-                            >
-                              <CheckCircle2 className="w-4 h-4 mr-1" /> Select
-                            </Button>
-                          )}
-                          {quote.is_selected && (
-                            <span className="px-3 py-1 bg-green-100 text-green-700 text-sm rounded-full font-medium">
-                              Selected
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
+
+                      {/* Item-wise breakdown row */}
+                      {quote.is_itemwise && isExpanded && (
+                        <tr key={`${quote.quote_id}-items`} className="bg-slate-50">
+                          <td colSpan={7} className="p-4">
+                            <div className="space-y-2">
+                              <h5 className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                                <FileText className="w-4 h-4" /> Item-wise Cost Breakdown
+                              </h5>
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead className="bg-slate-100">
+                                    <tr>
+                                      <th className="text-left p-2 text-xs font-medium text-slate-500">#</th>
+                                      <th className="text-left p-2 text-xs font-medium text-slate-500">Item</th>
+                                      <th className="text-right p-2 text-xs font-medium text-slate-500">Material</th>
+                                      <th className="text-right p-2 text-xs font-medium text-slate-500">Labour</th>
+                                      <th className="text-right p-2 text-xs font-medium text-slate-500">Additional</th>
+                                      <th className="text-right p-2 text-xs font-medium text-slate-500">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-200">
+                                    {(quote.items || []).map((item, idx) => {
+                                      const itemAdditional = item.additional_costs ? 
+                                        Object.values(item.additional_costs).reduce((a, b) => a + b, 0) : 0;
+                                      return (
+                                        <tr key={item.item_id || idx} className="hover:bg-slate-100">
+                                          <td className="p-2 text-slate-500">{idx + 1}</td>
+                                          <td className="p-2">
+                                            <span className="font-medium text-slate-800">
+                                              {item.title || `Item ${idx + 1}`}
+                                            </span>
+                                            {item.remarks && (
+                                              <p className="text-xs text-slate-500 truncate max-w-[200px]">
+                                                {item.remarks}
+                                              </p>
+                                            )}
+                                          </td>
+                                          <td className="p-2 text-right">
+                                            {item.material_provided_by_buyer ? (
+                                              <span className="text-xs text-slate-400">Buyer</span>
+                                            ) : (
+                                              `₹${(item.material_cost || 0).toLocaleString('en-IN')}`
+                                            )}
+                                          </td>
+                                          <td className="p-2 text-right">
+                                            ₹{(item.labour_cost || 0).toLocaleString('en-IN')}
+                                          </td>
+                                          <td className="p-2 text-right">
+                                            {itemAdditional > 0 ? (
+                                              `₹${itemAdditional.toLocaleString('en-IN')}`
+                                            ) : '-'}
+                                          </td>
+                                          <td className="p-2 text-right font-medium">
+                                            ₹{(item.total_cost || 0).toLocaleString('en-IN')}
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
                   );
                 })}
               </tbody>
@@ -255,11 +356,16 @@ const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
 
       {/* Quote Details Dialog */}
       <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-orange-600" />
               Quotation Details
+              {selectedQuote?.is_itemwise && (
+                <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full font-medium">
+                  Item-wise
+                </span>
+              )}
             </DialogTitle>
           </DialogHeader>
           
@@ -274,48 +380,110 @@ const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
                 </div>
               </div>
 
-              {/* Cost Breakdown */}
-              <div className="space-y-3">
-                <h4 className="font-medium text-slate-700">Cost Breakdown</h4>
-                
-                <div className="space-y-2">
-                  {/* Material Cost */}
-                  <div className="flex justify-between items-center p-2 bg-slate-50 rounded">
-                    <span className="text-slate-600">Material Cost</span>
-                    {selectedQuote.material_provided_by_buyer ? (
-                      <span className="text-slate-400 italic text-sm">Buyer provides material</span>
-                    ) : (
-                      <span className="font-medium">₹{selectedQuote.material_cost?.toLocaleString('en-IN')}</span>
-                    )}
-                  </div>
-
-                  {/* Machining Cost */}
-                  <div className="flex justify-between items-center p-2 bg-slate-50 rounded">
-                    <span className="text-slate-600">Machining / Labor Cost</span>
-                    <span className="font-medium">₹{selectedQuote.machining_cost?.toLocaleString('en-IN')}</span>
-                  </div>
-
-                  {/* Additional Costs */}
-                  {selectedQuote.additional_costs && Object.keys(selectedQuote.additional_costs).length > 0 && (
-                    <>
-                      <p className="text-sm text-slate-500 pt-2">Additional Costs:</p>
-                      {Object.entries(selectedQuote.additional_costs).map(([key, value]) => (
-                        <div key={key} className="flex justify-between items-center p-2 bg-orange-50 rounded">
-                          <span className="text-slate-600 capitalize">{key.replace(/_/g, ' ')}</span>
-                          <span className="font-medium">₹{value?.toLocaleString('en-IN')}</span>
+              {/* Item-wise Breakdown */}
+              {selectedQuote.is_itemwise && selectedQuote.items && (
+                <div className="space-y-3">
+                  <h4 className="font-medium text-slate-700 flex items-center gap-2">
+                    <FileText className="w-4 h-4" /> Item-wise Breakdown ({selectedQuote.items.length} items)
+                  </h4>
+                  <div className="space-y-2">
+                    {selectedQuote.items.map((item, idx) => {
+                      const itemAdditional = item.additional_costs ? 
+                        Object.values(item.additional_costs).reduce((a, b) => a + b, 0) : 0;
+                      return (
+                        <div key={item.item_id || idx} className="p-3 bg-slate-50 rounded-lg">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="font-medium text-slate-800">
+                                {idx + 1}. {item.title || `Item ${idx + 1}`}
+                              </p>
+                              {item.remarks && (
+                                <p className="text-xs text-slate-500 mt-1">{item.remarks}</p>
+                              )}
+                            </div>
+                            <span className="font-bold text-slate-900">
+                              ₹{(item.total_cost || 0).toLocaleString('en-IN')}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 mt-2 text-xs text-slate-600">
+                            <div>
+                              <span className="text-slate-400">Material:</span>{' '}
+                              {item.material_provided_by_buyer ? 'Buyer' : `₹${(item.material_cost || 0).toLocaleString('en-IN')}`}
+                            </div>
+                            <div>
+                              <span className="text-slate-400">Labour:</span>{' '}
+                              ₹{(item.labour_cost || 0).toLocaleString('en-IN')}
+                            </div>
+                            <div>
+                              <span className="text-slate-400">Additional:</span>{' '}
+                              {itemAdditional > 0 ? `₹${itemAdditional.toLocaleString('en-IN')}` : '-'}
+                            </div>
+                          </div>
+                          {item.additional_costs && Object.keys(item.additional_costs).length > 0 && (
+                            <div className="mt-2 pt-2 border-t border-slate-200">
+                              <p className="text-xs text-slate-400 mb-1">Additional Costs:</p>
+                              <div className="flex flex-wrap gap-1">
+                                {Object.entries(item.additional_costs).map(([key, value]) => (
+                                  <span key={key} className="text-xs px-2 py-0.5 bg-orange-50 text-orange-700 rounded">
+                                    {key.replace(/_/g, ' ')}: ₹{value.toLocaleString('en-IN')}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      ))}
-                    </>
-                  )}
-
-                  {/* Total */}
-                  <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg border border-green-200 mt-3">
-                    <span className="font-medium text-green-700">Total Cost</span>
-                    <span className="text-xl font-bold text-green-700">
-                      ₹{selectedQuote.total_cost?.toLocaleString('en-IN')}
-                    </span>
+                      );
+                    })}
                   </div>
                 </div>
+              )}
+
+              {/* Cost Breakdown (for non-itemwise) */}
+              {!selectedQuote.is_itemwise && (
+                <div className="space-y-3">
+                  <h4 className="font-medium text-slate-700">Cost Breakdown</h4>
+                  
+                  <div className="space-y-2">
+                    {/* Material Cost */}
+                    <div className="flex justify-between items-center p-2 bg-slate-50 rounded">
+                      <span className="text-slate-600">Material Cost</span>
+                      {selectedQuote.material_provided_by_buyer ? (
+                        <span className="text-slate-400 italic text-sm">Buyer provides material</span>
+                      ) : (
+                        <span className="font-medium">₹{selectedQuote.material_cost?.toLocaleString('en-IN')}</span>
+                      )}
+                    </div>
+
+                    {/* Machining Cost */}
+                    <div className="flex justify-between items-center p-2 bg-slate-50 rounded">
+                      <span className="text-slate-600">Labour / Machining Cost</span>
+                      <span className="font-medium">₹{(selectedQuote.labour_cost || selectedQuote.machining_cost)?.toLocaleString('en-IN')}</span>
+                    </div>
+
+                    {/* Additional Costs */}
+                    {selectedQuote.additional_costs && Object.keys(selectedQuote.additional_costs).length > 0 && (
+                      <>
+                        <p className="text-sm text-slate-500 pt-2">Additional Costs:</p>
+                        {Object.entries(selectedQuote.additional_costs).map(([key, value]) => (
+                          <div key={key} className="flex justify-between items-center p-2 bg-orange-50 rounded">
+                            <span className="text-slate-600 capitalize">{key.replace(/_/g, ' ')}</span>
+                            <span className="font-medium">₹{value?.toLocaleString('en-IN')}</span>
+                          </div>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Total */}
+              <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg border border-green-200">
+                <span className="font-medium text-green-700">
+                  {selectedQuote.is_itemwise ? 'Grand Total' : 'Total Cost'}
+                </span>
+                <span className="text-xl font-bold text-green-700">
+                  ₹{selectedQuote.total_cost?.toLocaleString('en-IN')}
+                </span>
               </div>
 
               {/* Lead Time & Payment Terms */}

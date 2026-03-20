@@ -1,178 +1,166 @@
-<analysis>**original_problem_statement:** The user wants to build a full-stack web application called **OEMLinker**, an AI-driven on-demand manufacturing marketplace. The core functionality involves buyers uploading RFQs with engineering drawings. An AI engine analyzes these drawings to extract technical specifications, which a smart matching algorithm uses to connect buyers with suitable manufacturing vendors based on capabilities, dimensions, and location.
-
-The platform must support a complete workflow: RFQ -> AI Analysis -> Vendor Matching -> Quotation -> Purchase Order -> Delivery -> Payment. It should handle different user roles (Buyer, Vendor, Admin) and include features like a vendor capability database, dashboards for each role, and a secure escrow payment system. The user has also requested to fix image rendering issues and investigate deployment failures.
+<analysis>**original_problem_statement**: The user wants to build a full-stack web application called **OEMLinker**, an AI-driven on-demand manufacturing marketplace. Buyers upload RFQs with drawings; an AI engine analyzes them, and a matching algorithm connects buyers with vendors. The platform handles an RFQ-to-payment workflow, RBAC permissions, manual/AI vendor matching, advanced quotation systems (cost breakdowns), and item-wise multi-part quoting.
 
 **PRODUCT REQUIREMENTS:**
--   **User Roles:** Buyer, Vendor, Admin, and custom staff roles (e.g., Sales Manager), all managed via a full RBAC system.
--   **AI Core:** An Intelligence Engine to read drawings and an AI assistant for user interaction.
--   **Matching:** A smart algorithm to match RFQs to vendors.
--   **Workflow:** A complete RFQ-to-payment lifecycle management module.
--   **Security:** Secure user authentication and granular, role-based permissions.
--   **Commercials:** Escrow payments, platform commissions.
--   **Integrations:** WhatsApp for vendor communication, AWS S3 for file storage, and a potential ElevenLabs integration for a voice agent.
--   **WhatsApp Admin:** A system for admins to view user messages, templates, and detailed logs.
--   **Compliance:** Meta (WhatsApp) compliant User Data Deletion policy.
--   **Drawings Protection:** An NDA mechanism before vendors can access drawings.
--   **Image URLs:** All image URLs must be direct S3 URLs (presigned) to prevent cross-origin issues.
+-   **User Roles:** Buyer, Vendor, Admin, Staff (Managed via RBAC).
+-   **AI Core & Matching:** AI analyzes RFQ processes (machining, casting, etc.) and auto-matches or manually matches vendors.
+-   **Workflow:** RFQ -> Matching -> Quotation -> Comparison -> Order -> Payment.
+-   **Quotation System:** Advanced quoting with detailed cost breakdown (material, machining, additional) and item-wise (per-drawing) granularity.
+-   **File Management:** S3 presigned URLs for all drawings and images. ReportLab-based PDF generation for RFQs.
 
-**User's preferred language**: English
+**User's preferred language**: English (INSTRUCT next agent to respond in the user's preferred language only)
 
 **what currently exists?**
-The OEMLinker application is a full-stack platform (React/FastAPI/MongoDB) with AWS S3 integration for file storage, JWT authentication, and a comprehensive Role-Based Access Control (RBAC) system. The application's frontend is highly dynamic and permission-aware, with the UI (sidebar, dashboard cards, admin tabs, action buttons) rendering conditionally based on the logged-in user's role and permissions.
-
-Key features implemented in the last session include:
-- A fix for the critical WhatsApp notification bug, now using text-based messages with magic links.
-- A new feature to search vendors by machine capabilities in the admin dashboard.
-- New machine categories (Casting, Forging).
-- A complete RBAC permission system for managing vendor machines and their images.
-- A fix for broken images by migrating all stored URLs to S3 presigned URLs.
-- A new Machines tab in the admin dashboard, which is currently a placeholder.
+OEMLinker is a React/FastAPI/MongoDB application with comprehensive RBAC, AWS S3 storage, and Gupshup/Resend integrations. The admin dashboard supports dynamic tabs based on permissions. Recent additions include full machine management, manual RFQ-vendor matching, RFQ PDF generation, and an advanced quotation system allowing cost breakdowns. The  backend is monolithic (nearly 17,000 lines) and relies heavily on search-replace for updates. 
 
 **Last working item**:
--   Last item agent was working: The user requested to create dashboard tabs that match a user's assigned role permissions. The agent started by adding a new Machines tab to the Admin Dashboard, which is conditionally rendered based on the  permission. A new  React component was created as a placeholder.
--   Status: IN PROGRESS
--   Agent Testing Done: Y
--   Which testing method agent to use? frontend testing agent
--   User Testing Done: N
+-   **Last item agent was working**: Implementing item-wise (per drawing) quotation with detailed cost breakdowns for vendors. The agent had just updated the Pydantic models (, ) in  to support arrays of items.
+-   **Status**: IN PROGRESS
+-   **Agent Testing Done**: N
+-   **Which testing method agent to use?**: both (Backend testing for API logic, Frontend testing for dynamic multi-item quote forms)
+-   **User Testing Done**: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1: Production Login Failure with Password (Priority: P2)**
-    -   **Description:** Password-based login fails on the production site. This is a carry-over issue.
-    -   **Status:** BLOCKED (Pending user deployment of a prior fix).
+-   **Issue 1**: Production Login Failure with Password (Priority: P2)
+    -   **Attempted fixes**: Previous job diagnosed but pending user deployment of the fix.
+    -   **Next debug checklist**: Verify login flow in production environment once user confirms deployment. 
+    -   **Why fix this issue**: Critical for user access.
+    -   **Status**: BLOCKED (Pending user deployment)
     -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** backend
-    -   **Blocked on other issue:** None
+    -   **Should Test frontend/backend/both after fix?**: backend
+    -   **Blocked on other issue**: User deployment
 
 **In progress Task List**:
--   **Task 1: Flesh out Machines Tab (Priority: P0)**
-    -   **Where to resume:** The newly created  component in  is currently an empty shell.
-    -   **What will be achieved with this?** This will complete the user's request for matching tabs by providing a functional, centralized view for admins and permitted staff to browse, search, and manage all machines in the system, independent of the vendor they belong to.
-    -   **Status:** IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?** frontend
-    -   **Blocked on something:** None
+-   **Task 1: Item-wise (per drawing) vendor quotation system (Priority: P0)**
+    -   **Where to resume**: The Pydantic models for  are updated in . You need to: 
+        1. Update  API to process arrays of items.
+        2. Ensure the RFQ model and  endpoints support linking  to drawings.
+        3. Overhaul  to dynamically render a form per drawing.
+        4. Overhaul  to show item-wise comparisons.
+    -   **What will be achieved with this?**: Vendors can quote accurately per drawing in multi-part RFQs, and buyers get granular cost breakdowns.
+    -   **Status**: IN PROGRESS
+    -   **Should Test frontend/backend/both after fix?**: both
+    -   **Blocked on something**: None
 
 -   **Task 2:  Refactoring (Priority: P1)**
-    -   **Where to resume:** Continue the refactoring of the monolithic . The next logical step is to migrate authentication endpoints () into a new file: .
-    -   **What will be achieved with this?** Improved code maintainability, scalability, and developer velocity.
-    -   **Status:** IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?** both (regression testing)
-    -   **Blocked on something:** None
+    -   **Where to resume**: The monolithic  is now nearly 17,000 lines long. Migrate authentication, vendor, RFQ, and admin routes into separate modules (e.g., ).
+    -   **What will be achieved with this?**: Improved code maintainability and reduced risk of search-replace errors.
+    -   **Status**: NOT STARTED
+    -   **Should Test frontend/backend/both after fix?**: both
+    -   **Blocked on something**: Best to complete P0 feature first.
 
 **Upcoming and Future Tasks**
-**Upcoming Tasks:**
--   **ElevenLabs Integration (P1):** The user has asked about integrating an ElevenLabs voice agent. The next step is to gather requirements (use cases, voice selection, API key) via  and then proceed with the .
--   **Drawing Protection/NDA (P1):** Implement a click-to-accept modal or watermarking before vendors can access drawing files.
--   **Stripe Integration (P1):** Implement the escrow payment system.
--   **WordPress Integration (P1):** Scope and plan the integration of WordPress for content management.
--   **Continue  Refactoring (P1):** Move the remaining routes (vendor, RFQ, admin, WhatsApp) into their respective modules.
--   **SMS OTP Registration (P2):** Implement phone number-based registration using an SMS API.
+Upcoming Tasks:
+-   **ElevenLabs Integration (P1)**: Integrate voice agent (pending requirements gathering via ).
+-   **Drawing Protection/NDA (P1)**: Click-to-accept modal or watermarking before vendors can view/download S3 drawings.
+-   **Stripe Integration (P1)**: Escrow payment system.
+-   **WordPress Integration (P1)**: Content management integration.
+-   **SMS OTP Registration (P2)**: Phone number-based auth.
 
-**Future Tasks:**
+Future Tasks:
 -   Instant AI auto-quote for simple parts.
 -   API for ERP integration.
 -   Capacity forecasting for vendors.
--   Full-scale stress testing before public launch.
--   Localization of WhatsApp flows into more regional Indian languages.
+-   Partial quoting & item-wise auto-award (split orders).
 
 **Completed work in this session**
--   **WhatsApp RFQ Notification Fix (DONE):** Resolved the critical P0 bug by switching from failing PDF attachments to text-only messages containing secure, one-click magic login links. Updated all user-facing notification links to use this system.
--   **Image URL & Deployment Fix (DONE):** Diagnosed and fixed broken images and deployment 404 errors by migrating all stored URLs from legacy proxy paths to secure, expiring S3 presigned URLs. Created a migration endpoint to fix existing data.
--   **Vendor Search by Machine (DONE):** Implemented a new backend endpoint and a corresponding UI in the admin dashboard to allow searching for vendors by machine capabilities (category, type, dimensions, etc.).
--   **Machine Category Expansion (DONE):** Added Casting and Forging categories, each with 9 specific types and relevant dimension fields, to the machine data model.
--   **Machine Management Permissions (DONE):** Introduced a Machine Management RBAC module (, , , , ) and secured all relevant backend endpoints and frontend UI components. Admins or permitted staff can now manage machines on behalf of vendors.
--   **Dynamic Admin Dashboard Tabs (DONE):** Added a new Machines tab that is only visible to users with the  permission, furthering the goal of a fully permission-driven UI.
+-   Admin Machine Management feature (Machines Tab, Create Dialog) (DONE)
+-   Manual RFQ-Vendor Matching with UI and notifications (DONE)
+-   RFQ Details View & ReportLab PDF Generation/Download (DONE)
+-   Drawing S3 Presigned URL Fix (DONE)
+-   Advanced Quotation System (Material, Machining, Additional cost breakdowns) (DONE)
+-   Created  and  components (DONE)
 
 **Earlier issues found/mentioned but not fixed**
--   The **Made with Emergent badge** cannot be removed via code in the preview environment as it's a platform limitation.
+-   **Issue 1: Monolithic Files**
+    -   **Debug checklist**: Check line counts for  (>16k) and  (>4k).
+    -   **Why to solve this issue**: Slows down development, causes tool timeout errors, and risks context truncation.
+    -   **Should Test frontend/backend/both after fix**: both
+    -   **Is recurring issue?**: Y
 
 **Known issue recurrence from previous fork**
--   None.
+-   Issue recurrence in previous fork: None
+-   Recurrence count: 0
+-   Status: RESOLVED
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Backend:** FastAPI ( monolith).
--   **Frontend:** React, Shadcn UI, Axios.
--   **Database:** MongoDB.
--   **File Storage:** AWS S3, now using **presigned URLs** for secure, temporary access to private objects.
--   **Security:** JWT, Magic Links, and a highly granular **Role-Based Access Control (RBAC)** system.
+-   **Frontend**: React, Shadcn UI, TailwindCSS, Axios
+-   **Backend**: FastAPI, Pydantic, ReportLab (PDF Generation)
+-   **Database**: MongoDB
+-   **File Storage**: AWS S3 (Strictly using Presigned URLs for temporary access)
+-   **Security**: JWT, RBAC
 
 **key DB schema**
--   **machines:** The  array field now stores temporary S3 presigned URLs instead of persistent public or relative URLs.
+-   **rfqs**: 
+-   **quotes**: 
 
 **changes in tech stack**
--   None.
+-   Added  for structured PDF generation.
 
 **All files of reference**
--   : Heavily modified to add new endpoints (machine search, image migration), update WhatsApp notifications to use magic links, secure endpoints with new RBAC permissions, and fix legacy URL routing.
--   : Heavily modified to add a new Machines tab and component, implement the vendor search UI, and add a full machine management UI (add/edit/delete images) within the vendor profile view, all controlled by new permissions.
--   : Modified to generate presigned URLs and configure the S3 client with a regional endpoint.
--   : Modified to add the Machine Management permission module and update default roles.
--   : Modified to add Casting and Forging categories.
+-   : Contains API routes, matching logic, PDF generation logic.
+-   : Contains RFQs tab, Match Dialog, View RFQ dialog.
+-   : Created for displaying vendor quotes.
+-   : Created for vendor quote submission.
 
 **Areas that need refactoring**:
--   : This file is now over 3,500 lines and contains the logic and JSX for at least five separate tabs. It urgently needs to be broken down. Each tab component (, , , , etc.) should be extracted into its own file (e.g., ).
--   : This remains the highest priority for refactoring. The file has grown even larger and is difficult to maintain.
+-   : Nearing 17,000 lines. Extreme risk of modification errors.
+-   : Over 4,000 lines. Needs tabs extracted into separate component files.
 
 **key api endpoints**
--   : **NEW**. Searches vendors by machine capabilities.
--   , , , : **UPDATED** to check for  permissions.
--   , : **NEW**. Admin endpoints to manage machine images.
--   : **NEW**. An admin utility to regenerate all presigned URLs for images.
--   : **UPDATED** to correctly handle S3 keys that may incorrectly contain the bucket name.
--   : **NEW**. A legacy endpoint to gracefully return a 404 for old, non-existent image paths.
+-   : Analyzes drawing process and matches vendors.
+-   : Manual vendor matching.
+-   : Generates PDF.
+-   : Currently being modified to accept  array for multi-part quoting.
 
 **Critical Info for New Agent**
--   **Your immediate priority (P0) is to implement the  component.** It has been added to the dashboard UI but is currently an empty placeholder. It needs to fetch and display all machines from  and include search, filter, and management actions.
--   **Refactoring is critical.** The  file is extremely large and difficult to work with. Before adding more features, consider breaking out the tab components into their own files. Similarly, the  monolith needs to be broken down.
--   The user has requested **ElevenLabs integration**. You should use  to confirm the use case and gather requirements before proceeding.
--   Image URLs are now **presigned and temporary**. When developing UI that displays images, be aware that the URLs will expire (currently after 7 days). For testing, you may need to use the  endpoint to refresh them.
+-   **Immediate Priority**: Complete the Item-wise Vendor Quotation implementation (P0). Ensure the backend parses the  array and calculates total cost correctly. Ensure the frontend dynamically renders inputs per drawing.
+-   **S3 Rule**: Always use  to serve images/drawings. Do not use legacy  routes.
+-   **Editing Monoliths**: Due to file sizes (, ), use  very carefully with highly specific block matches to avoid corruption.
 
 **documents and test reports created in this job**
--    (updated)
+-   
+-    (Admin Machines)
+-    (Manual Match)
+-    (RFQ PDF)
+-    (RFQ Drawing Fix)
+-    (Advanced Quotations)
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **user:**  (Status: **In Progress**. The  component was created as a placeholder).
-2.  **user:**  (Status: **Completed**).
-3.  **user:**  (Status: **Completed**).
-4.  **user:**  (Status: **Completed**. Agent analyzed logs and fixed underlying URL issues).
-5.  **user:**  (Status: **Completed**. Migrated all image URLs to S3 presigned URLs).
-6.  **user:**  (Status: **Pending**. Agent asked for clarification but was interrupted by a higher-priority bug fix).
-7.  **user:**  (Status: **Completed**).
-8.  **user:**  (Status: **Completed**. Agent tested the API and fixed a frontend dropdown issue).
-9.  **user:**  (Status: **Completed**).
-10. **user:**  (Status: **Completed**).
+1.  **user**:  (Status: Completed).
+2.  **user**:  (Status: Completed).
+3.  **user**:  (Status: Completed).
+4.  **user**:  (Status: Completed).
+5.  **user**:  (Status: Completed).
+6.  **user**:  (Status: Completed).
+7.  **user**:  (Status: **IN PROGRESS** - Backend models updated, APIs and UI pending).
 
 **Project Health Check:**
--   **Broken:**
-    -   None. The critical WhatsApp and image loading issues were resolved.
--   **Mocked:**
-    -   Stripe payment integration is planned but not implemented.
-    -   WordPress integration is planned but not implemented.
-    -   ElevenLabs integration is pending requirements.
+-   **Broken**: None
+-   **Mocked**: Stripe payments, ElevenLabs voice agent, WordPress integration.
 
 **3rd Party Integrations**
--   **OpenAI GPT:** Powers AI analysis. Uses Emergent LLM Key.
--   **Resend:** For transactional emails. Requires user-provided key.
--   **Gupshup:** For WhatsApp Business API. Requires user-provided key.
--   **GSTIN Check API:** For vendor data verification. Requires user-provided key.
--   **AWS S3:** For persistent file storage. Fully integrated.
--   **ElevenLabs:** **(Potential)** User has expressed interest. Requires user API key and further scoping.
+-   OpenAI GPT-4o — uses Emergent LLM Key (AI Analysis)
+-   AWS S3 — fully integrated (Storage)
+-   Resend — requires User API Key (Emails)
+-   Gupshup — requires User API Key (WhatsApp Notifications)
+-   ElevenLabs — requires User API Key (Pending Integration)
+-   Stripe — requires User API Key (Pending Integration)
 
 **Testing status**
--   Testing agent used after significant changes: NO
+-   Testing agent used after significant changes: YES
 -   Troubleshoot agent used after agent stuck in loop: NO
--   Test files created: None
+-   Test files created:  to 
 -   Known regressions: None
 
 **Credentials to test flow:**
--   **Admin:** Email: , Password: 
--   **Buyer:** Email: , Password: 
--   **Vendor:** Email: , Password: 
--   **Staff Users:** Create new users and assign custom roles like , , , or  to test the permission system.
+-   Admin:  / 
+-   Buyer:  / 
+-   Vendor:  / 
+-   Test Vendor (Dynamically Created):  / 
 
 **What agent forgot to execute**
--   The agent did not complete the implementation of the . It exists but is not functional.
--   The agent did not follow up on the user's request for **ElevenLabs integration** after being sidetracked by the image URL bug. This needs to be revisited.
--   The agent identified numerous linting warnings in  but did not fix them. While non-blocking, they should be addressed for code quality.</analysis>
+-   The item-wise quotation UI on the frontend ( and ) has not been updated yet to reflect the new item-wise Pydantic models.
+-   Refactoring of  and  was postponed in favor of feature delivery.</analysis>
