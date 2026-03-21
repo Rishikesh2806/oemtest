@@ -596,6 +596,7 @@ const OrderDetail = () => {
         <InspectionStatusCard 
           orderId={orderId} 
           isBuyer={isBuyer}
+          isVendor={isVendor}
           onRefresh={() => fetchOrder()}
         />
 

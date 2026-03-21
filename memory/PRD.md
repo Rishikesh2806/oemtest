@@ -380,6 +380,12 @@ Comprehensive platform analytics for business tracking:
   - Created BuyerOrders.jsx and VendorOrders.jsx pages
   - Added /buyer/orders and /vendor/orders routes
   - Added backend APIs for enriched order lists
+- Vendor Inspector Assignment feature ✓ (Mar 21, 2026)
+  - Vendors can now assign inspectors to orders they own
+  - Added /vendor/orders/{order_id}/assign-inspector API
+  - Added /vendor/inspectors API to list available inspectors
+  - Updated InspectionStatusCard with vendor assign inspector modal
+  - Fixed inspection authorization for vendors
 
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check

@@ -12746,9 +12746,15 @@ async def get_order_inspection(order_id: str, user: dict = Depends(get_current_u
     
     # Check authorization
     is_buyer = order.get("buyer_id") == user["user_id"]
-    is_vendor = order.get("vendor_id") == user["user_id"]
     is_admin = user["role"] == UserRole.ADMIN
     is_inspector = user["role"] == "inspector"
+    
+    # Check if user is the vendor
+    is_vendor = False
+    if user["role"] == UserRole.VENDOR:
+        vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0, "vendor_id": 1})
+        if vendor and vendor.get("vendor_id") == order.get("vendor_id"):
+            is_vendor = True
     
     if not (is_buyer or is_vendor or is_admin or is_inspector):
         raise HTTPException(status_code=403, detail="Not authorized")
@@ -12777,11 +12783,26 @@ async def get_order_inspection(order_id: str, user: dict = Depends(get_current_u
 
 @api_router.post("/admin/orders/{order_id}/assign-inspector")
 async def assign_inspector(order_id: str, request: Request, user: dict = Depends(get_current_user)):
-    """Admin assigns an inspector to an inspection request"""
-    if user["role"] != UserRole.ADMIN:
-        has_permission = await rbac_service.check_permission(user["user_id"], "inspections.assign")
-        if not has_permission:
-            raise HTTPException(status_code=403, detail="Permission denied")
+    """Admin or authorized vendor assigns an inspector to an inspection request"""
+    # Check permissions - Admin, RBAC permission, or vendor who owns the order
+    is_admin = user["role"] == UserRole.ADMIN
+    has_rbac_permission = False
+    is_order_vendor = False
+    
+    if not is_admin:
+        from app.services.rbac_service import rbac_service
+        has_rbac_permission = await rbac_service.check_permission(user["user_id"], "inspections.assign")
+    
+    # Check if user is the vendor for this order
+    if user["role"] == UserRole.VENDOR:
+        vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0, "vendor_id": 1})
+        if vendor:
+            order = await db.orders.find_one({"order_id": order_id}, {"_id": 0, "vendor_id": 1})
+            if order and order.get("vendor_id") == vendor.get("vendor_id"):
+                is_order_vendor = True
+    
+    if not (is_admin or has_rbac_permission or is_order_vendor):
+        raise HTTPException(status_code=403, detail="Permission denied. Only admin, authorized staff, or the order vendor can assign inspectors.")
     
     inspection = await db.inspections.find_one({"order_id": order_id}, {"_id": 0})
     if not inspection:
@@ -12898,6 +12919,42 @@ async def assign_inspector(order_id: str, request: Request, user: dict = Depends
             "agency_name": agency_name,
             "status": InspectionStatus.INSPECTOR_ASSIGNED
         }
+
+
+@api_router.post("/vendor/orders/{order_id}/assign-inspector")
+async def vendor_assign_inspector(order_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Vendor assigns an inspector to an inspection request for their order"""
+    if user["role"] != UserRole.VENDOR:
+        raise HTTPException(status_code=403, detail="Only vendors can use this endpoint")
+    
+    # Verify vendor owns this order
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0, "vendor_id": 1})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor profile not found")
+    
+    order = await db.orders.find_one({"order_id": order_id}, {"_id": 0, "vendor_id": 1})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order.get("vendor_id") != vendor.get("vendor_id"):
+        raise HTTPException(status_code=403, detail="You can only assign inspectors to your own orders")
+    
+    # Delegate to the main assign_inspector function
+    return await assign_inspector(order_id, request, user)
+
+
+@api_router.get("/vendor/inspectors")
+async def vendor_list_inspectors(user: dict = Depends(get_current_user)):
+    """Vendor gets list of available inspectors for assignment"""
+    if user["role"] not in [UserRole.VENDOR, UserRole.ADMIN]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    inspectors = await db.inspectors.find(
+        {"approval_status": "approved", "is_available": True},
+        {"_id": 0, "inspector_id": 1, "name": 1, "city": 1, "state": 1, "avg_rating": 1, "total_inspections": 1}
+    ).to_list(100)
+    
+    return {"inspectors": inspectors, "total": len(inspectors)}
 
 
 @api_router.post("/inspector/orders/{order_id}/report")

@@ -4,13 +4,16 @@ import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "./ui/dialog";
 import { Textarea } from "./ui/textarea";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { toast } from "sonner";
 import { 
   Shield, ClipboardCheck, ShieldCheck, User, Building2, 
   Clock, CheckCircle2, XCircle, AlertTriangle, FileText,
   Image as ImageIcon, Download, Loader2, RefreshCw, Eye,
-  MapPin, Calendar
+  MapPin, Calendar, UserPlus
 } from "lucide-react";
 
 const STATUS_CONFIG = {
@@ -34,13 +37,20 @@ const RESULT_CONFIG = {
   conditional_pass: { label: "CONDITIONAL PASS", color: "bg-yellow-500 text-white", icon: AlertTriangle }
 };
 
-const InspectionStatusCard = ({ orderId, isBuyer = false, onRefresh }) => {
+const InspectionStatusCard = ({ orderId, isBuyer = false, isVendor = false, onRefresh }) => {
   const [loading, setLoading] = useState(true);
   const [inspection, setInspection] = useState(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [showAssignModal, setShowAssignModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [inspectors, setInspectors] = useState([]);
+  const [assignForm, setAssignForm] = useState({
+    inspector_id: "",
+    agency_name: "",
+    agency_contact: ""
+  });
 
   useEffect(() => {
     fetchInspection();
@@ -55,6 +65,53 @@ const InspectionStatusCard = ({ orderId, isBuyer = false, onRefresh }) => {
       console.error("Failed to fetch inspection:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchInspectors = async () => {
+    try {
+      const res = await api.get("/vendor/inspectors");
+      setInspectors(res.data.inspectors || []);
+    } catch (error) {
+      console.error("Failed to fetch inspectors:", error);
+    }
+  };
+
+  const openAssignModal = () => {
+    setAssignForm({ inspector_id: "", agency_name: "", agency_contact: "" });
+    fetchInspectors();
+    setShowAssignModal(true);
+  };
+
+  const handleAssignInspector = async () => {
+    const isBasic = inspection?.inspection_type === "basic";
+    
+    if (isBasic && !assignForm.inspector_id) {
+      toast.error("Please select an inspector");
+      return;
+    }
+    
+    if (!isBasic && !assignForm.agency_name) {
+      toast.error("Please enter agency name");
+      return;
+    }
+    
+    setActionLoading(true);
+    try {
+      const payload = isBasic 
+        ? { inspector_id: assignForm.inspector_id }
+        : { agency_name: assignForm.agency_name, agency_contact: assignForm.agency_contact };
+      
+      await api.post(`/vendor/orders/${orderId}/assign-inspector`, payload);
+      
+      toast.success("Inspector/Agency assigned successfully!");
+      setShowAssignModal(false);
+      fetchInspection();
+      onRefresh?.();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to assign inspector");
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -292,6 +349,19 @@ const InspectionStatusCard = ({ orderId, isBuyer = false, onRefresh }) => {
             </div>
           )}
 
+          {/* Vendor Actions - Assign Inspector */}
+          {isVendor && (inspection.status === "awaiting_assignment" || inspection.status === "re_inspection_requested") && (
+            <div className="pt-2">
+              <Button 
+                onClick={openAssignModal}
+                className="w-full bg-orange-600 hover:bg-orange-700"
+                data-testid="vendor-assign-inspector-btn"
+              >
+                <UserPlus className="w-4 h-4 mr-1" /> Assign Inspector
+              </Button>
+            </div>
+          )}
+
           {/* View Full Report */}
           {inspection.result && (
             <Button 
@@ -498,6 +568,115 @@ const InspectionStatusCard = ({ orderId, isBuyer = false, onRefresh }) => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowReportModal(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Inspector Modal (Vendor) */}
+      <Dialog open={showAssignModal} onOpenChange={setShowAssignModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-orange-600" />
+              Assign Inspector / Agency
+            </DialogTitle>
+          </DialogHeader>
+          
+          {inspection && (
+            <div className="space-y-4 mt-4">
+              {/* Inspection Info */}
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-500">Inspection Type</span>
+                  <Badge className={inspection.inspection_type === "basic" ? "bg-blue-100 text-blue-700" : "bg-purple-100 text-purple-700"}>
+                    {inspection.inspection_type === "basic" ? "Basic" : "Certified"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-sm text-slate-500">Fee</span>
+                  <span className="font-medium">₹{inspection.inspection_fee?.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              {inspection.inspection_type === "basic" ? (
+                <div>
+                  <Label>Select Inspector</Label>
+                  <Select 
+                    value={assignForm.inspector_id}
+                    onValueChange={(v) => setAssignForm(prev => ({ ...prev, inspector_id: v }))}
+                  >
+                    <SelectTrigger className="mt-1" data-testid="vendor-inspector-select">
+                      <SelectValue placeholder="Choose an inspector" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {inspectors.length === 0 ? (
+                        <div className="p-2 text-center text-slate-500 text-sm">
+                          No available inspectors
+                        </div>
+                      ) : (
+                        inspectors.map((inspector) => (
+                          <SelectItem key={inspector.inspector_id} value={inspector.inspector_id}>
+                            <div className="flex items-center gap-2">
+                              <User className="w-4 h-4 text-slate-400" />
+                              <span>{inspector.name}</span>
+                              {inspector.city && (
+                                <span className="text-xs text-slate-400">({inspector.city})</span>
+                              )}
+                              {inspector.avg_rating > 0 && (
+                                <span className="text-xs text-amber-500">★ {inspector.avg_rating.toFixed(1)}</span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-slate-500 mt-2">
+                    Platform inspectors will visit your facility to verify order quality.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <Label>Agency Name *</Label>
+                    <Input
+                      placeholder="Enter certified agency name"
+                      value={assignForm.agency_name}
+                      onChange={(e) => setAssignForm(prev => ({ ...prev, agency_name: e.target.value }))}
+                      className="mt-1"
+                      data-testid="vendor-agency-name-input"
+                    />
+                  </div>
+                  <div>
+                    <Label>Agency Contact</Label>
+                    <Input
+                      placeholder="Contact person / phone"
+                      value={assignForm.agency_contact}
+                      onChange={(e) => setAssignForm(prev => ({ ...prev, agency_contact: e.target.value }))}
+                      className="mt-1"
+                      data-testid="vendor-agency-contact-input"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Certified agencies provide official inspection certificates recognized by industry standards.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowAssignModal(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAssignInspector}
+              disabled={actionLoading}
+              className="bg-orange-600 hover:bg-orange-700"
+              data-testid="vendor-confirm-assign-btn"
+            >
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assign"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
