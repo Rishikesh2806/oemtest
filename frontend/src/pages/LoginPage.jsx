@@ -29,6 +29,8 @@ const LoginPage = () => {
       navigate("/vendor/dashboard");
     } else if (userData.role === "admin") {
       navigate("/admin/dashboard");
+    } else if (userData.role === "inspector") {
+      navigate("/inspector/dashboard");
     } else if (userData.role === "buyer") {
       navigate("/buyer/dashboard");
     } else if (userData.custom_role) {

@@ -188,6 +188,8 @@ const AuthCallback = () => {
           navigate("/vendor/dashboard", { replace: true });
         } else if (role === "admin") {
           navigate("/admin/dashboard", { replace: true });
+        } else if (role === "inspector") {
+          navigate("/inspector/dashboard", { replace: true });
         } else if (role === "buyer") {
           navigate("/buyer/dashboard", { replace: true });
         } else if (customRole) {

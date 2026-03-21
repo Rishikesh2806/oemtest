@@ -39,6 +39,9 @@ const ALL_NAV_ITEMS = {
   machines: { path: "/vendor/machines", label: "Machines", icon: Wrench, permissions: [] },
   vendor_quotes: { path: "/vendor/quotes", label: "My Quotes", icon: DollarSign, permissions: ['quotes.view'] },
   
+  // Inspector items
+  inspector_dashboard: { path: "/inspector/dashboard", label: "Dashboard", icon: LayoutDashboard, permissions: [] },
+  
   // Admin items with permission requirements (for staff users)
   admin_dashboard: { path: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard, permissions: ['users.view', 'vendors.view', 'rfqs.view'] },
   analytics: { path: "/admin/analytics", label: "Analytics", icon: BarChart3, permissions: ['analytics.view_dashboard'] },
@@ -56,6 +59,7 @@ const ALL_NAV_ITEMS = {
 const ROLE_NAV_CONFIGS = {
   buyer: ['buyer_dashboard', 'my_rfqs', 'received_quotes', 'buyer_orders', 'new_rfq', 'disputes', 'buyer_profile', 'messages'],
   vendor: ['vendor_dashboard', 'matched_rfqs', 'vendor_orders', 'vendor_profile', 'machines', 'vendor_quotes', 'disputes', 'messages'],
+  inspector: ['inspector_dashboard', 'messages'],
   admin: ['admin_dashboard', 'analytics', 'whatsapp', 'whatsapp_logs', 'roles', 'file_manager', 'disputes'],
   // Staff roles - admin-focused menu without buyer/vendor specific items
   staff: ['admin_dashboard', 'analytics', 'whatsapp', 'whatsapp_logs', 'roles', 'file_manager', 'disputes', 'messages'],
