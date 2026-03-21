@@ -366,6 +366,14 @@ Comprehensive platform analytics for business tracking:
 - Payment terms ✓
 - RFQ Urgency & Deadline feature ✓ (Mar 6, 2026)
 - Availability prioritization for urgent RFQs ✓ (Mar 6, 2026)
+- Item-wise (per-drawing) vendor quotation system ✓ (Mar 20, 2026)
+- Partial quoting feature ✓ (Mar 20, 2026)
+- Hybrid Third-Party Inspection System ✓ (Mar 21, 2026)
+  - Buyer inspection request from OrderDetail page
+  - Basic (Platform Inspector) and Certified (External Agency) types
+  - Inspector Dashboard for report submission
+  - Admin Inspections Tab for management and assignment
+  - Dynamic pricing configuration
 
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check
@@ -395,6 +403,20 @@ Comprehensive platform analytics for business tracking:
 - GET /api/gstin/verify/{gstin} - Verify GSTIN
 - POST /api/quotes/{quote_id}/negotiate - Start negotiation
 - GET /api/notifications - Get notifications
+
+### Inspection System APIs (Added Mar 21, 2026)
+- GET /api/inspection/pricing - Get inspection pricing (Basic/Certified)
+- POST /api/orders/{order_id}/request-inspection - Buyer requests inspection
+- POST /api/inspections/{inspection_id}/pay - Pay inspection fee (MOCKED)
+- GET /api/orders/{order_id}/inspection - Get inspection for order
+- POST /api/inspector/orders/{order_id}/report - Inspector submits report
+- POST /api/inspections/{inspection_id}/approve - Buyer approves/rejects
+- GET /api/admin/inspections - List all inspections (admin)
+- GET /api/admin/inspectors - List inspectors (admin)
+- POST /api/admin/orders/{order_id}/assign-inspector - Assign inspector (admin)
+- POST /api/admin/inspectors/create - Create inspector (admin)
+- GET /api/admin/inspection-pricing - Get pricing config (admin)
+- POST /api/admin/inspection-pricing - Set pricing (admin)
 
 ## Known Issues
 - External GSTIN API (gstincheck.co.in) may occasionally return errors
