@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { 
   DollarSign, Building2, Clock, CheckCircle2, ArrowUpDown, 
   TrendingUp, Star, Loader2, Info, Package, FileText,
-  ChevronDown, ChevronUp, Layers
+  ChevronDown, ChevronUp, Layers, AlertTriangle
 } from "lucide-react";
 
 const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
@@ -120,7 +120,7 @@ const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
 
       {/* Sort Controls */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2 text-sm text-slate-500">
+        <div className="flex items-center gap-2 text-sm text-slate-500 flex-wrap">
           <span>
             {data.comparison_summary.quotes_with_material} quotes include material, {data.comparison_summary.quotes_without_material} buyer-supplied
           </span>
@@ -128,6 +128,12 @@ const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
             <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium flex items-center gap-1">
               <Layers className="w-3 h-3" />
               {data.comparison_summary.itemwise_quotes} item-wise
+            </span>
+          )}
+          {data.comparison_summary.partial_quotes > 0 && (
+            <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium flex items-center gap-1">
+              <AlertTriangle className="w-3 h-3" />
+              {data.comparison_summary.partial_quotes} partial
             </span>
           )}
         </div>
@@ -174,19 +180,25 @@ const QuotationComparison = ({ rfqId, isAdmin = false, onQuoteSelect }) => {
                     <>
                       <tr 
                         key={quote.quote_id} 
-                        className={`hover:bg-slate-50 ${isLowest ? 'bg-green-50' : ''}`}
+                        className={`hover:bg-slate-50 ${isLowest ? 'bg-green-50' : ''} ${quote.is_partial ? 'bg-amber-50/50' : ''}`}
                         data-testid={`quote-row-${quote.quote_id}`}
                       >
                         <td className="p-4">
                           <div className="flex items-center gap-3">
                             <div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
                                 {isLowest && (
                                   <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full font-medium">
                                     Best Price
                                   </span>
                                 )}
-                                {quote.is_itemwise && (
+                                {quote.is_partial && (
+                                  <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    Partial ({quote.quoted_items_count}/{quote.total_rfq_items})
+                                  </span>
+                                )}
+                                {quote.is_itemwise && !quote.is_partial && (
                                   <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full font-medium flex items-center gap-1">
                                     <Layers className="w-3 h-3" />
                                     {quote.items_count} items

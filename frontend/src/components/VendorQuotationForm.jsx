@@ -6,12 +6,13 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Switch } from "./ui/switch";
+import { Checkbox } from "./ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { toast } from "sonner";
 import { 
   DollarSign, Package, Plus, Trash2, Loader2, Calculator, 
   HelpCircle, CheckCircle2, Info, FileText, ChevronDown, ChevronUp,
-  Image as ImageIcon
+  Image as ImageIcon, AlertTriangle, CheckSquare, Square
 } from "lucide-react";
 
 const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => {
@@ -20,6 +21,9 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
   const [items, setItems] = useState([]);
   const [isItemwiseMode, setIsItemwiseMode] = useState(false);
   const [expandedItems, setExpandedItems] = useState({});
+  
+  // Partial quoting - selected items
+  const [selectedItems, setSelectedItems] = useState({});
   
   // Single item form state (for non-itemwise mode)
   const [materialProvidedByBuyer, setMaterialProvidedByBuyer] = useState(
@@ -53,8 +57,9 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
       const fetchedItems = res.data.items || [];
       setItems(fetchedItems);
       
-      // Initialize item quotes
+      // Initialize item quotes and selections
       const initialQuotes = {};
+      const initialSelections = {};
       fetchedItems.forEach(item => {
         initialQuotes[item.item_id] = {
           material_provided_by_buyer: res.data.raw_material_provided || false,
@@ -63,8 +68,11 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
           additional_costs: [],
           remarks: ""
         };
+        // Default: all items selected
+        initialSelections[item.item_id] = true;
       });
       setItemQuotes(initialQuotes);
+      setSelectedItems(initialSelections);
       
       // If multiple items, default to itemwise mode
       if (fetchedItems.length > 1) {
@@ -85,7 +93,7 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
   const additionalCostsTotal = additionalCosts.reduce((sum, item) => sum + (parseFloat(item.cost) || 0), 0);
   const totalCost = (materialProvidedByBuyer ? 0 : materialCostNum) + machiningCostNum + additionalCostsTotal;
 
-  // Calculate grand total for item-wise mode
+  // Calculate grand total for item-wise mode (only selected items)
   const calculateItemTotal = (itemId) => {
     const quote = itemQuotes[itemId];
     if (!quote) return 0;
@@ -95,12 +103,34 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
     return material + labour + additional;
   };
 
+  // Count selected items
+  const selectedItemsCount = Object.values(selectedItems).filter(Boolean).length;
+  const isPartialQuote = selectedItemsCount < items.length && selectedItemsCount > 0;
+
   const grandTotal = isItemwiseMode 
-    ? Object.keys(itemQuotes).reduce((sum, itemId) => sum + calculateItemTotal(itemId), 0)
+    ? Object.keys(itemQuotes)
+        .filter(itemId => selectedItems[itemId])
+        .reduce((sum, itemId) => sum + calculateItemTotal(itemId), 0)
     : totalCost;
 
   const toggleItemExpand = (itemId) => {
     setExpandedItems(prev => ({ ...prev, [itemId]: !prev[itemId] }));
+  };
+
+  const toggleItemSelection = (itemId) => {
+    setSelectedItems(prev => ({ ...prev, [itemId]: !prev[itemId] }));
+  };
+
+  const selectAllItems = () => {
+    const newSelections = {};
+    items.forEach(item => { newSelections[item.item_id] = true; });
+    setSelectedItems(newSelections);
+  };
+
+  const deselectAllItems = () => {
+    const newSelections = {};
+    items.forEach(item => { newSelections[item.item_id] = false; });
+    setSelectedItems(newSelections);
   };
 
   const updateItemQuote = (itemId, field, value) => {
@@ -157,8 +187,16 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
 
   const validateForm = () => {
     if (isItemwiseMode) {
-      // Validate each item
+      // Check if at least one item is selected
+      if (selectedItemsCount === 0) {
+        toast.error("Please select at least one item to quote");
+        return false;
+      }
+      
+      // Validate only selected items
       for (const item of items) {
+        if (!selectedItems[item.item_id]) continue; // Skip unselected items
+        
         const quote = itemQuotes[item.item_id];
         if (!quote?.labour_cost || parseFloat(quote.labour_cost) <= 0) {
           toast.error(`Labour cost is required for item: ${item.title}`);
@@ -194,27 +232,29 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
     setLoading(true);
     try {
       if (isItemwiseMode) {
-        // Item-wise quotation
-        const itemsPayload = items.map(item => {
-          const quote = itemQuotes[item.item_id];
-          const additionalCostsObj = {};
-          (quote?.additional_costs || []).forEach(cost => {
-            if (cost.name && cost.cost) {
-              additionalCostsObj[cost.name.toLowerCase().replace(/\s+/g, '_')] = parseFloat(cost.cost);
-            }
-          });
+        // Item-wise quotation (supports partial)
+        const itemsPayload = items
+          .filter(item => selectedItems[item.item_id]) // Only include selected items
+          .map(item => {
+            const quote = itemQuotes[item.item_id];
+            const additionalCostsObj = {};
+            (quote?.additional_costs || []).forEach(cost => {
+              if (cost.name && cost.cost) {
+                additionalCostsObj[cost.name.toLowerCase().replace(/\s+/g, '_')] = parseFloat(cost.cost);
+              }
+            });
 
-          return {
-            item_id: item.item_id,
-            drawing_id: item.drawing_id,
-            title: item.title,
-            material_provided_by_buyer: quote?.material_provided_by_buyer || false,
-            material_cost: quote?.material_provided_by_buyer ? 0 : parseFloat(quote?.material_cost || 0),
-            labour_cost: parseFloat(quote?.labour_cost || 0),
-            additional_costs: additionalCostsObj,
-            remarks: quote?.remarks || ""
-          };
-        });
+            return {
+              item_id: item.item_id,
+              drawing_id: item.drawing_id,
+              title: item.title,
+              material_provided_by_buyer: quote?.material_provided_by_buyer || false,
+              material_cost: quote?.material_provided_by_buyer ? 0 : parseFloat(quote?.material_cost || 0),
+              labour_cost: parseFloat(quote?.labour_cost || 0),
+              additional_costs: additionalCostsObj,
+              remarks: quote?.remarks || ""
+            };
+          });
 
         await api.post("/vendor/quotation/itemwise", {
           rfq_id: rfq.rfq_id,
@@ -246,7 +286,8 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
         });
       }
 
-      toast.success("Quotation submitted successfully!");
+      const quoteType = isPartialQuote ? "Partial quotation" : "Quotation";
+      toast.success(`${quoteType} submitted successfully!`);
       if (onSubmitSuccess) {
         onSubmitSuccess();
       }
@@ -397,15 +438,77 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
     </div>
   );
 
-  // Item-wise form (for multiple drawings)
-  const renderItemwiseForm = () => (
+  // Item-wise form (for multiple drawings) with partial selection
+  const renderItemwiseForm = () => {
+    // Determine quote status: none, partial, or full
+    const noItemsSelected = selectedItemsCount === 0;
+    const quoteStatus = noItemsSelected ? 'none' : (isPartialQuote ? 'partial' : 'full');
+    
+    return (
     <div className="space-y-4">
+      {/* Partial Quote Notice */}
+      {items.length > 1 && (
+        <div className={`p-3 rounded-lg border flex items-center justify-between ${
+          quoteStatus === 'none' 
+            ? 'bg-red-50 border-red-200'
+            : quoteStatus === 'partial'
+              ? 'bg-amber-50 border-amber-200' 
+              : 'bg-green-50 border-green-200'
+        }`}>
+          <div className="flex items-center gap-2">
+            {quoteStatus === 'none' ? (
+              <AlertTriangle className="w-4 h-4 text-red-600" />
+            ) : quoteStatus === 'partial' ? (
+              <AlertTriangle className="w-4 h-4 text-amber-600" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-green-600" />
+            )}
+            <span className={`text-sm font-medium ${
+              quoteStatus === 'none' 
+                ? 'text-red-800'
+                : quoteStatus === 'partial' 
+                  ? 'text-amber-800' 
+                  : 'text-green-800'
+            }`}>
+              {quoteStatus === 'none' 
+                ? 'No items selected - Please select at least one item to quote'
+                : quoteStatus === 'partial'
+                  ? `Partial Quote: ${selectedItemsCount} of ${items.length} items selected`
+                  : `Full Quote: All ${items.length} items selected`
+              }
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={selectAllItems}
+              className="text-xs h-7"
+              data-testid="select-all-items"
+            >
+              <CheckSquare className="w-3 h-3 mr-1" /> Select All
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={deselectAllItems}
+              className="text-xs h-7"
+              data-testid="deselect-all-items"
+            >
+              <Square className="w-3 h-3 mr-1" /> Deselect All
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Items Header */}
       <div className="flex items-center justify-between">
         <h4 className="font-medium text-slate-700 flex items-center gap-2">
           <FileText className="w-4 h-4" /> Quote per Drawing/Item ({items.length} items)
         </h4>
-        <span className="text-xs text-slate-500">Expand each item to enter costs</span>
+        <span className="text-xs text-slate-500">Select items and expand to enter costs</span>
       </div>
 
       {/* Items List */}
@@ -413,53 +516,75 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
         {items.map((item, idx) => {
           const quote = itemQuotes[item.item_id] || {};
           const isExpanded = expandedItems[item.item_id];
+          const isSelected = selectedItems[item.item_id];
           const itemTotal = calculateItemTotal(item.item_id);
 
           return (
             <Card 
               key={item.item_id} 
-              className={`border ${isExpanded ? 'border-orange-300' : 'border-slate-200'}`}
+              className={`border transition-all ${
+                !isSelected 
+                  ? 'border-slate-200 bg-slate-50 opacity-60' 
+                  : isExpanded 
+                    ? 'border-orange-300' 
+                    : 'border-slate-200'
+              }`}
               data-testid={`item-card-${item.item_id}`}
             >
               {/* Item Header */}
-              <div 
-                className="p-4 cursor-pointer flex items-center justify-between"
-                onClick={() => toggleItemExpand(item.item_id)}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
-                    {item.drawing_url ? (
-                      <ImageIcon className="w-5 h-5 text-slate-500" />
-                    ) : (
-                      <FileText className="w-5 h-5 text-slate-500" />
+              <div className="p-4 flex items-center gap-3">
+                {/* Selection Checkbox */}
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={() => toggleItemSelection(item.item_id)}
+                  data-testid={`select-item-${item.item_id}`}
+                />
+
+                {/* Item Info (Expandable) */}
+                <div 
+                  className="flex-1 cursor-pointer flex items-center justify-between"
+                  onClick={() => isSelected && toggleItemExpand(item.item_id)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center">
+                      {item.drawing_url ? (
+                        <ImageIcon className="w-5 h-5 text-slate-500" />
+                      ) : (
+                        <FileText className="w-5 h-5 text-slate-500" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-900">
+                        Item {idx + 1}: {item.title || item.filename || `Drawing ${idx + 1}`}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {item.material_type && `Material: ${item.material_type}`}
+                        {item.quantity && ` | Qty: ${item.quantity}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    {isSelected && itemTotal > 0 && (
+                      <span className="text-sm font-medium text-green-700">
+                        ₹{itemTotal.toLocaleString('en-IN')}
+                      </span>
+                    )}
+                    {!isSelected && (
+                      <span className="text-xs text-slate-400 italic">Not quoting</span>
+                    )}
+                    {isSelected && (
+                      isExpanded ? (
+                        <ChevronUp className="w-5 h-5 text-slate-400" />
+                      ) : (
+                        <ChevronDown className="w-5 h-5 text-slate-400" />
+                      )
                     )}
                   </div>
-                  <div>
-                    <p className="font-medium text-slate-900">
-                      Item {idx + 1}: {item.title || item.filename || `Drawing ${idx + 1}`}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {item.material_type && `Material: ${item.material_type}`}
-                      {item.quantity && ` | Qty: ${item.quantity}`}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  {itemTotal > 0 && (
-                    <span className="text-sm font-medium text-green-700">
-                      ₹{itemTotal.toLocaleString('en-IN')}
-                    </span>
-                  )}
-                  {isExpanded ? (
-                    <ChevronUp className="w-5 h-5 text-slate-400" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5 text-slate-400" />
-                  )}
                 </div>
               </div>
 
-              {/* Item Details (Expanded) */}
-              {isExpanded && (
+              {/* Item Details (Expanded) - Only show if selected */}
+              {isSelected && isExpanded && (
                 <CardContent className="pt-0 border-t">
                   <div className="space-y-4 pt-4">
                     {/* Drawing Preview */}
@@ -587,6 +712,7 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
       </div>
     </div>
   );
+  };
 
   if (loadingItems) {
     return (
@@ -621,7 +747,7 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
               <div className="flex items-center gap-2">
                 <Info className="w-4 h-4 text-blue-600" />
                 <span className="text-sm text-blue-800">
-                  This RFQ has {items.length} drawings. Quote each item separately for accurate pricing.
+                  This RFQ has {items.length} drawings. You can quote all or selected items.
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -639,20 +765,34 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
           {isItemwiseMode ? renderItemwiseForm() : renderSingleItemForm()}
 
           {/* Grand Total Display */}
-          <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+          <div className={`p-4 rounded-lg border ${
+            isPartialQuote 
+              ? 'bg-amber-50 border-amber-200' 
+              : 'bg-green-50 border-green-200'
+          }`}>
             <div className="flex justify-between items-center">
-              <span className="font-medium text-green-700">
-                {isItemwiseMode ? 'Grand Total (All Items)' : 'Total Cost'}
-              </span>
-              <span className="text-2xl font-bold text-green-700" data-testid="total-cost">
+              <div>
+                <span className={`font-medium ${isPartialQuote ? 'text-amber-700' : 'text-green-700'}`}>
+                  {isItemwiseMode 
+                    ? isPartialQuote 
+                      ? `Partial Total (${selectedItemsCount}/${items.length} items)` 
+                      : `Grand Total (All ${items.length} Items)`
+                    : 'Total Cost'
+                  }
+                </span>
+                {isPartialQuote && (
+                  <p className="text-xs text-amber-600 mt-1">
+                    This is a partial quote. Buyer may receive quotes from other vendors for remaining items.
+                  </p>
+                )}
+              </div>
+              <span 
+                className={`text-2xl font-bold ${isPartialQuote ? 'text-amber-700' : 'text-green-700'}`} 
+                data-testid="total-cost"
+              >
                 ₹{grandTotal.toLocaleString('en-IN')}
               </span>
             </div>
-            {isItemwiseMode && (
-              <p className="text-xs text-green-600 mt-2">
-                Includes {items.length} items with individual cost breakdowns
-              </p>
-            )}
             {!isItemwiseMode && (
               <div className="text-xs text-green-600 mt-2 space-y-1">
                 {!materialProvidedByBuyer && materialCostNum > 0 && (
@@ -736,14 +876,17 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
           {/* Submit Button */}
           <Button 
             type="submit" 
-            className="w-full bg-orange-600 hover:bg-orange-700"
-            disabled={loading}
+            className={`w-full ${isPartialQuote ? 'bg-amber-600 hover:bg-amber-700' : 'bg-orange-600 hover:bg-orange-700'}`}
+            disabled={loading || (isItemwiseMode && selectedItemsCount === 0)}
             data-testid="submit-quotation-btn"
           >
             {loading ? (
               <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Submitting...</>
             ) : (
-              <><CheckCircle2 className="w-4 h-4 mr-2" /> Submit {isItemwiseMode ? 'Item-wise ' : ''}Quotation</>
+              <>
+                <CheckCircle2 className="w-4 h-4 mr-2" /> 
+                Submit {isPartialQuote ? 'Partial ' : ''}{isItemwiseMode ? 'Item-wise ' : ''}Quotation
+              </>
             )}
           </Button>
         </form>

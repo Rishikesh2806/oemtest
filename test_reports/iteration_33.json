@@ -1,0 +1,68 @@
+{
+  "summary": "Tested Partial Quoting feature for OEMLinker. Backend APIs fully functional - POST /api/vendor/quotation/itemwise accepts partial items, returns is_partial/quoted_items_count/total_rfq_items fields. GET /api/rfq/{rfq_id}/quotations returns partial_quotes count in comparison_summary. Frontend shows partial quote indicator text but QuotationComparison component uses simplified card view instead of table with badges.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/vendor/quotation/itemwise",
+        "issue": "Response uses 'items_count' instead of 'quoted_items_count' for consistency with GET endpoint",
+        "priority": "LOW"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Buyer RFQ Detail - Received Quotes",
+        "issues": [
+          "Partial quote indicator shows as text ('Partial quote - only quoting selected items') instead of badge with count (e.g., 'Partial (2/4)')",
+          "QuotationComparison.jsx has badge implementation but buyer RFQ detail page uses different quote card component"
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_partial_quoting.py",
+    "/app/test_reports/pytest/partial_quoting_results.xml"
+  ],
+  "action_items": [
+    "Consider using QuotationComparison component in buyer RFQ detail page for consistent partial quote badge display",
+    "Minor: Align response field name 'items_count' to 'quoted_items_count' in POST /api/vendor/quotation/itemwise for consistency"
+  ],
+  "critical_code_review_comments": [
+    "Backend partial quoting logic is correctly implemented - validates items, calculates is_partial based on quoted vs total items",
+    "GET /api/rfq/{rfq_id}/quotations correctly returns partial_quotes count in comparison_summary",
+    "VendorQuotationForm.jsx has Select All/Deselect All buttons and item checkboxes for partial selection",
+    "QuotationComparison.jsx has AlertTriangle icon and 'Partial (X/Y)' badge implementation",
+    "Buyer RFQ detail page shows partial quote text indicator but doesn't use the badge format from QuotationComparison"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_partial_quoting.py"
+  ],
+  "success_rate": {
+    "backend": "100% - 14/14 tests passed, 1 skipped",
+    "frontend": "85% - Partial quoting works, UI shows text indicator instead of badge"
+  },
+  "test_credentials": {
+    "vendor_email": "vendor@oemlinker.com",
+    "vendor_password": "SecureV3nd0r!",
+    "buyer_email": "buyer@oemlinker.com",
+    "buyer_password": "SecureBuy3r!"
+  },
+  "seed_data_creation": "Used existing test RFQs: rfq_partial_test_1fa917f6 (3 items), rfq_partial_ui_test_dadab1 (4 items with partial quote from ABC Manufacturing - 2/4 items quoted)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Partial quoting feature is fully functional. Test RFQ 'rfq_partial_ui_test_dadab1' has a partial quote (2/4 items) from ABC Manufacturing for ₹3,200. Backend returns is_partial, quoted_items_count, total_rfq_items fields. VendorQuotationForm has item selection checkboxes. QuotationComparison has badge implementation but buyer RFQ detail uses card view with text indicator.",
+  "features_tested": {
+    "POST /api/vendor/quotation/itemwise": "PASS - Accepts partial items, returns is_partial flag",
+    "POST /api/vendor/quotation/itemwise_validation": "PASS - Validates rfq_id, items array, labour_cost > 0",
+    "GET /api/rfqs/{rfq_id}/items": "PASS - Returns items with item_id, title, drawing_url",
+    "GET /api/rfq/{rfq_id}/quotations": "PASS - Returns is_partial, quoted_items_count, total_rfq_items per quote",
+    "GET /api/rfq/{rfq_id}/quotations_comparison_summary": "PASS - Returns partial_quotes count",
+    "VendorQuotationForm_item_selection": "PASS - Has Select All/Deselect All buttons (data-testid present)",
+    "VendorQuotationForm_status_indicator": "PASS - Shows 'Partial quote - only quoting selected items' text",
+    "QuotationComparison_partial_badge": "PARTIAL - Badge code exists but buyer RFQ detail uses different component"
+  }
+}

@@ -6561,6 +6561,11 @@ async def get_rfq_quotations(rfq_id: str, user: dict = Depends(get_current_user)
             "is_itemwise": is_itemwise,
             "items": quote.get("items", []) if is_itemwise else [],
             "items_count": len(quote.get("items", [])) if is_itemwise else 0,
+            # Partial quote fields
+            "is_partial": quote.get("is_partial", False),
+            "quoted_items_count": quote.get("quoted_items_count", len(quote.get("items", [])) if is_itemwise else 1),
+            "total_rfq_items": quote.get("total_rfq_items", 1),
+            "quoted_item_ids": quote.get("quoted_item_ids", []),
             "material_provided_by_buyer": quote.get("material_provided_by_buyer", False),
             "material_cost": total_material,
             "machining_cost": total_labour,
@@ -6585,6 +6590,10 @@ async def get_rfq_quotations(rfq_id: str, user: dict = Depends(get_current_user)
     lowest_total = min([q["total_cost"] for q in quotations]) if quotations else 0
     lowest_machining = min([q["machining_cost"] for q in quotations]) if quotations else 0
     
+    # Count partial quotes
+    partial_quotes = len([q for q in quotations if q.get("is_partial", False)])
+    full_quotes = len([q for q in quotations if not q.get("is_partial", False)])
+    
     return {
         "rfq_id": rfq_id,
         "rfq_title": rfq.get("title"),
@@ -6598,7 +6607,9 @@ async def get_rfq_quotations(rfq_id: str, user: dict = Depends(get_current_user)
             "quotes_with_material": len([q for q in quotations if not q["material_provided_by_buyer"]]),
             "quotes_without_material": len([q for q in quotations if q["material_provided_by_buyer"]]),
             "itemwise_quotes": len([q for q in quotations if q["is_itemwise"]]),
-            "flat_quotes": len([q for q in quotations if not q["is_itemwise"]])
+            "flat_quotes": len([q for q in quotations if not q["is_itemwise"]]),
+            "partial_quotes": partial_quotes,
+            "full_quotes": full_quotes
         }
     }
 
@@ -6811,6 +6822,15 @@ async def submit_itemwise_quotation(request: Request, user: dict = Depends(get_c
     quote_id = f"quote_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc)
     
+    # Get total RFQ items count to determine if this is a partial quote
+    drawings = await db.drawings.find({"rfq_id": rfq_id}, {"_id": 0}).to_list(100)
+    total_rfq_items = len(drawings) if drawings else 1
+    quoted_items_count = len(processed_items)
+    is_partial = quoted_items_count < total_rfq_items
+    
+    # Get item IDs that were quoted
+    quoted_item_ids = [item["item_id"] for item in processed_items]
+    
     quote_doc = {
         "quote_id": quote_id,
         "rfq_id": rfq_id,
@@ -6829,6 +6849,11 @@ async def submit_itemwise_quotation(request: Request, user: dict = Depends(get_c
         "items": processed_items,
         "total_cost": grand_total,
         "cost_breakdown_remarks": body.get("cost_breakdown_remarks"),
+        # Partial quote fields
+        "is_partial": is_partial,
+        "quoted_items_count": quoted_items_count,
+        "total_rfq_items": total_rfq_items,
+        "quoted_item_ids": quoted_item_ids,
         "created_at": now.isoformat(),
         "expires_at": (now + timedelta(days=14)).isoformat()
     }
@@ -6856,28 +6881,33 @@ async def submit_itemwise_quotation(request: Request, user: dict = Depends(get_c
         asyncio.create_task(send_email_async(buyer["email"], subject, html))
     
     # Create in-app notification
+    quote_type = "Partial" if is_partial else "Item-wise"
     await create_notification(
         user_id=rfq["buyer_id"],
         notification_type=NotificationType.QUOTE_RECEIVED,
-        title=f"Item-wise Quote from {vendor.get('company_name', 'Vendor')}",
-        message=f"₹{grand_total:,.2f} for {len(processed_items)} items in {rfq.get('title', 'your RFQ')[:30]}",
+        title=f"{quote_type} Quote from {vendor.get('company_name', 'Vendor')}",
+        message=f"₹{grand_total:,.2f} for {quoted_items_count}/{total_rfq_items} items in {rfq.get('title', 'your RFQ')[:30]}",
         data={
             "rfq_id": rfq_id,
             "quote_id": quote_id,
             "vendor_name": vendor.get("company_name"),
             "total_cost": grand_total,
-            "items_count": len(processed_items),
+            "items_count": quoted_items_count,
+            "total_rfq_items": total_rfq_items,
+            "is_partial": is_partial,
             "link": f"/buyer/rfq/{rfq_id}"
         }
     )
     
-    logger.info(f"Item-wise quotation submitted: {quote_id} for RFQ {rfq_id} with {len(processed_items)} items")
+    logger.info(f"{'Partial' if is_partial else 'Full'} item-wise quotation submitted: {quote_id} for RFQ {rfq_id} with {quoted_items_count}/{total_rfq_items} items")
     
     return {
         "success": True,
         "quote_id": quote_id,
         "total_cost": grand_total,
-        "items_count": len(processed_items),
+        "items_count": quoted_items_count,
+        "total_rfq_items": total_rfq_items,
+        "is_partial": is_partial,
         "items": processed_items,
         "message": "Item-wise quotation submitted successfully"
     }
