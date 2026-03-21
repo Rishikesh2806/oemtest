@@ -1038,6 +1038,40 @@ Enhanced the quotation system to support item-wise (per drawing) quotations for 
 
 ### Test Report: /app/test_reports/iteration_32.json (100% backend, 90% frontend)
 
+## Partial Quoting Feature (Implemented Mar 21, 2026)
+
+### Overview
+Vendors can now submit quotations for only selected items/drawings from a multi-part RFQ, instead of being required to quote all items.
+
+### Features:
+- **Item Selection**: Checkboxes to select which items to quote
+- **Select All / Deselect All**: Quick selection buttons
+- **Quote Status Indicator**: Shows "No items selected" (red), "Partial Quote: X of Y items" (amber), "Full Quote" (green)
+- **Partial Badge in Comparison**: Shows "Partial (2/4)" badge in quotation comparison
+
+### Backend Changes:
+- `POST /api/vendor/quotation/itemwise` now accepts partial items array
+- Response includes: `is_partial`, `quoted_items_count`, `total_rfq_items`, `quoted_item_ids`
+- `GET /api/rfq/{rfq_id}/quotations` includes `partial_quotes` count in comparison_summary
+
+### Data Model (Quote with Partial):
+```json
+{
+  "quote_id": "quote_xxx",
+  "is_partial": true,
+  "quoted_items_count": 2,
+  "total_rfq_items": 4,
+  "quoted_item_ids": ["drawing_abc", "drawing_def"],
+  "items": [...]
+}
+```
+
+### Frontend Components Updated:
+- **VendorQuotationForm.jsx**: Item selection checkboxes, Select All/Deselect All buttons, status indicator
+- **QuotationComparison.jsx**: AlertTriangle icon and "Partial (X/Y)" badge for partial quotes
+
+### Test Report: /app/test_reports/iteration_33.json (100% backend, 85% frontend)
+
 ## RFQ Drawing Access & PDF Layout Fix (Implemented Mar 19, 2026)
 
 ### Overview
