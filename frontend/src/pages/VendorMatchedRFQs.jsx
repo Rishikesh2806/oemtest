@@ -3,16 +3,12 @@ import { Link } from "react-router-dom";
 import { useAuth, api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardContent } from "../components/ui/card";
 import { Input } from "../components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
-import { Label } from "../components/ui/label";
-import { Textarea } from "../components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { toast } from "sonner";
 import { 
-  FileText, Search, ArrowRight, Loader2, Filter, Calendar, Package,
-  DollarSign, Clock, Send, Eye, MessageSquare, CheckCircle2, Target,
+  FileText, Search, Loader2, Calendar, Package,
+  Clock, Send, Eye, MessageSquare, CheckCircle2, Target,
   CreditCard, Building2
 } from "lucide-react";
 
@@ -39,18 +35,7 @@ const VendorMatchedRFQs = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
-  const [selectedRFQ, setSelectedRFQ] = useState(null);
-  const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
-  const [submittingQuote, setSubmittingQuote] = useState(false);
   const [existingQuotes, setExistingQuotes] = useState({});
-  
-  const [quoteForm, setQuoteForm] = useState({
-    price: "",
-    lead_time_days: "",
-    notes: "",
-    proposed_payment_terms: "net_30",
-    payment_terms_notes: ""
-  });
 
   useEffect(() => {
     fetchMatchedRFQs();
@@ -74,45 +59,6 @@ const VendorMatchedRFQs = () => {
       toast.error("Failed to load matched RFQs");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const openQuoteDialog = (rfq) => {
-    setSelectedRFQ(rfq);
-    // Pre-fill with buyer's preferred payment terms if available
-    setQuoteForm({
-      price: "",
-      lead_time_days: "",
-      notes: "",
-      proposed_payment_terms: rfq.preferred_payment_terms || "net_30",
-      payment_terms_notes: ""
-    });
-    setQuoteDialogOpen(true);
-  };
-
-  const submitQuote = async () => {
-    if (!quoteForm.price || !quoteForm.lead_time_days) {
-      toast.error("Please fill in price and lead time");
-      return;
-    }
-
-    setSubmittingQuote(true);
-    try {
-      await api.post("/quotes", {
-        rfq_id: selectedRFQ.rfq_id,
-        price: parseFloat(quoteForm.price),
-        lead_time_days: parseInt(quoteForm.lead_time_days),
-        notes: quoteForm.notes,
-        proposed_payment_terms: quoteForm.proposed_payment_terms,
-        payment_terms_notes: quoteForm.payment_terms_notes
-      });
-      toast.success("Quote submitted successfully!");
-      setQuoteDialogOpen(false);
-      fetchMatchedRFQs();
-    } catch (error) {
-      toast.error(error.response?.data?.detail || "Failed to submit quote");
-    } finally {
-      setSubmittingQuote(false);
     }
   };
 
@@ -323,13 +269,14 @@ const VendorMatchedRFQs = () => {
                             <div className="text-xs font-bold uppercase tracking-wider text-amber-600">
                               No Quote Yet
                             </div>
-                            <Button
-                              onClick={() => openQuoteDialog(rfq)}
-                              className="bg-orange-600 hover:bg-orange-700 w-full"
-                              data-testid={`submit-quote-${rfq.rfq_id}`}
-                            >
-                              <Send className="w-4 h-4 mr-2" /> Submit Quote
-                            </Button>
+                            <Link to={`/vendor/rfq/${rfq.rfq_id}`}>
+                              <Button
+                                className="bg-orange-600 hover:bg-orange-700 w-full"
+                                data-testid={`submit-quote-${rfq.rfq_id}`}
+                              >
+                                <Send className="w-4 h-4 mr-2" /> Submit Quote
+                              </Button>
+                            </Link>
                           </div>
                         )}
                         
@@ -378,114 +325,6 @@ const VendorMatchedRFQs = () => {
           </Card>
         )}
       </div>
-
-      {/* Quote Dialog */}
-      <Dialog open={quoteDialogOpen} onOpenChange={setQuoteDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Submit Quote for: {selectedRFQ?.title}</DialogTitle>
-          </DialogHeader>
-          
-          {selectedRFQ && (
-            <div className="space-y-4 mt-4">
-              {/* RFQ Summary */}
-              <div className="p-3 bg-slate-50 rounded-lg text-sm">
-                <div className="grid grid-cols-2 gap-2">
-                  <div><span className="text-slate-500">Material:</span> {selectedRFQ.material_type}</div>
-                  <div><span className="text-slate-500">Quantity:</span> {selectedRFQ.quantity}</div>
-                  <div><span className="text-slate-500">Tolerance:</span> ±{selectedRFQ.tolerance}mm</div>
-                  <div><span className="text-slate-500">Surface:</span> {selectedRFQ.surface_finish || "N/A"}</div>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Price (₹) *
-                  </Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    value={quoteForm.price}
-                    onChange={(e) => setQuoteForm(prev => ({ ...prev, price: e.target.value }))}
-                    placeholder="0.00"
-                    className="mt-1"
-                    data-testid="quote-price"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Lead Time (Days) *
-                  </Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={quoteForm.lead_time_days}
-                    onChange={(e) => setQuoteForm(prev => ({ ...prev, lead_time_days: e.target.value }))}
-                    placeholder="10"
-                    className="mt-1"
-                    data-testid="quote-leadtime"
-                  />
-                </div>
-              </div>
-              
-              {/* Payment Terms */}
-              <div>
-                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  <CreditCard className="w-3 h-3 inline mr-1" /> Proposed Payment Terms *
-                </Label>
-                <Select
-                  value={quoteForm.proposed_payment_terms}
-                  onValueChange={(value) => setQuoteForm(prev => ({ ...prev, proposed_payment_terms: value }))}
-                >
-                  <SelectTrigger className="mt-1" data-testid="quote-payment-terms">
-                    <SelectValue placeholder="Select payment terms" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PAYMENT_TERMS.map((term) => (
-                      <SelectItem key={term.value} value={term.value}>{term.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedRFQ.preferred_payment_terms && (
-                  <p className="text-xs text-blue-600 mt-1">
-                    Buyer prefers: {getPaymentTermLabel(selectedRFQ.preferred_payment_terms)}
-                  </p>
-                )}
-              </div>
-              
-              <div>
-                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Notes
-                </Label>
-                <Textarea
-                  value={quoteForm.notes}
-                  onChange={(e) => setQuoteForm(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Additional details about your quote..."
-                  className="mt-1"
-                  rows={2}
-                  data-testid="quote-notes"
-                />
-              </div>
-              
-              <Button
-                onClick={submitQuote}
-                disabled={submittingQuote}
-                className="w-full bg-orange-600 hover:bg-orange-700"
-                data-testid="confirm-quote"
-              >
-                {submittingQuote ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <Send className="w-4 h-4 mr-2" /> Submit Quote
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </DashboardLayout>
   );
 };

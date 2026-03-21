@@ -374,6 +374,8 @@ Comprehensive platform analytics for business tracking:
   - Inspector Dashboard for report submission
   - Admin Inspections Tab for management and assignment
   - Dynamic pricing configuration
+- VendorMatchedRFQs "Submit Quote" button redirect fix ✓ (Mar 21, 2026)
+  - Now redirects to /vendor/rfq/{rfq_id} for full RFQ details before quoting
 
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check
