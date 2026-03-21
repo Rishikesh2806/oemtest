@@ -41,6 +41,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import DataDeletion from "./pages/DataDeletion";
 import DataDeletionStatus from "./pages/DataDeletionStatus";
 import MagicLogin from "./pages/MagicLogin";
+import InspectorDashboard from "./pages/InspectorDashboard";
 
 // Use window.location.origin for API calls - this ensures requests go to the same domain
 // This fixes issues where REACT_APP_BACKEND_URL might point to a different host
@@ -404,6 +405,13 @@ const AppRouter = () => {
       <Route path="/staff/dashboard" element={
         <ProtectedRoute allowedRoles={["admin", "staff"]}>
           <StaffDashboard />
+        </ProtectedRoute>
+      } />
+      
+      {/* Inspector Routes */}
+      <Route path="/inspector/dashboard" element={
+        <ProtectedRoute allowedRoles={["inspector", "admin"]}>
+          <InspectorDashboard />
         </ProtectedRoute>
       } />
       

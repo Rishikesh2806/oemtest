@@ -13,9 +13,11 @@ import {
   Package, ArrowLeft, Loader2, CreditCard, 
   CheckCircle2, Clock, Truck, MapPin, AlertCircle,
   Star, MessageSquare, Building2, ThumbsUp, Send,
-  FileText, User, Box, Calendar, AlertTriangle
+  FileText, User, Box, Calendar, AlertTriangle, Shield
 } from "lucide-react";
 import RaiseDisputeForm from "../components/RaiseDisputeForm";
+import InspectionRequestModal from "../components/InspectionRequestModal";
+import InspectionStatusCard from "../components/InspectionStatusCard";
 
 const OrderDetail = () => {
   const { orderId } = useParams();
@@ -53,6 +55,9 @@ const OrderDetail = () => {
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [hasDispute, setHasDispute] = useState(false);
   const [existingDispute, setExistingDispute] = useState(null);
+  
+  // Inspection state
+  const [showInspectionModal, setShowInspectionModal] = useState(false);
 
   useEffect(() => {
     fetchOrder();
@@ -325,6 +330,19 @@ const OrderDetail = () => {
               </Button>
             )}
             
+            {/* Request Inspection Button - for buyers when order is ready for delivery */}
+            {isBuyer && ['in_production', 'quality_check', 'dispatched'].includes(order.status) && (
+              <Button
+                variant="outline"
+                onClick={() => setShowInspectionModal(true)}
+                className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                data-testid="request-inspection-btn"
+              >
+                <Shield className="w-4 h-4 mr-2" />
+                Request Inspection
+              </Button>
+            )}
+            
             {canRate && (
               <Button 
                 onClick={() => setRatingDialogOpen(true)}
@@ -573,6 +591,13 @@ const OrderDetail = () => {
             </Card>
           )}
         </div>
+
+        {/* Inspection Status Card */}
+        <InspectionStatusCard 
+          orderId={orderId} 
+          isBuyer={isBuyer}
+          onRefresh={() => fetchOrder()}
+        />
 
         {/* Status Timeline */}
         <Card className="border-slate-200">
@@ -875,6 +900,16 @@ const OrderDetail = () => {
           onSuccess={handleDisputeSuccess}
         />
       )}
+      
+      {/* Inspection Request Modal */}
+      <InspectionRequestModal
+        orderId={orderId}
+        isOpen={showInspectionModal}
+        onClose={() => setShowInspectionModal(false)}
+        onSuccess={() => {
+          fetchOrder();
+        }}
+      />
     </DashboardLayout>
   );
 };

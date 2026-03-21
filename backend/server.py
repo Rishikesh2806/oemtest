@@ -1205,6 +1205,13 @@ class NotificationType:
     ORDER_STATUS_UPDATE = "order_status_update"
     PAYMENT_RECEIVED = "payment_received"
     MESSAGE_RECEIVED = "message_received"
+    # Inspection notifications
+    INSPECTION_REQUESTED = "inspection_requested"
+    INSPECTION_ASSIGNED = "inspection_assigned"
+    INSPECTION_REPORT_SUBMITTED = "inspection_report_submitted"
+    INSPECTION_APPROVED = "inspection_approved"
+    INSPECTION_REJECTED = "inspection_rejected"
+    INSPECTION_PAYMENT_REQUIRED = "inspection_payment_required"
 
 class OrderStatus:
     PENDING_PAYMENT = "pending_payment"
@@ -1241,6 +1248,126 @@ class RatingCreate(BaseModel):
     delivery_rating: float  # 1-5
     review_text: Optional[str] = None
     would_recommend: bool = True
+
+
+# ============== INSPECTION SYSTEM ==============
+
+class InspectionType:
+    BASIC = "basic"  # Platform-managed local inspector
+    CERTIFIED = "certified"  # External certified inspection agency
+
+
+class InspectionStatus:
+    REQUESTED = "requested"  # Buyer requested inspection
+    PAYMENT_PENDING = "payment_pending"  # Awaiting inspection fee payment
+    PAYMENT_COMPLETED = "payment_completed"  # Payment received
+    AWAITING_ASSIGNMENT = "awaiting_assignment"  # Ready for inspector assignment
+    INSPECTOR_ASSIGNED = "inspector_assigned"  # Inspector has been assigned
+    IN_PROGRESS = "in_progress"  # Inspection is being conducted
+    REPORT_SUBMITTED = "report_submitted"  # Inspector submitted report
+    APPROVED = "approved"  # Buyer approved the inspection
+    REJECTED = "rejected"  # Buyer rejected / needs re-inspection
+    RE_INSPECTION_REQUESTED = "re_inspection_requested"  # Re-inspection needed
+    COMPLETED = "completed"  # Final completion
+    CANCELLED = "cancelled"
+
+
+class InspectionResult:
+    PASS = "pass"
+    FAIL = "fail"
+    CONDITIONAL_PASS = "conditional_pass"  # Pass with minor issues
+
+
+class Inspection(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    inspection_id: str
+    order_id: str
+    rfq_id: Optional[str] = None
+    buyer_id: str
+    vendor_id: str
+    inspection_type: str = InspectionType.BASIC
+    status: str = InspectionStatus.REQUESTED
+    result: Optional[str] = None  # pass/fail/conditional_pass
+    
+    # Inspector details (for basic inspections)
+    inspector_id: Optional[str] = None
+    inspector_name: Optional[str] = None
+    
+    # Agency details (for certified inspections)
+    agency_name: Optional[str] = None
+    agency_contact: Optional[str] = None
+    
+    # Pricing
+    inspection_fee: float = 0
+    currency: str = "INR"
+    payment_status: str = "pending"  # pending/paid/refunded
+    payment_id: Optional[str] = None
+    
+    # Report data
+    report_files: List[str] = []  # S3 paths for PDF reports
+    images: List[str] = []  # S3 paths for inspection images
+    measurements: Optional[Dict[str, Any]] = None
+    remarks: Optional[str] = None
+    defects_found: List[str] = []
+    
+    # Buyer instructions/notes
+    buyer_notes: Optional[str] = None
+    
+    # Timestamps and location
+    inspection_date: Optional[str] = None
+    geo_location: Optional[Dict[str, float]] = None  # lat, lng
+    
+    # History
+    status_history: List[Dict[str, Any]] = []
+    
+    created_at: str
+    updated_at: str
+
+
+class InspectorProfile(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    inspector_id: str
+    user_id: str
+    name: str
+    email: str
+    phone: Optional[str] = None
+    
+    # Location for assignment proximity
+    city: Optional[str] = None
+    state: Optional[str] = None
+    pincode: Optional[str] = None
+    
+    # Availability
+    is_active: bool = True
+    is_available: bool = True
+    
+    # Stats
+    total_inspections: int = 0
+    completed_inspections: int = 0
+    avg_rating: float = 0
+    
+    # Certifications (optional)
+    certifications: List[str] = []
+    
+    # Status
+    approval_status: str = "pending"  # pending/approved/rejected
+    
+    created_at: str
+    updated_at: str
+
+
+class InspectionPricing(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    pricing_id: str
+    inspection_type: str
+    base_price: float
+    currency: str = "INR"
+    region: Optional[str] = None  # Optional region-specific pricing
+    is_active: bool = True
+    description: Optional[str] = None
+    created_at: str
+    updated_at: str
+
 
 # ============== AUTH HELPERS ==============
 
@@ -3119,7 +3246,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-9.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://oemlinker-preview-1.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -4991,7 +5118,7 @@ async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list
     from app.services.whatsapp_service import send_image_message
     
     # Use the actual deployed URL
-    BASE_URL = os.environ.get("APP_URL", "https://rfq-marketplace-9.preview.emergentagent.com")
+    BASE_URL = os.environ.get("APP_URL", "https://oemlinker-preview-1.preview.emergentagent.com")
     
     # Small delay to let template message send first
     await asyncio.sleep(2)
@@ -6041,7 +6168,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-9.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://oemlinker-preview-1.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -7047,7 +7174,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-9.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://oemlinker-preview-1.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -7309,7 +7436,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://rfq-marketplace-9.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://oemlinker-preview-1.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -7602,7 +7729,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-9.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://oemlinker-preview-1.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -7743,7 +7870,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://rfq-marketplace-9.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://oemlinker-preview-1.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(
@@ -12365,6 +12492,1030 @@ async def get_order_dispute(order_id: str, user: dict = Depends(get_current_user
     dispute = await db.disputes.find_one({"order_id": order_id}, {"_id": 0})
     
     return {"dispute": dispute, "has_dispute": dispute is not None}
+
+
+# ============== INSPECTION SYSTEM ROUTES ==============
+
+@api_router.get("/inspection/pricing")
+async def get_inspection_pricing(user: dict = Depends(get_current_user)):
+    """Get current inspection pricing"""
+    pricing = await db.inspection_pricing.find({"is_active": True}, {"_id": 0}).to_list(10)
+    
+    # If no pricing set, return defaults
+    if not pricing:
+        pricing = [
+            {
+                "pricing_id": "default_basic",
+                "inspection_type": InspectionType.BASIC,
+                "base_price": 500,
+                "currency": "INR",
+                "description": "Basic inspection by platform inspector - Fast turnaround",
+                "is_active": True
+            },
+            {
+                "pricing_id": "default_certified",
+                "inspection_type": InspectionType.CERTIFIED,
+                "base_price": 2000,
+                "currency": "INR",
+                "description": "Certified inspection by external agency - High trust",
+                "is_active": True
+            }
+        ]
+    
+    return {"pricing": pricing}
+
+
+@api_router.post("/orders/{order_id}/request-inspection")
+async def request_inspection(order_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """
+    Buyer requests inspection for an order.
+    Creates inspection request with payment pending status.
+    """
+    order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Verify buyer ownership
+    if order.get("buyer_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Only the buyer can request inspection")
+    
+    # Check if inspection already exists
+    existing = await db.inspections.find_one({"order_id": order_id, "status": {"$nin": ["cancelled", "completed"]}})
+    if existing:
+        raise HTTPException(status_code=400, detail="An active inspection request already exists for this order")
+    
+    body = await request.json()
+    inspection_type = body.get("inspection_type", InspectionType.BASIC)
+    buyer_notes = body.get("buyer_notes", "")
+    
+    # Validate inspection type
+    if inspection_type not in [InspectionType.BASIC, InspectionType.CERTIFIED]:
+        raise HTTPException(status_code=400, detail="Invalid inspection type")
+    
+    # Get pricing
+    pricing = await db.inspection_pricing.find_one({
+        "inspection_type": inspection_type, 
+        "is_active": True
+    }, {"_id": 0})
+    
+    # Default pricing if not configured
+    if not pricing:
+        inspection_fee = 500 if inspection_type == InspectionType.BASIC else 2000
+    else:
+        inspection_fee = pricing.get("base_price", 500)
+    
+    now = datetime.now(timezone.utc)
+    inspection_id = f"insp_{uuid.uuid4().hex[:12]}"
+    
+    inspection_doc = {
+        "inspection_id": inspection_id,
+        "order_id": order_id,
+        "rfq_id": order.get("rfq_id"),
+        "buyer_id": user["user_id"],
+        "vendor_id": order.get("vendor_id"),
+        "inspection_type": inspection_type,
+        "status": InspectionStatus.PAYMENT_PENDING,
+        "result": None,
+        "inspector_id": None,
+        "inspector_name": None,
+        "agency_name": None,
+        "inspection_fee": inspection_fee,
+        "currency": "INR",
+        "payment_status": "pending",
+        "report_files": [],
+        "images": [],
+        "buyer_notes": buyer_notes,
+        "status_history": [
+            {
+                "status": InspectionStatus.REQUESTED,
+                "timestamp": now.isoformat(),
+                "note": f"Inspection requested by buyer - Type: {inspection_type}"
+            },
+            {
+                "status": InspectionStatus.PAYMENT_PENDING,
+                "timestamp": now.isoformat(),
+                "note": f"Awaiting payment of ₹{inspection_fee}"
+            }
+        ],
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    await db.inspections.insert_one(inspection_doc)
+    
+    # Notify admins about new inspection request
+    admins = await db.users.find({"role": UserRole.ADMIN}, {"_id": 0, "user_id": 1}).to_list(10)
+    for admin in admins:
+        await create_notification(
+            user_id=admin["user_id"],
+            notification_type=NotificationType.INSPECTION_REQUESTED,
+            title=f"New Inspection Request - {inspection_type.title()}",
+            message=f"Order {order_id} needs {inspection_type} inspection. Fee: ₹{inspection_fee}",
+            data={"inspection_id": inspection_id, "order_id": order_id, "inspection_type": inspection_type}
+        )
+    
+    logger.info(f"Inspection requested: {inspection_id} for order {order_id}, type: {inspection_type}")
+    
+    return {
+        "success": True,
+        "inspection_id": inspection_id,
+        "inspection_type": inspection_type,
+        "inspection_fee": inspection_fee,
+        "status": InspectionStatus.PAYMENT_PENDING,
+        "message": f"Inspection requested. Please complete payment of ₹{inspection_fee} to proceed."
+    }
+
+
+@api_router.post("/inspections/{inspection_id}/pay")
+async def pay_inspection_fee(inspection_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """
+    Process inspection fee payment.
+    For MVP, this simulates payment. Integrate with Stripe/Razorpay later.
+    """
+    inspection = await db.inspections.find_one({"inspection_id": inspection_id}, {"_id": 0})
+    if not inspection:
+        raise HTTPException(status_code=404, detail="Inspection not found")
+    
+    if inspection.get("buyer_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Only the buyer can pay for inspection")
+    
+    if inspection.get("payment_status") == "paid":
+        raise HTTPException(status_code=400, detail="Payment already completed")
+    
+    body = await request.json()
+    payment_method = body.get("payment_method", "simulated")
+    
+    now = datetime.now(timezone.utc)
+    payment_id = f"pay_insp_{uuid.uuid4().hex[:10]}"
+    
+    # Update inspection status
+    await db.inspections.update_one(
+        {"inspection_id": inspection_id},
+        {
+            "$set": {
+                "status": InspectionStatus.AWAITING_ASSIGNMENT,
+                "payment_status": "paid",
+                "payment_id": payment_id,
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "status_history": {
+                    "status": InspectionStatus.PAYMENT_COMPLETED,
+                    "timestamp": now.isoformat(),
+                    "note": f"Payment received: ₹{inspection.get('inspection_fee')}"
+                }
+            }
+        }
+    )
+    
+    # Notify admins to assign inspector
+    admins = await db.users.find({"role": UserRole.ADMIN}, {"_id": 0, "user_id": 1}).to_list(10)
+    for admin in admins:
+        await create_notification(
+            user_id=admin["user_id"],
+            notification_type=NotificationType.INSPECTION_PAYMENT_REQUIRED,
+            title="Inspection Payment Received - Assign Inspector",
+            message=f"Inspection {inspection_id} payment completed. Please assign an inspector.",
+            data={"inspection_id": inspection_id, "order_id": inspection.get("order_id")}
+        )
+    
+    logger.info(f"Inspection payment completed: {inspection_id}, payment_id: {payment_id}")
+    
+    return {
+        "success": True,
+        "payment_id": payment_id,
+        "status": InspectionStatus.AWAITING_ASSIGNMENT,
+        "message": "Payment successful. An inspector will be assigned shortly."
+    }
+
+
+@api_router.get("/orders/{order_id}/inspection")
+async def get_order_inspection(order_id: str, user: dict = Depends(get_current_user)):
+    """Get inspection details for an order"""
+    order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Check authorization
+    is_buyer = order.get("buyer_id") == user["user_id"]
+    is_vendor = order.get("vendor_id") == user["user_id"]
+    is_admin = user["role"] == UserRole.ADMIN
+    is_inspector = user["role"] == "inspector"
+    
+    if not (is_buyer or is_vendor or is_admin or is_inspector):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    inspection = await db.inspections.find_one({"order_id": order_id}, {"_id": 0})
+    
+    # Get presigned URLs for images and reports
+    if inspection:
+        from app.services.s3_storage_service import get_presigned_url
+        
+        if inspection.get("images"):
+            inspection["image_urls"] = [
+                get_presigned_url(path, expiration=3600) for path in inspection["images"]
+            ]
+        
+        if inspection.get("report_files"):
+            inspection["report_urls"] = [
+                get_presigned_url(path, expiration=3600) for path in inspection["report_files"]
+            ]
+    
+    return {
+        "has_inspection": inspection is not None,
+        "inspection": inspection
+    }
+
+
+@api_router.post("/admin/orders/{order_id}/assign-inspector")
+async def assign_inspector(order_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Admin assigns an inspector to an inspection request"""
+    if user["role"] != UserRole.ADMIN:
+        has_permission = await rbac_service.check_permission(user["user_id"], "inspections.assign")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    inspection = await db.inspections.find_one({"order_id": order_id}, {"_id": 0})
+    if not inspection:
+        raise HTTPException(status_code=404, detail="Inspection request not found for this order")
+    
+    if inspection.get("status") not in [InspectionStatus.AWAITING_ASSIGNMENT, InspectionStatus.RE_INSPECTION_REQUESTED]:
+        raise HTTPException(status_code=400, detail=f"Cannot assign inspector. Current status: {inspection.get('status')}")
+    
+    body = await request.json()
+    inspection_type = inspection.get("inspection_type")
+    
+    now = datetime.now(timezone.utc)
+    
+    if inspection_type == InspectionType.BASIC:
+        # Assign platform inspector
+        inspector_id = body.get("inspector_id")
+        if not inspector_id:
+            raise HTTPException(status_code=400, detail="inspector_id is required for basic inspections")
+        
+        inspector = await db.inspectors.find_one({"inspector_id": inspector_id}, {"_id": 0})
+        if not inspector:
+            raise HTTPException(status_code=404, detail="Inspector not found")
+        
+        if not inspector.get("is_available", True):
+            raise HTTPException(status_code=400, detail="Inspector is not available")
+        
+        await db.inspections.update_one(
+            {"inspection_id": inspection["inspection_id"]},
+            {
+                "$set": {
+                    "status": InspectionStatus.INSPECTOR_ASSIGNED,
+                    "inspector_id": inspector_id,
+                    "inspector_name": inspector.get("name"),
+                    "updated_at": now.isoformat()
+                },
+                "$push": {
+                    "status_history": {
+                        "status": InspectionStatus.INSPECTOR_ASSIGNED,
+                        "timestamp": now.isoformat(),
+                        "note": f"Inspector assigned: {inspector.get('name')}",
+                        "assigned_by": user["user_id"]
+                    }
+                }
+            }
+        )
+        
+        # Notify inspector
+        await create_notification(
+            user_id=inspector.get("user_id"),
+            notification_type=NotificationType.INSPECTION_ASSIGNED,
+            title="New Inspection Assignment",
+            message=f"You have been assigned to inspect order {order_id}",
+            data={"inspection_id": inspection["inspection_id"], "order_id": order_id}
+        )
+        
+        # Notify buyer
+        await create_notification(
+            user_id=inspection.get("buyer_id"),
+            notification_type=NotificationType.INSPECTION_ASSIGNED,
+            title="Inspector Assigned",
+            message=f"Inspector {inspector.get('name')} has been assigned to your order",
+            data={"inspection_id": inspection["inspection_id"], "order_id": order_id, "inspector_name": inspector.get("name")}
+        )
+        
+        logger.info(f"Inspector {inspector_id} assigned to inspection {inspection['inspection_id']}")
+        
+        return {
+            "success": True,
+            "inspector_id": inspector_id,
+            "inspector_name": inspector.get("name"),
+            "status": InspectionStatus.INSPECTOR_ASSIGNED
+        }
+    
+    else:  # Certified inspection
+        agency_name = body.get("agency_name")
+        agency_contact = body.get("agency_contact")
+        
+        if not agency_name:
+            raise HTTPException(status_code=400, detail="agency_name is required for certified inspections")
+        
+        await db.inspections.update_one(
+            {"inspection_id": inspection["inspection_id"]},
+            {
+                "$set": {
+                    "status": InspectionStatus.INSPECTOR_ASSIGNED,
+                    "agency_name": agency_name,
+                    "agency_contact": agency_contact,
+                    "updated_at": now.isoformat()
+                },
+                "$push": {
+                    "status_history": {
+                        "status": InspectionStatus.INSPECTOR_ASSIGNED,
+                        "timestamp": now.isoformat(),
+                        "note": f"Agency assigned: {agency_name}",
+                        "assigned_by": user["user_id"]
+                    }
+                }
+            }
+        )
+        
+        # Notify buyer
+        await create_notification(
+            user_id=inspection.get("buyer_id"),
+            notification_type=NotificationType.INSPECTION_ASSIGNED,
+            title="Inspection Agency Assigned",
+            message=f"Certified agency '{agency_name}' has been assigned to your order",
+            data={"inspection_id": inspection["inspection_id"], "order_id": order_id, "agency_name": agency_name}
+        )
+        
+        logger.info(f"Agency {agency_name} assigned to inspection {inspection['inspection_id']}")
+        
+        return {
+            "success": True,
+            "agency_name": agency_name,
+            "status": InspectionStatus.INSPECTOR_ASSIGNED
+        }
+
+
+@api_router.post("/inspector/orders/{order_id}/report")
+async def submit_inspection_report(order_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Inspector submits inspection report"""
+    # Check if user is an inspector
+    inspector = await db.inspectors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not inspector and user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only inspectors can submit reports")
+    
+    inspection = await db.inspections.find_one({"order_id": order_id}, {"_id": 0})
+    if not inspection:
+        raise HTTPException(status_code=404, detail="Inspection not found")
+    
+    # Verify inspector is assigned to this inspection
+    if inspector and inspection.get("inspector_id") != inspector.get("inspector_id"):
+        raise HTTPException(status_code=403, detail="You are not assigned to this inspection")
+    
+    if inspection.get("status") not in [InspectionStatus.INSPECTOR_ASSIGNED, InspectionStatus.IN_PROGRESS]:
+        raise HTTPException(status_code=400, detail=f"Cannot submit report. Current status: {inspection.get('status')}")
+    
+    body = await request.json()
+    result = body.get("result")  # pass/fail/conditional_pass
+    remarks = body.get("remarks")
+    images = body.get("images", [])  # List of S3 paths
+    report_files = body.get("report_files", [])  # List of S3 paths
+    measurements = body.get("measurements")
+    defects_found = body.get("defects_found", [])
+    geo_location = body.get("geo_location")  # {lat, lng}
+    
+    # Validate result
+    if result not in [InspectionResult.PASS, InspectionResult.FAIL, InspectionResult.CONDITIONAL_PASS]:
+        raise HTTPException(status_code=400, detail="Invalid result. Must be pass, fail, or conditional_pass")
+    
+    # Validate mandatory images
+    if not images or len(images) == 0:
+        raise HTTPException(status_code=400, detail="At least one inspection image is required")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.inspections.update_one(
+        {"inspection_id": inspection["inspection_id"]},
+        {
+            "$set": {
+                "status": InspectionStatus.REPORT_SUBMITTED,
+                "result": result,
+                "remarks": remarks,
+                "images": images,
+                "report_files": report_files,
+                "measurements": measurements,
+                "defects_found": defects_found,
+                "inspection_date": now.isoformat(),
+                "geo_location": geo_location,
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "status_history": {
+                    "status": InspectionStatus.REPORT_SUBMITTED,
+                    "timestamp": now.isoformat(),
+                    "note": f"Report submitted. Result: {result}",
+                    "submitted_by": user["user_id"]
+                }
+            }
+        }
+    )
+    
+    # Update inspector stats
+    if inspector:
+        await db.inspectors.update_one(
+            {"inspector_id": inspector["inspector_id"]},
+            {"$inc": {"total_inspections": 1, "completed_inspections": 1}}
+        )
+    
+    # Notify buyer
+    result_emoji = "✅" if result == InspectionResult.PASS else "⚠️" if result == InspectionResult.CONDITIONAL_PASS else "❌"
+    await create_notification(
+        user_id=inspection.get("buyer_id"),
+        notification_type=NotificationType.INSPECTION_REPORT_SUBMITTED,
+        title=f"Inspection Report Submitted {result_emoji}",
+        message=f"Order {order_id} inspection result: {result.upper()}. Please review and approve.",
+        data={
+            "inspection_id": inspection["inspection_id"],
+            "order_id": order_id,
+            "result": result
+        }
+    )
+    
+    # Notify vendor
+    await create_notification(
+        user_id=inspection.get("vendor_id"),
+        notification_type=NotificationType.INSPECTION_REPORT_SUBMITTED,
+        title=f"Inspection Completed for Your Order {result_emoji}",
+        message=f"Order {order_id} inspection result: {result.upper()}",
+        data={
+            "inspection_id": inspection["inspection_id"],
+            "order_id": order_id,
+            "result": result
+        }
+    )
+    
+    logger.info(f"Inspection report submitted: {inspection['inspection_id']}, result: {result}")
+    
+    return {
+        "success": True,
+        "result": result,
+        "status": InspectionStatus.REPORT_SUBMITTED,
+        "message": "Inspection report submitted successfully. Awaiting buyer approval."
+    }
+
+
+@api_router.post("/admin/orders/{order_id}/upload-agency-report")
+async def upload_agency_report(order_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Admin uploads report from certified inspection agency"""
+    if user["role"] != UserRole.ADMIN:
+        has_permission = await rbac_service.check_permission(user["user_id"], "inspections.assign")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    inspection = await db.inspections.find_one({"order_id": order_id}, {"_id": 0})
+    if not inspection:
+        raise HTTPException(status_code=404, detail="Inspection not found")
+    
+    if inspection.get("inspection_type") != InspectionType.CERTIFIED:
+        raise HTTPException(status_code=400, detail="This endpoint is only for certified inspections")
+    
+    body = await request.json()
+    result = body.get("result")
+    remarks = body.get("remarks")
+    report_files = body.get("report_files", [])
+    images = body.get("images", [])
+    
+    if result not in [InspectionResult.PASS, InspectionResult.FAIL, InspectionResult.CONDITIONAL_PASS]:
+        raise HTTPException(status_code=400, detail="Invalid result")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.inspections.update_one(
+        {"inspection_id": inspection["inspection_id"]},
+        {
+            "$set": {
+                "status": InspectionStatus.REPORT_SUBMITTED,
+                "result": result,
+                "remarks": remarks,
+                "report_files": report_files,
+                "images": images,
+                "inspection_date": now.isoformat(),
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "status_history": {
+                    "status": InspectionStatus.REPORT_SUBMITTED,
+                    "timestamp": now.isoformat(),
+                    "note": f"Agency report uploaded by admin. Result: {result}",
+                    "uploaded_by": user["user_id"]
+                }
+            }
+        }
+    )
+    
+    # Notify buyer
+    await create_notification(
+        user_id=inspection.get("buyer_id"),
+        notification_type=NotificationType.INSPECTION_REPORT_SUBMITTED,
+        title="Certified Inspection Report Available",
+        message=f"Order {order_id} certified inspection result: {result.upper()}",
+        data={"inspection_id": inspection["inspection_id"], "order_id": order_id, "result": result}
+    )
+    
+    return {"success": True, "result": result, "message": "Agency report uploaded successfully"}
+
+
+@api_router.post("/inspections/{inspection_id}/approve")
+async def approve_inspection(inspection_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Buyer approves or rejects inspection result"""
+    inspection = await db.inspections.find_one({"inspection_id": inspection_id}, {"_id": 0})
+    if not inspection:
+        raise HTTPException(status_code=404, detail="Inspection not found")
+    
+    if inspection.get("buyer_id") != user["user_id"] and user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only the buyer can approve/reject inspection")
+    
+    if inspection.get("status") != InspectionStatus.REPORT_SUBMITTED:
+        raise HTTPException(status_code=400, detail=f"Cannot approve. Current status: {inspection.get('status')}")
+    
+    body = await request.json()
+    action = body.get("action")  # approve/reject
+    rejection_reason = body.get("rejection_reason")
+    
+    if action not in ["approve", "reject"]:
+        raise HTTPException(status_code=400, detail="Action must be 'approve' or 'reject'")
+    
+    now = datetime.now(timezone.utc)
+    
+    if action == "approve":
+        new_status = InspectionStatus.APPROVED
+        note = "Inspection approved by buyer"
+    else:
+        new_status = InspectionStatus.REJECTED
+        note = f"Inspection rejected by buyer. Reason: {rejection_reason or 'Not specified'}"
+    
+    await db.inspections.update_one(
+        {"inspection_id": inspection_id},
+        {
+            "$set": {
+                "status": new_status,
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "status_history": {
+                    "status": new_status,
+                    "timestamp": now.isoformat(),
+                    "note": note,
+                    "action_by": user["user_id"]
+                }
+            }
+        }
+    )
+    
+    # Notify vendor
+    notification_type = NotificationType.INSPECTION_APPROVED if action == "approve" else NotificationType.INSPECTION_REJECTED
+    await create_notification(
+        user_id=inspection.get("vendor_id"),
+        notification_type=notification_type,
+        title=f"Inspection {'Approved' if action == 'approve' else 'Rejected'}",
+        message=f"Order {inspection.get('order_id')} inspection has been {action}ed by buyer",
+        data={"inspection_id": inspection_id, "order_id": inspection.get("order_id"), "action": action}
+    )
+    
+    # Notify inspector
+    if inspection.get("inspector_id"):
+        inspector = await db.inspectors.find_one({"inspector_id": inspection["inspector_id"]}, {"_id": 0})
+        if inspector:
+            await create_notification(
+                user_id=inspector.get("user_id"),
+                notification_type=notification_type,
+                title=f"Your Inspection Report {action.title()}ed",
+                message=f"Buyer has {action}ed your inspection report for order {inspection.get('order_id')}",
+                data={"inspection_id": inspection_id, "order_id": inspection.get("order_id")}
+            )
+    
+    return {"success": True, "status": new_status, "message": f"Inspection {action}ed successfully"}
+
+
+@api_router.post("/inspections/{inspection_id}/request-reinspection")
+async def request_reinspection(inspection_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Buyer requests re-inspection"""
+    inspection = await db.inspections.find_one({"inspection_id": inspection_id}, {"_id": 0})
+    if not inspection:
+        raise HTTPException(status_code=404, detail="Inspection not found")
+    
+    if inspection.get("buyer_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Only the buyer can request re-inspection")
+    
+    if inspection.get("status") not in [InspectionStatus.REPORT_SUBMITTED, InspectionStatus.REJECTED]:
+        raise HTTPException(status_code=400, detail="Can only request re-inspection after report submission")
+    
+    body = await request.json()
+    reason = body.get("reason", "")
+    
+    now = datetime.now(timezone.utc)
+    
+    await db.inspections.update_one(
+        {"inspection_id": inspection_id},
+        {
+            "$set": {
+                "status": InspectionStatus.RE_INSPECTION_REQUESTED,
+                "result": None,
+                "report_files": [],
+                "images": [],
+                "remarks": None,
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "status_history": {
+                    "status": InspectionStatus.RE_INSPECTION_REQUESTED,
+                    "timestamp": now.isoformat(),
+                    "note": f"Re-inspection requested. Reason: {reason}",
+                    "requested_by": user["user_id"]
+                }
+            }
+        }
+    )
+    
+    # Notify admins
+    admins = await db.users.find({"role": UserRole.ADMIN}, {"_id": 0, "user_id": 1}).to_list(10)
+    for admin in admins:
+        await create_notification(
+            user_id=admin["user_id"],
+            notification_type=NotificationType.INSPECTION_REQUESTED,
+            title="Re-inspection Requested",
+            message=f"Buyer has requested re-inspection for order {inspection.get('order_id')}",
+            data={"inspection_id": inspection_id, "order_id": inspection.get("order_id")}
+        )
+    
+    return {"success": True, "status": InspectionStatus.RE_INSPECTION_REQUESTED, "message": "Re-inspection requested"}
+
+
+# ============== INSPECTOR MANAGEMENT ==============
+
+@api_router.post("/inspectors/register")
+async def register_as_inspector(request: Request, user: dict = Depends(get_current_user)):
+    """User registers as an inspector (requires approval)"""
+    # Check if already registered
+    existing = await db.inspectors.find_one({"user_id": user["user_id"]})
+    if existing:
+        raise HTTPException(status_code=400, detail="You are already registered as an inspector")
+    
+    body = await request.json()
+    
+    now = datetime.now(timezone.utc)
+    inspector_id = f"inspector_{uuid.uuid4().hex[:12]}"
+    
+    inspector_doc = {
+        "inspector_id": inspector_id,
+        "user_id": user["user_id"],
+        "name": body.get("name") or user.get("name", ""),
+        "email": user.get("email", ""),
+        "phone": body.get("phone"),
+        "city": body.get("city"),
+        "state": body.get("state"),
+        "pincode": body.get("pincode"),
+        "is_active": False,  # Requires approval
+        "is_available": True,
+        "total_inspections": 0,
+        "completed_inspections": 0,
+        "avg_rating": 0,
+        "certifications": body.get("certifications", []),
+        "approval_status": "pending",
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    await db.inspectors.insert_one(inspector_doc)
+    
+    # Notify admins
+    admins = await db.users.find({"role": UserRole.ADMIN}, {"_id": 0, "user_id": 1}).to_list(10)
+    for admin in admins:
+        await create_notification(
+            user_id=admin["user_id"],
+            notification_type="inspector_registration",
+            title="New Inspector Registration",
+            message=f"{inspector_doc['name']} has registered as an inspector. Please review.",
+            data={"inspector_id": inspector_id}
+        )
+    
+    logger.info(f"New inspector registration: {inspector_id}")
+    
+    return {
+        "success": True,
+        "inspector_id": inspector_id,
+        "status": "pending",
+        "message": "Registration submitted. Awaiting admin approval."
+    }
+
+
+@api_router.get("/inspector/profile")
+async def get_inspector_profile(user: dict = Depends(get_current_user)):
+    """Get current user's inspector profile"""
+    inspector = await db.inspectors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not inspector:
+        raise HTTPException(status_code=404, detail="Inspector profile not found")
+    return inspector
+
+
+@api_router.get("/inspector/assignments")
+async def get_inspector_assignments(user: dict = Depends(get_current_user)):
+    """Get inspections assigned to the current inspector"""
+    inspector = await db.inspectors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not inspector:
+        raise HTTPException(status_code=403, detail="Not an inspector")
+    
+    inspections = await db.inspections.find(
+        {"inspector_id": inspector["inspector_id"]},
+        {"_id": 0}
+    ).sort("created_at", -1).to_list(50)
+    
+    # Enrich with order details
+    for insp in inspections:
+        order = await db.orders.find_one({"order_id": insp["order_id"]}, {"_id": 0, "total_amount": 1, "status": 1})
+        if order:
+            insp["order_amount"] = order.get("total_amount")
+            insp["order_status"] = order.get("status")
+    
+    return {"inspections": inspections, "total": len(inspections)}
+
+
+@api_router.put("/inspector/availability")
+async def update_inspector_availability(request: Request, user: dict = Depends(get_current_user)):
+    """Update inspector availability status"""
+    inspector = await db.inspectors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not inspector:
+        raise HTTPException(status_code=403, detail="Not an inspector")
+    
+    body = await request.json()
+    is_available = body.get("is_available", True)
+    
+    await db.inspectors.update_one(
+        {"inspector_id": inspector["inspector_id"]},
+        {"$set": {"is_available": is_available, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {"success": True, "is_available": is_available}
+
+
+# ============== ADMIN INSPECTOR MANAGEMENT ==============
+
+@api_router.get("/admin/inspectors")
+async def list_inspectors(status: str = None, user: dict = Depends(get_current_user)):
+    """Admin: List all inspectors"""
+    if user["role"] != UserRole.ADMIN:
+        has_permission = await rbac_service.check_permission(user["user_id"], "inspections.manage_inspectors")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    query = {}
+    if status:
+        query["approval_status"] = status
+    
+    inspectors = await db.inspectors.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    return {"inspectors": inspectors, "total": len(inspectors)}
+
+
+@api_router.post("/admin/inspectors/{inspector_id}/approve")
+async def approve_inspector(inspector_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Admin: Approve or reject inspector registration"""
+    if user["role"] != UserRole.ADMIN:
+        has_permission = await rbac_service.check_permission(user["user_id"], "inspections.manage_inspectors")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    inspector = await db.inspectors.find_one({"inspector_id": inspector_id}, {"_id": 0})
+    if not inspector:
+        raise HTTPException(status_code=404, detail="Inspector not found")
+    
+    body = await request.json()
+    action = body.get("action")  # approve/reject
+    
+    if action not in ["approve", "reject"]:
+        raise HTTPException(status_code=400, detail="Action must be 'approve' or 'reject'")
+    
+    now = datetime.now(timezone.utc)
+    
+    if action == "approve":
+        # Update inspector status
+        await db.inspectors.update_one(
+            {"inspector_id": inspector_id},
+            {
+                "$set": {
+                    "approval_status": "approved",
+                    "is_active": True,
+                    "approved_by": user["user_id"],
+                    "approved_at": now.isoformat(),
+                    "updated_at": now.isoformat()
+                }
+            }
+        )
+        
+        # Update user role to inspector
+        await db.users.update_one(
+            {"user_id": inspector["user_id"]},
+            {"$set": {"role": "inspector"}}
+        )
+        
+        # Notify inspector
+        await create_notification(
+            user_id=inspector["user_id"],
+            notification_type="inspector_approved",
+            title="Inspector Registration Approved!",
+            message="Congratulations! Your inspector registration has been approved. You can now receive inspection assignments.",
+            data={"inspector_id": inspector_id}
+        )
+    else:
+        await db.inspectors.update_one(
+            {"inspector_id": inspector_id},
+            {
+                "$set": {
+                    "approval_status": "rejected",
+                    "rejected_by": user["user_id"],
+                    "rejected_at": now.isoformat(),
+                    "updated_at": now.isoformat()
+                }
+            }
+        )
+        
+        await create_notification(
+            user_id=inspector["user_id"],
+            notification_type="inspector_rejected",
+            title="Inspector Registration Update",
+            message="Your inspector registration was not approved at this time.",
+            data={"inspector_id": inspector_id}
+        )
+    
+    return {"success": True, "action": action, "message": f"Inspector {action}ed successfully"}
+
+
+@api_router.post("/admin/inspectors/create")
+async def admin_create_inspector(request: Request, user: dict = Depends(get_current_user)):
+    """Admin: Create inspector account directly"""
+    if user["role"] != UserRole.ADMIN:
+        has_permission = await rbac_service.check_permission(user["user_id"], "inspections.manage_inspectors")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    body = await request.json()
+    email = body.get("email")
+    name = body.get("name")
+    phone = body.get("phone")
+    password = body.get("password")
+    
+    if not all([email, name, password]):
+        raise HTTPException(status_code=400, detail="email, name, and password are required")
+    
+    # Check if user exists
+    existing_user = await db.users.find_one({"email": email})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="User with this email already exists")
+    
+    now = datetime.now(timezone.utc)
+    user_id = f"user_{uuid.uuid4().hex[:12]}"
+    inspector_id = f"inspector_{uuid.uuid4().hex[:12]}"
+    
+    # Create user account
+    user_doc = {
+        "user_id": user_id,
+        "email": email,
+        "name": name,
+        "phone": phone,
+        "password_hash": hash_password(password),
+        "role": "inspector",
+        "email_verified": True,
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    await db.users.insert_one(user_doc)
+    
+    # Create inspector profile
+    inspector_doc = {
+        "inspector_id": inspector_id,
+        "user_id": user_id,
+        "name": name,
+        "email": email,
+        "phone": phone,
+        "city": body.get("city"),
+        "state": body.get("state"),
+        "pincode": body.get("pincode"),
+        "is_active": True,
+        "is_available": True,
+        "total_inspections": 0,
+        "completed_inspections": 0,
+        "avg_rating": 0,
+        "certifications": body.get("certifications", []),
+        "approval_status": "approved",
+        "approved_by": user["user_id"],
+        "approved_at": now.isoformat(),
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    await db.inspectors.insert_one(inspector_doc)
+    
+    logger.info(f"Admin created inspector: {inspector_id}")
+    
+    return {
+        "success": True,
+        "inspector_id": inspector_id,
+        "user_id": user_id,
+        "message": "Inspector account created successfully"
+    }
+
+
+@api_router.get("/admin/inspections")
+async def list_all_inspections(status: str = None, user: dict = Depends(get_current_user)):
+    """Admin: List all inspections"""
+    if user["role"] != UserRole.ADMIN:
+        has_permission = await rbac_service.check_permission(user["user_id"], "inspections.view")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    query = {}
+    if status:
+        query["status"] = status
+    
+    inspections = await db.inspections.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    # Enrich with order and buyer info
+    for insp in inspections:
+        buyer = await db.users.find_one({"user_id": insp.get("buyer_id")}, {"_id": 0, "name": 1, "email": 1})
+        if buyer:
+            insp["buyer_name"] = buyer.get("name")
+            insp["buyer_email"] = buyer.get("email")
+    
+    return {"inspections": inspections, "total": len(inspections)}
+
+
+# ============== INSPECTION PRICING MANAGEMENT ==============
+
+@api_router.get("/admin/inspection-pricing")
+async def get_admin_inspection_pricing(user: dict = Depends(get_current_user)):
+    """Admin: Get all inspection pricing configurations"""
+    if user["role"] != UserRole.ADMIN:
+        has_permission = await rbac_service.check_permission(user["user_id"], "inspections.manage_pricing")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    pricing = await db.inspection_pricing.find({}, {"_id": 0}).to_list(50)
+    return {"pricing": pricing}
+
+
+@api_router.post("/admin/inspection-pricing")
+async def create_inspection_pricing(request: Request, user: dict = Depends(get_current_user)):
+    """Admin: Create or update inspection pricing"""
+    if user["role"] != UserRole.ADMIN:
+        has_permission = await rbac_service.check_permission(user["user_id"], "inspections.manage_pricing")
+        if not has_permission:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    body = await request.json()
+    inspection_type = body.get("inspection_type")
+    base_price = body.get("base_price")
+    region = body.get("region")
+    description = body.get("description")
+    
+    if not inspection_type or base_price is None:
+        raise HTTPException(status_code=400, detail="inspection_type and base_price are required")
+    
+    now = datetime.now(timezone.utc)
+    
+    # Check if pricing exists for this type and region
+    existing = await db.inspection_pricing.find_one({
+        "inspection_type": inspection_type,
+        "region": region
+    })
+    
+    if existing:
+        # Update existing
+        await db.inspection_pricing.update_one(
+            {"pricing_id": existing["pricing_id"]},
+            {
+                "$set": {
+                    "base_price": float(base_price),
+                    "description": description,
+                    "is_active": True,
+                    "updated_at": now.isoformat(),
+                    "updated_by": user["user_id"]
+                }
+            }
+        )
+        return {"success": True, "pricing_id": existing["pricing_id"], "action": "updated"}
+    else:
+        # Create new
+        pricing_id = f"pricing_{uuid.uuid4().hex[:8]}"
+        pricing_doc = {
+            "pricing_id": pricing_id,
+            "inspection_type": inspection_type,
+            "base_price": float(base_price),
+            "currency": "INR",
+            "region": region,
+            "description": description,
+            "is_active": True,
+            "created_at": now.isoformat(),
+            "updated_at": now.isoformat(),
+            "created_by": user["user_id"]
+        }
+        await db.inspection_pricing.insert_one(pricing_doc)
+        return {"success": True, "pricing_id": pricing_id, "action": "created"}
+
 
 # ============== HEALTH CHECK ==============
 

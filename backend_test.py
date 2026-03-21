@@ -7,7 +7,7 @@ import json
 
 class OffoadexAPITester:
     def __init__(self):
-        self.base_url = "https://rfq-marketplace-9.preview.emergentagent.com/api"
+        self.base_url = "https://oemlinker-preview-1.preview.emergentagent.com/api"
         self.session = requests.Session()
         self.session.headers.update({'Content-Type': 'application/json'})
         self.token = None

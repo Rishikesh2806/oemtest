@@ -5,6 +5,7 @@ import { usePermissions } from "../hooks/usePermissions";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import PermittedActions from "../components/PermittedActions";
 import QuotationComparison from "../components/QuotationComparison";
+import InspectionsTab from "../components/admin/InspectionsTab";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -17,7 +18,7 @@ import {
   Users, FileText, Package, DollarSign, Building2, Wrench, FileCheck,
   CheckCircle2, XCircle, Loader2, Search, Plus, Edit, Trash2,
   Eye, Send, AlertCircle, RefreshCw, ChevronRight, Clock, Camera, Upload,
-  Link, X, CheckCircle, BarChart3, Zap
+  Link, X, CheckCircle, BarChart3, Zap, Shield
 } from "lucide-react";
 import { Checkbox } from "../components/ui/checkbox";
 
@@ -30,6 +31,7 @@ const TAB_CONFIG = {
   rfqs: { label: "RFQs", icon: FileText, permissions: ['rfqs.view'] },
   quotes: { label: "Quotes", icon: DollarSign, permissions: ['quotes.view'] },
   orders: { label: "Orders", icon: Package, permissions: ['orders.view'] },
+  inspections: { label: "Inspections", icon: Shield, permissions: ['inspections.view'] },
   drawings: { label: "Drawings", icon: FileCheck, permissions: ['rfqs.view'] },
   ndas: { label: "NDAs", icon: FileText, permissions: ['rfqs.view'] },
 };
@@ -4412,6 +4414,14 @@ const AdminDashboard = () => {
                 count={stats?.total_orders}
               />
             )}
+            {permittedTabs.includes('inspections') && (
+              <TabButton 
+                active={activeTab === "inspections"} 
+                onClick={() => handleTabChange("inspections")} 
+                icon={Shield} 
+                label="Inspections"
+              />
+            )}
             {permittedTabs.includes('drawings') && (
               <TabButton 
                 active={activeTab === "drawings"} 
@@ -4517,6 +4527,13 @@ const AdminDashboard = () => {
             onRefresh={fetchOrders}
             onUpdateOrder={updateOrder}
             onDeleteOrder={deleteOrder}
+          />
+        )}
+        {activeTab === "inspections" && permittedTabs.includes('inspections') && (
+          <InspectionsTab 
+            canAssign={isAdmin || hasAnyPermission(['inspections.assign'])}
+            canManageInspectors={isAdmin || hasAnyPermission(['inspections.manage_inspectors'])}
+            canManagePricing={isAdmin || hasAnyPermission(['inspections.manage_pricing'])}
           />
         )}
         {activeTab === "drawings" && permittedTabs.includes('drawings') && (

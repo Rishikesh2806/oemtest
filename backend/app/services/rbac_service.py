@@ -90,6 +90,15 @@ PERMISSIONS = {
     "disputes.manage": {"label": "Manage Disputes", "module": "Disputes", "description": "Handle and resolve disputes"},
     "disputes.escalate": {"label": "Escalate Disputes", "module": "Disputes", "description": "Escalate dispute cases"},
     
+    # Inspection Management
+    "inspections.view": {"label": "View Inspections", "module": "Inspections", "description": "View inspection requests and reports"},
+    "inspections.request": {"label": "Request Inspection", "module": "Inspections", "description": "Request inspection for orders"},
+    "inspections.assign": {"label": "Assign Inspectors", "module": "Inspections", "description": "Assign inspectors to orders"},
+    "inspections.submit_report": {"label": "Submit Reports", "module": "Inspections", "description": "Submit inspection reports"},
+    "inspections.approve": {"label": "Approve/Reject", "module": "Inspections", "description": "Approve or reject inspection results"},
+    "inspections.manage_pricing": {"label": "Manage Pricing", "module": "Inspections", "description": "Configure inspection pricing"},
+    "inspections.manage_inspectors": {"label": "Manage Inspectors", "module": "Inspections", "description": "Manage inspector accounts"},
+    
     # System Administration
     "admin.roles": {"label": "Manage Roles", "module": "System Admin", "description": "Create and manage custom roles"},
     "admin.settings": {"label": "System Settings", "module": "System Admin", "description": "Manage system settings"},
@@ -121,6 +130,7 @@ DEFAULT_ROLES = {
             "whatsapp.view_messages", "whatsapp.send_messages", "whatsapp.send_templates", "whatsapp.view_logs",
             "analytics.view_dashboard", "analytics.export_reports", "analytics.view_financials",
             "disputes.view", "disputes.manage",
+            "inspections.view", "inspections.assign", "inspections.approve", "inspections.manage_pricing", "inspections.manage_inspectors",
             "admin.file_manager", "admin.audit_logs"
         ],
         "is_system": True,
@@ -194,6 +204,7 @@ DEFAULT_ROLES = {
             "rfqs.view", "rfqs.create", "rfqs.edit", "rfqs.analyze", "rfqs.match_vendors",
             "quotes.view", "quotes.approve", "quotes.negotiate",
             "orders.view", "orders.create",
+            "inspections.view", "inspections.request", "inspections.approve",
             "disputes.view"
         ],
         "is_system": True,
@@ -215,6 +226,18 @@ DEFAULT_ROLES = {
         ],
         "is_system": True,
         "color": "#3b82f6"  # Blue
+    },
+    "inspector": {
+        "name": "Inspector",
+        "description": "Quality inspector for order verification",
+        "permissions": [
+            "orders.view",
+            "inspections.view",
+            "inspections.submit_report"
+        ],
+        "is_system": True,
+        "is_base_role": True,
+        "color": "#059669"  # Emerald
     }
 }
 

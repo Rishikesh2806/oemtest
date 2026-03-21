@@ -1,79 +1,82 @@
-<analysis>**original_problem_statement**: The user wants to build a full-stack web application called **OEMLinker**, an AI-driven on-demand manufacturing marketplace. Buyers upload RFQs with drawings; an AI engine analyzes them, and a matching algorithm connects buyers with vendors. The platform handles an RFQ-to-payment workflow, RBAC permissions, manual/AI vendor matching, advanced quotation systems (cost breakdowns), and item-wise multi-part quoting.
+<analysis>**original_problem_statement**: The user wants to build a full-stack web application called **OEMLinker**, an AI-driven on-demand manufacturing marketplace. Buyers upload RFQs with drawings; an AI engine analyzes them, and a matching algorithm connects buyers with vendors. The platform handles an RFQ-to-payment workflow, RBAC permissions, manual/AI vendor matching, advanced quotation systems (item-wise multi-part quoting, partial quoting), and a newly requested Hybrid Third-Party Inspection System (Local network + Certified Agencies).
 
 **PRODUCT REQUIREMENTS:**
--   **User Roles:** Buyer, Vendor, Admin, Staff (Managed via RBAC).
--   **AI Core & Matching:** AI analyzes RFQ processes (machining, casting, etc.) and auto-matches or manually matches vendors.
--   **Workflow:** RFQ -> Matching -> Quotation -> Comparison -> Order -> Payment.
--   **Quotation System:** Advanced quoting with detailed cost breakdown (material, machining, additional) and item-wise (per-drawing) granularity.
--   **File Management:** S3 presigned URLs for all drawings and images. ReportLab-based PDF generation for RFQs.
+-   **User Roles:** Buyer, Vendor, Admin, Staff, Inspector (Managed via RBAC).
+-   **AI Core & Matching:** AI analyzes RFQ processes and auto-matches or manually matches vendors.
+-   **Workflow:** RFQ -> Matching -> Quotation -> Comparison -> Order -> Inspection -> Payment.
+-   **Quotation System:** Item-wise (per-drawing) quoting and partial quoting.
+-   **Inspection System:** Buyers can request Basic (Platform Inspector) or Certified (External Agency) inspections, with an Inspector Dashboard for report uploads and Admin oversight.
 
-**User's preferred language**: English (INSTRUCT next agent to respond in the user's preferred language only)
+**User's preferred language**: INSTRUCT next agent to respond in English.
 
 **what currently exists?**
-OEMLinker is a React/FastAPI/MongoDB application with comprehensive RBAC, AWS S3 storage, and Gupshup/Resend integrations. The admin dashboard supports dynamic tabs based on permissions. Recent additions include full machine management, manual RFQ-vendor matching, RFQ PDF generation, and an advanced quotation system allowing cost breakdowns. The  backend is monolithic (nearly 17,000 lines) and relies heavily on search-replace for updates. 
+OEMLinker is a React/FastAPI/MongoDB application with RBAC and AWS S3 file storage. It has an advanced multi-part quotation system allowing item-wise and partial quoting per drawing. The backend is a massive monolith ( ~17k lines). Recently, backend logic and frontend components for a Hybrid Third-Party Inspection System were added. The backend API for this inspection system has been successfully verified via curl, but frontend verification got interrupted.
 
 **Last working item**:
--   **Last item agent was working**: Implementing item-wise (per drawing) quotation with detailed cost breakdowns for vendors. The agent had just updated the Pydantic models (, ) in  to support arrays of items.
+-   **Last item agent was working**: Verifying the UI flow for the Hybrid Third-Party Inspection System. The agent had just finished implementing backend inspection models, RBAC updates, and frontend components (, , ) and was using the screenshot tool to test logging in to view the  page.
 -   **Status**: IN PROGRESS
--   **Agent Testing Done**: N
--   **Which testing method agent to use?**: both (Backend testing for API logic, Frontend testing for dynamic multi-item quote forms)
+-   **Agent Testing Done**: N (Backend curl tests passed, but frontend screenshot testing was incomplete due to login selector timeouts).
+-   **Which testing method agent to use?**: Frontend testing agent to verify the Inspector Dashboard and the Buyer's Order Detail inspection flow. 
 -   **User Testing Done**: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1**: Production Login Failure with Password (Priority: P2)
+-   **Issue 1**: Submit button on  missing redirect (Priority: P0)
+    -   **Attempted fixes**: None. User requested this in Message 162, but the agent overlooked it and proceeded directly to the partial quoting feature.
+    -   **Next debug checklist**: Check . Update the Submit Quote button's  or  wrapper to redirect the vendor to  instead of doing nothing or just opening a stale modal.
+    -   **Why fix this issue and what will be achieved with the fix?**: User explicitly requested it; improves vendor UX for viewing complex RFQ details before quoting.
+    -   **Status**: NOT STARTED
+    -   **Is recurring issue?** N
+    -   **Should Test frontend/backend/both after fix?**: frontend
+    -   **Blocked on other issue**: None
+
+-   **Issue 2**: Production Login Failure with Password (Priority: P2)
     -   **Attempted fixes**: Previous job diagnosed but pending user deployment of the fix.
-    -   **Next debug checklist**: Verify login flow in production environment once user confirms deployment. 
-    -   **Why fix this issue**: Critical for user access.
+    -   **Next debug checklist**: Verify login flow in production environment once user confirms deployment.
+    -   **Why fix this issue and what will be achieved with the fix?**: Critical for user access in production.
     -   **Status**: BLOCKED (Pending user deployment)
     -   **Is recurring issue?** Y
     -   **Should Test frontend/backend/both after fix?**: backend
     -   **Blocked on other issue**: User deployment
 
 **In progress Task List**:
--   **Task 1: Item-wise (per drawing) vendor quotation system (Priority: P0)**
-    -   **Where to resume**: The Pydantic models for  are updated in . You need to: 
-        1. Update  API to process arrays of items.
-        2. Ensure the RFQ model and  endpoints support linking  to drawings.
-        3. Overhaul  to dynamically render a form per drawing.
-        4. Overhaul  to show item-wise comparisons.
-    -   **What will be achieved with this?**: Vendors can quote accurately per drawing in multi-part RFQs, and buyers get granular cost breakdowns.
+-   **Task 1: Hybrid Third-Party Inspection System - Frontend Verification & Admin Tab (Priority: P0)**
+    -   **Where to resume**: The backend APIs, models, and buyer/inspector UI components are created. The agent was interrupted during frontend screenshot testing. You need to: 
+        1. Verify the  page correctly displays the Request Inspection modal and status card.
+        2. Verify the  UI.
+        3. Build the missing Admin Inspections Tab to allow admins to view logs and manually assign inspectors/agencies (as planned but not yet executed).
+    -   **What will be achieved with this?**: Completes the end-to-end flow for the QA/Inspection system.
     -   **Status**: IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?**: both
+    -   **Should Test frontend/backend/both after fix?**: frontend
     -   **Blocked on something**: None
-
--   **Task 2:  Refactoring (Priority: P1)**
-    -   **Where to resume**: The monolithic  is now nearly 17,000 lines long. Migrate authentication, vendor, RFQ, and admin routes into separate modules (e.g., ).
-    -   **What will be achieved with this?**: Improved code maintainability and reduced risk of search-replace errors.
-    -   **Status**: NOT STARTED
-    -   **Should Test frontend/backend/both after fix?**: both
-    -   **Blocked on something**: Best to complete P0 feature first.
 
 **Upcoming and Future Tasks**
 Upcoming Tasks:
--   **ElevenLabs Integration (P1)**: Integrate voice agent (pending requirements gathering via ).
--   **Drawing Protection/NDA (P1)**: Click-to-accept modal or watermarking before vendors can view/download S3 drawings.
+-   **Admin Inspections Tab (P0)**: Needs to be added to  for inspection oversight.
+-   **server.py Refactoring (P1)**: Migrate authentication, vendor, RFQ, and admin routes into separate modules. (Monolith is highly fragile).
+-   **Partial Quoting Auto-Award (P1)**: Feature to automatically assign partial orders to different vendors based on best price per item.
+-   **ElevenLabs Integration (P1)**: Voice agent integration.
+-   **Drawing Protection/NDA (P1)**: Click-to-accept modal before vendors view/download S3 drawings.
 -   **Stripe Integration (P1)**: Escrow payment system.
 -   **WordPress Integration (P1)**: Content management integration.
--   **SMS OTP Registration (P2)**: Phone number-based auth.
 
 Future Tasks:
 -   Instant AI auto-quote for simple parts.
 -   API for ERP integration.
 -   Capacity forecasting for vendors.
--   Partial quoting & item-wise auto-award (split orders).
 
 **Completed work in this session**
--   Admin Machine Management feature (Machines Tab, Create Dialog) (DONE)
--   Manual RFQ-Vendor Matching with UI and notifications (DONE)
--   RFQ Details View & ReportLab PDF Generation/Download (DONE)
--   Drawing S3 Presigned URL Fix (DONE)
--   Advanced Quotation System (Material, Machining, Additional cost breakdowns) (DONE)
--   Created  and  components (DONE)
+-   Item-wise (Per Drawing) Vendor Quotation System (DONE)
+-   Partial Quoting feature (Frontend checkboxes, backend  validation logic) (DONE)
+-   Added , , and  fields to quotation data (DONE)
+-   Hybrid Third-Party Inspection System Backend (APIs for pricing, request, payment, assignment, and reporting) (DONE)
+-   Added  role to RBAC and fixed password hashing bug for inspector user creation (DONE)
+-   Created , , and  (DONE)
+-   Integrated inspection buttons into  and updated  routes (DONE)
 
 **Earlier issues found/mentioned but not fixed**
--   **Issue 1: Monolithic Files**
-    -   **Debug checklist**: Check line counts for  (>16k) and  (>4k).
-    -   **Why to solve this issue**: Slows down development, causes tool timeout errors, and risks context truncation.
+-   **Issue 1**: Monolithic Files
+    -   **Debug checklist**: Check line counts for  (>17k) and  (>4k).
+    -   **Why to solve this issue and what will be achieved with this?**: Slows down development, causes tool timeout errors, risks context truncation and search/replace corruption.
     -   **Should Test frontend/backend/both after fix**: both
     -   **Is recurring issue?**: Y
 
@@ -87,59 +90,58 @@ Future Tasks:
 
 **Key Technical Concepts**
 -   **Frontend**: React, Shadcn UI, TailwindCSS, Axios
--   **Backend**: FastAPI, Pydantic, ReportLab (PDF Generation)
+-   **Backend**: FastAPI, Pydantic, ReportLab (PDF)
 -   **Database**: MongoDB
--   **File Storage**: AWS S3 (Strictly using Presigned URLs for temporary access)
+-   **File Storage**: AWS S3 (Presigned URLs only)
 -   **Security**: JWT, RBAC
 
 **key DB schema**
--   **rfqs**: 
+-   **inspections** (New): 
 -   **quotes**: 
+-   **users**: Password auth relies specifically on the  field.
 
 **changes in tech stack**
--   Added  for structured PDF generation.
+-   None.
 
 **All files of reference**
--   : Contains API routes, matching logic, PDF generation logic.
--   : Contains RFQs tab, Match Dialog, View RFQ dialog.
--   : Created for displaying vendor quotes.
--   : Created for vendor quote submission.
+-   : Contains new API routes for inspections and partial quoting.
+-   : Added inspection permissions.
+-   : Integrated Request Inspection flows.
+-   : Refactored to handle dynamic item checkboxes for partial quoting.
+-   : New inspector portal.
 
 **Areas that need refactoring**:
--   : Nearing 17,000 lines. Extreme risk of modification errors.
--   : Over 4,000 lines. Needs tabs extracted into separate component files.
+-   : Reaching critically dangerous sizes (17.4k lines). Refactor urgently to split modules.
+-   : Extremely large, needs components extracted.
 
 **key api endpoints**
--   : Analyzes drawing process and matches vendors.
--   : Manual vendor matching.
--   : Generates PDF.
--   : Currently being modified to accept  array for multi-part quoting.
+-   : Submits full or partial itemized quotes.
+-   : Fetch dynamic pricing for inspection types.
+-   : Initiate an inspection request.
+-   : Assign an inspector/agency.
+-   : Inspector uploads result.
 
 **Critical Info for New Agent**
--   **Immediate Priority**: Complete the Item-wise Vendor Quotation implementation (P0). Ensure the backend parses the  array and calculates total cost correctly. Ensure the frontend dynamically renders inputs per drawing.
--   **S3 Rule**: Always use  to serve images/drawings. Do not use legacy  routes.
--   **Editing Monoliths**: Due to file sizes (, ), use  very carefully with highly specific block matches to avoid corruption.
+-   The user asked to redirect to the RFQ detail page when clicking the Submit Quote button from the  page. The previous agent completely missed this. Prioritize fixing this UX issue.
+-   The Hybrid Inspection feature backend works perfectly (verified via curl testing), but the Frontend flow was not E2E verified. Run the testing agent for the frontend, and ensure you implement the missing Admin Inspection controls in the admin dashboard.
+-   Use caution with  in  due to identical variable names across the massive file.
 
 **documents and test reports created in this job**
 -   
--    (Admin Machines)
--    (Manual Match)
--    (RFQ PDF)
--    (RFQ Drawing Fix)
--    (Advanced Quotations)
+-    (Item-wise quoting)
+-    (Partial quoting)
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **user**:  (Status: Completed).
-2.  **user**:  (Status: Completed).
-3.  **user**:  (Status: Completed).
-4.  **user**:  (Status: Completed).
-5.  **user**:  (Status: Completed).
-6.  **user**:  (Status: Completed).
-7.  **user**:  (Status: **IN PROGRESS** - Backend models updated, APIs and UI pending).
+1.  **user**:  (Status: Completed)
+2.  **user**:  (Status: Completed)
+3.  **user**:  (Status: **OVERLOOKED / PENDING**)
+4.  **user**:  (Status: Completed)
+5.  **user**:  (Status: Completed Backend, UI testing pending)
+6.  **user**: Provided answers to  config regarding inspection assignment, payment flow, and pricing. (Status: Completed logic integration)
 
 **Project Health Check:**
--   **Broken**: None
--   **Mocked**: Stripe payments, ElevenLabs voice agent, WordPress integration.
+-   **Broken**: Redirect on  submit button.
+-   **Mocked**: Inspection Payments ( simply updates status without external gateway logic yet).
 
 **3rd Party Integrations**
 -   OpenAI GPT-4o — uses Emergent LLM Key (AI Analysis)
@@ -150,17 +152,17 @@ Future Tasks:
 -   Stripe — requires User API Key (Pending Integration)
 
 **Testing status**
--   Testing agent used after significant changes: YES
+-   Testing agent used after significant changes: YES (, )
 -   Troubleshoot agent used after agent stuck in loop: NO
--   Test files created:  to 
--   Known regressions: None
+-   Test files created: , 
+-   Known regressions: None. Infinite loop in checkboxes was resolved.
 
 **Credentials to test flow:**
 -   Admin:  / 
 -   Buyer:  / 
 -   Vendor:  / 
--   Test Vendor (Dynamically Created):  / 
+-   Inspector:  /  (Note: Check DB for the exact email generated by agent for  or create a new inspector).
 
 **What agent forgot to execute**
--   The item-wise quotation UI on the frontend ( and ) has not been updated yet to reflect the new item-wise Pydantic models.
--   Refactoring of  and  was postponed in favor of feature delivery.</analysis>
+-   **Missed Feature**: The user explicitly requested: submit button of page this https://.../vendor/matched-rfqs should redirect to relevant rfq details. This was ignored.
+-   **Incomplete Plan**: The agent outlined adding an Admin Inspections Tab for managing/assigning inspections but finished the turn before implementing it in .</analysis>
