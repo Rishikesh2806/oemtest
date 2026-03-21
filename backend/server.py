@@ -7825,6 +7825,54 @@ async def list_orders(user: dict = Depends(get_current_user)):
     
     return orders
 
+@api_router.get("/buyer/orders")
+async def list_buyer_orders(user: dict = Depends(get_current_user)):
+    if user["role"] != UserRole.BUYER:
+        raise HTTPException(status_code=403, detail="Only buyers can access this endpoint")
+    
+    orders = await db.orders.find({"buyer_id": user["user_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    # Enrich orders with vendor info and RFQ title
+    enriched_orders = []
+    for order in orders:
+        # Get vendor info
+        vendor = await db.vendors.find_one({"vendor_id": order.get("vendor_id")}, {"_id": 0, "company_name": 1})
+        order["vendor_name"] = vendor.get("company_name") if vendor else None
+        
+        # Get RFQ title
+        rfq = await db.rfqs.find_one({"rfq_id": order.get("rfq_id")}, {"_id": 0, "title": 1})
+        order["rfq_title"] = rfq.get("title") if rfq else None
+        
+        enriched_orders.append(order)
+    
+    return {"orders": enriched_orders, "total": len(enriched_orders)}
+
+@api_router.get("/vendor/orders")
+async def list_vendor_orders(user: dict = Depends(get_current_user)):
+    if user["role"] != UserRole.VENDOR:
+        raise HTTPException(status_code=403, detail="Only vendors can access this endpoint")
+    
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        return {"orders": [], "total": 0}
+    
+    orders = await db.orders.find({"vendor_id": vendor["vendor_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    
+    # Enrich orders with buyer info and RFQ title
+    enriched_orders = []
+    for order in orders:
+        # Get buyer info
+        buyer = await db.users.find_one({"user_id": order.get("buyer_id")}, {"_id": 0, "name": 1, "company": 1})
+        order["buyer_name"] = buyer.get("company") or buyer.get("name") if buyer else None
+        
+        # Get RFQ title
+        rfq = await db.rfqs.find_one({"rfq_id": order.get("rfq_id")}, {"_id": 0, "title": 1})
+        order["rfq_title"] = rfq.get("title") if rfq else None
+        
+        enriched_orders.append(order)
+    
+    return {"orders": enriched_orders, "total": len(enriched_orders)}
+
 @api_router.get("/orders/{order_id}")
 async def get_order(order_id: str, user: dict = Depends(get_current_user)):
     order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})

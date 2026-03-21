@@ -27,12 +27,14 @@ const ALL_NAV_ITEMS = {
   buyer_dashboard: { path: "/buyer/dashboard", label: "Dashboard", icon: LayoutDashboard, permissions: [] },
   my_rfqs: { path: "/buyer/rfqs", label: "My RFQs", icon: FileText, permissions: ['rfqs.view'] },
   received_quotes: { path: "/buyer/quotes", label: "Received Quotes", icon: DollarSign, permissions: ['quotes.view'] },
+  buyer_orders: { path: "/buyer/orders", label: "Orders", icon: Package, permissions: ['orders.view'] },
   new_rfq: { path: "/buyer/rfq/new", label: "New RFQ", icon: FileText, permissions: ['rfqs.create'] },
   buyer_profile: { path: "/buyer/profile", label: "My Profile", icon: User, permissions: [] },
   
   // Vendor items
   vendor_dashboard: { path: "/vendor/dashboard", label: "Dashboard", icon: LayoutDashboard, permissions: [] },
   matched_rfqs: { path: "/vendor/matched-rfqs", label: "Matched RFQs", icon: FileText, permissions: ['rfqs.view'] },
+  vendor_orders: { path: "/vendor/orders", label: "Orders", icon: Package, permissions: ['orders.view'] },
   vendor_profile: { path: "/vendor/profile", label: "Company Profile", icon: Building2, permissions: [] },
   machines: { path: "/vendor/machines", label: "Machines", icon: Wrench, permissions: [] },
   vendor_quotes: { path: "/vendor/quotes", label: "My Quotes", icon: DollarSign, permissions: ['quotes.view'] },
@@ -52,8 +54,8 @@ const ALL_NAV_ITEMS = {
 
 // Define nav configurations for each role type
 const ROLE_NAV_CONFIGS = {
-  buyer: ['buyer_dashboard', 'my_rfqs', 'received_quotes', 'new_rfq', 'disputes', 'buyer_profile', 'messages'],
-  vendor: ['vendor_dashboard', 'matched_rfqs', 'vendor_profile', 'machines', 'vendor_quotes', 'disputes', 'messages'],
+  buyer: ['buyer_dashboard', 'my_rfqs', 'received_quotes', 'buyer_orders', 'new_rfq', 'disputes', 'buyer_profile', 'messages'],
+  vendor: ['vendor_dashboard', 'matched_rfqs', 'vendor_orders', 'vendor_profile', 'machines', 'vendor_quotes', 'disputes', 'messages'],
   admin: ['admin_dashboard', 'analytics', 'whatsapp', 'whatsapp_logs', 'roles', 'file_manager', 'disputes'],
   // Staff roles - admin-focused menu without buyer/vendor specific items
   staff: ['admin_dashboard', 'analytics', 'whatsapp', 'whatsapp_logs', 'roles', 'file_manager', 'disputes', 'messages'],

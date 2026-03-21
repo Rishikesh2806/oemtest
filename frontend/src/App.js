@@ -15,8 +15,10 @@ import BuyerDashboard from "./pages/BuyerDashboard";
 import BuyerRFQList from "./pages/BuyerRFQList";
 import BuyerQuotes from "./pages/BuyerQuotes";
 import BuyerProfile from "./pages/BuyerProfile";
+import BuyerOrders from "./pages/BuyerOrders";
 import VendorDashboard from "./pages/VendorDashboard";
 import VendorMatchedRFQs from "./pages/VendorMatchedRFQs";
+import VendorOrders from "./pages/VendorOrders";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminAnalytics from "./pages/AdminAnalytics";
 import WhatsAppAdmin from "./pages/WhatsAppAdmin";
@@ -294,6 +296,11 @@ const AppRouter = () => {
           <BuyerProfile />
         </ProtectedRoute>
       } />
+      <Route path="/buyer/orders" element={
+        <ProtectedRoute allowedRoles={["buyer", "staff"]}>
+          <BuyerOrders />
+        </ProtectedRoute>
+      } />
       <Route path="/buyer/rfq/new" element={
         <ProtectedRoute allowedRoles={["buyer", "staff"]}>
           <CreateRFQ />
@@ -324,6 +331,11 @@ const AppRouter = () => {
       <Route path="/vendor/matched-rfqs" element={
         <ProtectedRoute allowedRoles={["vendor"]}>
           <VendorMatchedRFQs />
+        </ProtectedRoute>
+      } />
+      <Route path="/vendor/orders" element={
+        <ProtectedRoute allowedRoles={["vendor"]}>
+          <VendorOrders />
         </ProtectedRoute>
       } />
       <Route path="/vendor/machines" element={

@@ -376,6 +376,10 @@ Comprehensive platform analytics for business tracking:
   - Dynamic pricing configuration
 - VendorMatchedRFQs "Submit Quote" button redirect fix ✓ (Mar 21, 2026)
   - Now redirects to /vendor/rfq/{rfq_id} for full RFQ details before quoting
+- Orders menu added to Buyer and Vendor sidebars ✓ (Mar 21, 2026)
+  - Created BuyerOrders.jsx and VendorOrders.jsx pages
+  - Added /buyer/orders and /vendor/orders routes
+  - Added backend APIs for enriched order lists
 
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check
