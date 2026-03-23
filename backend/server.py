@@ -1070,6 +1070,9 @@ class RFQCreate(BaseModel):
     incoterms: Optional[str] = Incoterms.EXW
     preferred_vendor_countries: Optional[List[str]] = None  # List of preferred countries
     preferred_vendor_cities: Optional[List[str]] = None  # List of preferred cities
+    # NDA enforcement
+    require_nda: bool = False  # If True, vendors must accept NDA before viewing drawings
+    nda_id: Optional[str] = None  # Custom NDA template ID (uses default if not specified)
 
 class Drawing(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -1367,6 +1370,41 @@ class InspectionPricing(BaseModel):
     description: Optional[str] = None
     created_at: str
     updated_at: str
+
+
+# ============== NDA SYSTEM ==============
+
+class NDATemplate(BaseModel):
+    nda_id: str
+    title: str
+    content: str  # HTML content
+    version: str = "1.0"
+    is_default: bool = False
+    is_active: bool = True
+    created_by: str
+    created_at: str
+    updated_at: str
+
+class NDAAcceptance(BaseModel):
+    acceptance_id: str
+    vendor_id: str
+    rfq_id: str
+    nda_id: str
+    nda_version: str
+    vendor_name: str
+    vendor_email: str
+    accepted_at: str
+    ip_address: str
+    user_agent: str
+
+class NDAAcceptRequest(BaseModel):
+    agree_checkbox: bool = True  # Must be True to accept
+
+class NDACreateRequest(BaseModel):
+    title: str
+    content: str
+    version: str = "1.0"
+    is_default: bool = False
 
 
 # ============== AUTH HELPERS ==============
@@ -3246,7 +3284,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://oemlinker-preview-1.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://nda-enforcement.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -4251,6 +4289,351 @@ async def update_rfq(rfq_id: str, rfq: RFQCreate, user: dict = Depends(get_curre
     updated = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
     return updated
 
+
+# ============== NDA SYSTEM ROUTES ==============
+
+@api_router.get("/nda/templates")
+async def list_nda_templates(user: dict = Depends(get_current_user)):
+    """List all NDA templates (admin/buyer)"""
+    if user["role"] not in [UserRole.ADMIN, UserRole.BUYER]:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    templates = await db.nda_templates.find({"is_active": True}, {"_id": 0}).to_list(100)
+    return {"templates": templates, "total": len(templates)}
+
+
+@api_router.post("/nda/templates")
+async def create_nda_template(request: NDACreateRequest, user: dict = Depends(get_current_user)):
+    """Create NDA template (admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can create NDA templates")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    nda_id = f"nda_{uuid.uuid4().hex[:12]}"
+    
+    # If setting as default, unset other defaults
+    if request.is_default:
+        await db.nda_templates.update_many(
+            {"is_default": True},
+            {"$set": {"is_default": False}}
+        )
+    
+    template = {
+        "nda_id": nda_id,
+        "title": request.title,
+        "content": request.content,
+        "version": request.version,
+        "is_default": request.is_default,
+        "is_active": True,
+        "created_by": user["user_id"],
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.nda_templates.insert_one(template)
+    template.pop("_id", None)
+    
+    logger.info(f"NDA template created: {nda_id} by {user['email']}")
+    return {"success": True, "nda_id": nda_id, "template": template}
+
+
+@api_router.put("/nda/templates/{nda_id}")
+async def update_nda_template(nda_id: str, request: NDACreateRequest, user: dict = Depends(get_current_user)):
+    """Update NDA template (admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can update NDA templates")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # If setting as default, unset other defaults
+    if request.is_default:
+        await db.nda_templates.update_many(
+            {"is_default": True, "nda_id": {"$ne": nda_id}},
+            {"$set": {"is_default": False}}
+        )
+    
+    result = await db.nda_templates.update_one(
+        {"nda_id": nda_id},
+        {"$set": {
+            "title": request.title,
+            "content": request.content,
+            "version": request.version,
+            "is_default": request.is_default,
+            "updated_at": now
+        }}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="NDA template not found")
+    
+    return {"success": True, "message": "Template updated"}
+
+
+@api_router.delete("/nda/templates/{nda_id}")
+async def delete_nda_template(nda_id: str, user: dict = Depends(get_current_user)):
+    """Soft delete NDA template (admin only)"""
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can delete NDA templates")
+    
+    result = await db.nda_templates.update_one(
+        {"nda_id": nda_id},
+        {"$set": {"is_active": False, "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="NDA template not found")
+    
+    return {"success": True, "message": "Template deleted"}
+
+
+@api_router.get("/nda/default")
+async def get_default_nda(user: dict = Depends(get_current_user)):
+    """Get default NDA template"""
+    template = await db.nda_templates.find_one({"is_default": True, "is_active": True}, {"_id": 0})
+    if not template:
+        # Return a basic default NDA if none configured
+        template = {
+            "nda_id": "default",
+            "title": "Non-Disclosure Agreement",
+            "content": """<h2>Non-Disclosure Agreement</h2>
+<p>By accepting this agreement, you ("Receiving Party") agree to the following terms:</p>
+<ol>
+<li><strong>Confidential Information:</strong> All drawings, specifications, technical data, and business information shared through this platform are considered confidential.</li>
+<li><strong>Non-Disclosure:</strong> You agree not to disclose, share, or distribute any confidential information to third parties without prior written consent from the disclosing party.</li>
+<li><strong>Use Restriction:</strong> Confidential information shall only be used for the purpose of evaluating and responding to the Request for Quotation (RFQ).</li>
+<li><strong>No Copying:</strong> You shall not copy, reproduce, or store confidential information except as necessary for the permitted purpose.</li>
+<li><strong>Return/Destruction:</strong> Upon request or completion of the RFQ process, you agree to return or destroy all confidential materials.</li>
+<li><strong>Duration:</strong> This agreement remains in effect for 3 years from the date of acceptance.</li>
+<li><strong>Legal Compliance:</strong> You acknowledge that breach of this agreement may result in legal action and liability for damages.</li>
+</ol>
+<p><strong>By checking "I Agree" below, you confirm that you have read, understood, and agree to be bound by the terms of this Non-Disclosure Agreement.</strong></p>""",
+            "version": "1.0",
+            "is_default": True
+        }
+    return {"template": template}
+
+
+@api_router.get("/rfqs/{rfq_id}/nda")
+async def get_rfq_nda(rfq_id: str, user: dict = Depends(get_current_user)):
+    """Get NDA for an RFQ"""
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0, "require_nda": 1, "nda_id": 1, "buyer_id": 1})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Check if NDA is required
+    if not rfq.get("require_nda", False):
+        return {"nda_required": False}
+    
+    # Get vendor info if vendor role
+    vendor_id = None
+    if user["role"] == UserRole.VENDOR:
+        vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0, "vendor_id": 1})
+        if vendor:
+            vendor_id = vendor["vendor_id"]
+    
+    # Check if already accepted
+    has_accepted = False
+    acceptance = None
+    if vendor_id:
+        acceptance = await db.nda_acceptances.find_one(
+            {"rfq_id": rfq_id, "vendor_id": vendor_id},
+            {"_id": 0}
+        )
+        has_accepted = acceptance is not None
+    
+    # Get NDA template (custom for RFQ or default)
+    nda_id = rfq.get("nda_id")
+    if nda_id:
+        template = await db.nda_templates.find_one({"nda_id": nda_id, "is_active": True}, {"_id": 0})
+    else:
+        template = await db.nda_templates.find_one({"is_default": True, "is_active": True}, {"_id": 0})
+    
+    # Use hardcoded default if no template found
+    if not template:
+        default_response = await get_default_nda(user)
+        template = default_response["template"]
+    
+    return {
+        "nda_required": True,
+        "has_accepted": has_accepted,
+        "acceptance": acceptance,
+        "template": template
+    }
+
+
+@api_router.post("/rfqs/{rfq_id}/accept-nda")
+async def accept_rfq_nda(rfq_id: str, request: Request, body: NDAAcceptRequest, user: dict = Depends(get_current_user)):
+    """Vendor accepts NDA for an RFQ"""
+    if not body.agree_checkbox:
+        raise HTTPException(status_code=400, detail="You must agree to the NDA terms")
+    
+    # Get vendor info - validate user is a vendor (either by role or has vendor profile)
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0, "vendor_id": 1, "company_name": 1})
+    if not vendor:
+        raise HTTPException(status_code=403, detail="Only vendors can accept NDAs")
+    
+    # Check RFQ exists and requires NDA
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0, "require_nda": 1, "nda_id": 1, "buyer_id": 1, "title": 1})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    if not rfq.get("require_nda", False):
+        return {"success": True, "message": "NDA not required for this RFQ"}
+    
+    # Check if already accepted
+    existing = await db.nda_acceptances.find_one({"rfq_id": rfq_id, "vendor_id": vendor["vendor_id"]})
+    if existing:
+        return {"success": True, "message": "NDA already accepted", "already_accepted": True}
+    
+    # Get NDA template for version tracking
+    nda_id = rfq.get("nda_id")
+    if nda_id:
+        template = await db.nda_templates.find_one({"nda_id": nda_id}, {"_id": 0, "nda_id": 1, "version": 1})
+    else:
+        template = await db.nda_templates.find_one({"is_default": True}, {"_id": 0, "nda_id": 1, "version": 1})
+    
+    nda_id = template["nda_id"] if template else "default"
+    nda_version = template["version"] if template else "1.0"
+    
+    now = datetime.now(timezone.utc).isoformat()
+    
+    # Get client info for audit
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+    
+    acceptance = {
+        "acceptance_id": f"nda_acc_{uuid.uuid4().hex[:12]}",
+        "vendor_id": vendor["vendor_id"],
+        "rfq_id": rfq_id,
+        "nda_id": nda_id,
+        "nda_version": nda_version,
+        "vendor_name": vendor.get("company_name", user.get("name", "")),
+        "vendor_email": user.get("email", ""),
+        "accepted_at": now,
+        "ip_address": client_ip,
+        "user_agent": user_agent[:500]  # Limit length
+    }
+    
+    await db.nda_acceptances.insert_one(acceptance)
+    
+    logger.info(f"NDA accepted for RFQ {rfq_id} by vendor {vendor['vendor_id']}")
+    
+    # Notify buyer (optional)
+    buyer = await db.users.find_one({"user_id": rfq.get("buyer_id")}, {"_id": 0, "user_id": 1})
+    if buyer:
+        await create_notification(
+            user_id=buyer["user_id"],
+            notification_type="nda_accepted",
+            title="NDA Accepted",
+            message=f"{vendor.get('company_name', 'A vendor')} has accepted the NDA for your RFQ: {rfq.get('title', rfq_id)}",
+            data={"rfq_id": rfq_id, "vendor_id": vendor["vendor_id"]}
+        )
+    
+    return {"success": True, "message": "NDA accepted successfully", "acceptance_id": acceptance["acceptance_id"]}
+
+
+@api_router.get("/rfqs/{rfq_id}/nda-acceptances")
+async def get_rfq_nda_acceptances(rfq_id: str, user: dict = Depends(get_current_user)):
+    """Get list of vendors who accepted NDA (buyer/admin only)"""
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0, "buyer_id": 1})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Check authorization
+    is_buyer = rfq.get("buyer_id") == user["user_id"]
+    is_admin = user["role"] == UserRole.ADMIN
+    
+    if not (is_buyer or is_admin):
+        raise HTTPException(status_code=403, detail="Permission denied")
+    
+    acceptances = await db.nda_acceptances.find({"rfq_id": rfq_id}, {"_id": 0}).to_list(100)
+    
+    return {"acceptances": acceptances, "total": len(acceptances)}
+
+
+@api_router.get("/rfqs/{rfq_id}/files")
+async def get_rfq_files(rfq_id: str, user: dict = Depends(get_current_user)):
+    """Get RFQ files with NDA validation"""
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Check if user is buyer or admin (always allowed)
+    is_buyer = rfq.get("buyer_id") == user["user_id"]
+    is_admin = user["role"] == UserRole.ADMIN
+    
+    if is_buyer or is_admin:
+        # Return files directly
+        drawings = rfq.get("drawings", [])
+        return {"files": drawings, "nda_required": rfq.get("require_nda", False), "nda_accepted": True}
+    
+    # For vendors, check NDA
+    if user["role"] == UserRole.VENDOR:
+        vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0, "vendor_id": 1})
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor profile not found")
+        
+        # Check if NDA is required
+        if rfq.get("require_nda", False):
+            # Check if vendor has accepted NDA
+            acceptance = await db.nda_acceptances.find_one({
+                "rfq_id": rfq_id, 
+                "vendor_id": vendor["vendor_id"]
+            })
+            
+            if not acceptance:
+                return {
+                    "files": [],
+                    "nda_required": True,
+                    "nda_accepted": False,
+                    "message": "You must accept the NDA before accessing files"
+                }
+        
+        # NDA accepted or not required - return files
+        drawings = rfq.get("drawings", [])
+        return {"files": drawings, "nda_required": rfq.get("require_nda", False), "nda_accepted": True}
+    
+    raise HTTPException(status_code=403, detail="Permission denied")
+
+
+@api_router.get("/rfqs/{rfq_id}/drawing/{file_key:path}")
+async def get_protected_drawing(rfq_id: str, file_key: str, user: dict = Depends(get_current_user)):
+    """Get protected drawing file with NDA validation"""
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Check authorization
+    is_buyer = rfq.get("buyer_id") == user["user_id"]
+    is_admin = user["role"] == UserRole.ADMIN
+    
+    if not (is_buyer or is_admin):
+        # For vendors, check NDA
+        if user["role"] == UserRole.VENDOR:
+            vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0, "vendor_id": 1})
+            if not vendor:
+                raise HTTPException(status_code=404, detail="Vendor profile not found")
+            
+            if rfq.get("require_nda", False):
+                acceptance = await db.nda_acceptances.find_one({
+                    "rfq_id": rfq_id,
+                    "vendor_id": vendor["vendor_id"]
+                })
+                if not acceptance:
+                    raise HTTPException(status_code=403, detail="NDA acceptance required to access this file")
+        else:
+            raise HTTPException(status_code=403, detail="Permission denied")
+    
+    # Generate presigned URL for the file
+    try:
+        from app.services.s3_storage_service import s3_storage
+        presigned_url = s3_storage.generate_presigned_url(file_key, expiration=3600)  # 1 hour
+        return {"url": presigned_url, "expires_in": 3600}
+    except Exception as e:
+        logger.error(f"Failed to generate presigned URL: {e}")
+        raise HTTPException(status_code=500, detail="Failed to access file")
+
+
 # ============== DRAWING UPLOAD & AI ANALYSIS ==============
 
 @api_router.post("/rfqs/{rfq_id}/drawings")
@@ -4348,9 +4731,10 @@ async def view_drawing(drawing_id: str, token: Optional[str] = None, request: Re
     if not auth_token:
         raise HTTPException(status_code=401, detail="Authentication required")
     
+    user_payload = None
     if not is_wa_access:
         try:
-            payload = jwt.decode(auth_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_payload = jwt.decode(auth_token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         except jwt.ExpiredSignatureError:
             raise HTTPException(status_code=401, detail="Token expired")
         except jwt.InvalidTokenError:
@@ -4359,6 +4743,38 @@ async def view_drawing(drawing_id: str, token: Optional[str] = None, request: Re
     drawing = await db.drawings.find_one({"drawing_id": drawing_id}, {"_id": 0})
     if not drawing:
         raise HTTPException(status_code=404, detail="Drawing not found")
+    
+    # === NDA ENFORCEMENT CHECK ===
+    # Skip NDA check for WhatsApp temp access, admins, staff, and buyers (owner of RFQ)
+    if not is_wa_access and user_payload:
+        user_role = user_payload.get("role", "")
+        user_id = user_payload.get("user_id", "")
+        
+        # Skip NDA for admin/staff
+        if user_role not in ["admin", "staff"]:
+            rfq_id = drawing.get("rfq_id")
+            if rfq_id:
+                rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0, "require_nda": 1, "buyer_id": 1})
+                if rfq:
+                    # Skip NDA for the buyer who owns the RFQ
+                    if rfq.get("buyer_id") != user_id and rfq.get("require_nda", False):
+                        # Check if user has a vendor profile (handles both role="vendor" and empty role with vendor profile)
+                        vendor = await db.vendors.find_one({"user_id": user_id}, {"_id": 0, "vendor_id": 1})
+                        if vendor:
+                            # User is a vendor - check NDA acceptance
+                            acceptance = await db.nda_acceptances.find_one({
+                                "rfq_id": rfq_id, 
+                                "vendor_id": vendor["vendor_id"]
+                            })
+                            if not acceptance:
+                                raise HTTPException(
+                                    status_code=403, 
+                                    detail="NDA acceptance required before viewing this drawing"
+                                )
+                        else:
+                            # Not a vendor and not the buyer - deny access to protected drawing
+                            raise HTTPException(status_code=403, detail="Access denied to NDA-protected drawing")
+    # === END NDA CHECK ===
     
     # Check for S3 storage (new drawings)
     s3_url = drawing.get("s3_url")
@@ -4434,6 +4850,36 @@ async def download_drawing(drawing_id: str, user: dict = Depends(get_current_use
     drawing = await db.drawings.find_one({"drawing_id": drawing_id}, {"_id": 0})
     if not drawing:
         raise HTTPException(status_code=404, detail="Drawing not found")
+    
+    # === NDA ENFORCEMENT CHECK ===
+    user_role = user.get("role", "")
+    user_id = user.get("user_id", "")
+    
+    # Skip NDA for admin/staff
+    if user_role not in ["admin", "staff"]:
+        rfq_id = drawing.get("rfq_id")
+        if rfq_id:
+            rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0, "require_nda": 1, "buyer_id": 1})
+            if rfq:
+                # Skip NDA for the buyer who owns the RFQ
+                if rfq.get("buyer_id") != user_id and rfq.get("require_nda", False):
+                    # Check if user has a vendor profile (handles both role="vendor" and empty role with vendor profile)
+                    vendor = await db.vendors.find_one({"user_id": user_id}, {"_id": 0, "vendor_id": 1})
+                    if vendor:
+                        # User is a vendor - check NDA acceptance
+                        acceptance = await db.nda_acceptances.find_one({
+                            "rfq_id": rfq_id, 
+                            "vendor_id": vendor["vendor_id"]
+                        })
+                        if not acceptance:
+                            raise HTTPException(
+                                status_code=403, 
+                                detail="NDA acceptance required before downloading this drawing"
+                            )
+                    else:
+                        # Not a vendor and not the buyer - deny access to protected drawing
+                        raise HTTPException(status_code=403, detail="Access denied to NDA-protected drawing")
+    # === END NDA CHECK ===
     
     filename = drawing.get("filename", "drawing.pdf")
     
@@ -5118,7 +5564,7 @@ async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list
     from app.services.whatsapp_service import send_image_message
     
     # Use the actual deployed URL
-    BASE_URL = os.environ.get("APP_URL", "https://oemlinker-preview-1.preview.emergentagent.com")
+    BASE_URL = os.environ.get("APP_URL", "https://nda-enforcement.preview.emergentagent.com")
     
     # Small delay to let template message send first
     await asyncio.sleep(2)
@@ -6168,7 +6614,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://oemlinker-preview-1.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://nda-enforcement.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -7174,7 +7620,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://oemlinker-preview-1.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://nda-enforcement.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -7436,7 +7882,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://oemlinker-preview-1.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://nda-enforcement.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -7729,7 +8175,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://oemlinker-preview-1.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://nda-enforcement.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -7918,7 +8364,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://oemlinker-preview-1.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://nda-enforcement.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(
@@ -12783,26 +13229,17 @@ async def get_order_inspection(order_id: str, user: dict = Depends(get_current_u
 
 @api_router.post("/admin/orders/{order_id}/assign-inspector")
 async def assign_inspector(order_id: str, request: Request, user: dict = Depends(get_current_user)):
-    """Admin or authorized vendor assigns an inspector to an inspection request"""
-    # Check permissions - Admin, RBAC permission, or vendor who owns the order
+    """Admin assigns an inspector to an inspection request"""
+    # Check permissions - Admin or RBAC permission only (vendors cannot assign)
     is_admin = user["role"] == UserRole.ADMIN
     has_rbac_permission = False
-    is_order_vendor = False
     
     if not is_admin:
         from app.services.rbac_service import rbac_service
         has_rbac_permission = await rbac_service.check_permission(user["user_id"], "inspections.assign")
     
-    # Check if user is the vendor for this order
-    if user["role"] == UserRole.VENDOR:
-        vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0, "vendor_id": 1})
-        if vendor:
-            order = await db.orders.find_one({"order_id": order_id}, {"_id": 0, "vendor_id": 1})
-            if order and order.get("vendor_id") == vendor.get("vendor_id"):
-                is_order_vendor = True
-    
-    if not (is_admin or has_rbac_permission or is_order_vendor):
-        raise HTTPException(status_code=403, detail="Permission denied. Only admin, authorized staff, or the order vendor can assign inspectors.")
+    if not (is_admin or has_rbac_permission):
+        raise HTTPException(status_code=403, detail="Permission denied. Only admin or authorized staff can assign inspectors.")
     
     inspection = await db.inspections.find_one({"order_id": order_id}, {"_id": 0})
     if not inspection:
@@ -12921,14 +13358,14 @@ async def assign_inspector(order_id: str, request: Request, user: dict = Depends
         }
 
 
-@api_router.post("/vendor/orders/{order_id}/assign-inspector")
-async def vendor_assign_inspector(order_id: str, request: Request, user: dict = Depends(get_current_user)):
-    """Vendor assigns an inspector to an inspection request for their order"""
+@api_router.post("/vendor/orders/{order_id}/schedule-inspection")
+async def vendor_schedule_inspection(order_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Vendor schedules an inspection for their order"""
     if user["role"] != UserRole.VENDOR:
         raise HTTPException(status_code=403, detail="Only vendors can use this endpoint")
     
     # Verify vendor owns this order
-    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0, "vendor_id": 1})
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0, "vendor_id": 1, "company_name": 1})
     if not vendor:
         raise HTTPException(status_code=404, detail="Vendor profile not found")
     
@@ -12937,10 +13374,60 @@ async def vendor_assign_inspector(order_id: str, request: Request, user: dict = 
         raise HTTPException(status_code=404, detail="Order not found")
     
     if order.get("vendor_id") != vendor.get("vendor_id"):
-        raise HTTPException(status_code=403, detail="You can only assign inspectors to your own orders")
+        raise HTTPException(status_code=403, detail="You can only schedule inspections for your own orders")
     
-    # Delegate to the main assign_inspector function
-    return await assign_inspector(order_id, request, user)
+    # Get inspection
+    inspection = await db.inspections.find_one({"order_id": order_id}, {"_id": 0})
+    if not inspection:
+        raise HTTPException(status_code=404, detail="No inspection request found for this order")
+    
+    # Only allow scheduling for awaiting_assignment or payment_completed status
+    allowed_statuses = [InspectionStatus.AWAITING_ASSIGNMENT, InspectionStatus.PAYMENT_COMPLETED, InspectionStatus.RE_INSPECTION_REQUESTED]
+    if inspection.get("status") not in allowed_statuses:
+        raise HTTPException(status_code=400, detail=f"Cannot schedule inspection in current status: {inspection.get('status')}")
+    
+    data = await request.json()
+    scheduled_date = data.get("scheduled_date")
+    scheduled_time = data.get("scheduled_time")
+    vendor_notes = data.get("vendor_notes", "")
+    
+    if not scheduled_date:
+        raise HTTPException(status_code=400, detail="Scheduled date is required")
+    
+    now = datetime.now(timezone.utc)
+    
+    update_data = {
+        "scheduled_date": scheduled_date,
+        "scheduled_time": scheduled_time,
+        "vendor_notes": vendor_notes,
+        "scheduled_by": user["user_id"],
+        "scheduled_at": now.isoformat(),
+        "updated_at": now.isoformat()
+    }
+    
+    # Add status history entry
+    status_entry = {
+        "status": "scheduled",
+        "timestamp": now.isoformat(),
+        "note": f"Inspection scheduled by vendor for {scheduled_date}" + (f" at {scheduled_time}" if scheduled_time else "")
+    }
+    
+    await db.inspections.update_one(
+        {"order_id": order_id},
+        {
+            "$set": update_data,
+            "$push": {"status_history": status_entry}
+        }
+    )
+    
+    logger.info(f"Inspection scheduled for order {order_id} by vendor {vendor.get('company_name')}")
+    
+    return {
+        "success": True,
+        "message": "Inspection scheduled successfully",
+        "scheduled_date": scheduled_date,
+        "scheduled_time": scheduled_time
+    }
 
 
 @api_router.get("/vendor/inspectors")

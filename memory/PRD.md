@@ -386,6 +386,12 @@ Comprehensive platform analytics for business tracking:
   - Added /vendor/inspectors API to list available inspectors
   - Updated InspectionStatusCard with vendor assign inspector modal
   - Fixed inspection authorization for vendors
+- Vendor Inspection Scheduling (REPLACED inspector assignment) ✓ (Mar 21, 2026)
+  - Vendors can schedule inspection date/time for buyer-requested inspections
+  - Vendors CANNOT assign inspectors (admin-only)
+  - Added /vendor/orders/{order_id}/schedule-inspection API
+  - Vendor can add notes for inspector (access details, contact info)
+  - Inspection assignment remains admin-only
 
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check

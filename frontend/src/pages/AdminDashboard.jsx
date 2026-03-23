@@ -6,6 +6,7 @@ import DashboardLayout from "../components/layout/DashboardLayout";
 import PermittedActions from "../components/PermittedActions";
 import QuotationComparison from "../components/QuotationComparison";
 import InspectionsTab from "../components/admin/InspectionsTab";
+import NDATemplatesTab from "../components/admin/NDATemplatesTab";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -33,7 +34,7 @@ const TAB_CONFIG = {
   orders: { label: "Orders", icon: Package, permissions: ['orders.view'] },
   inspections: { label: "Inspections", icon: Shield, permissions: ['inspections.view'] },
   drawings: { label: "Drawings", icon: FileCheck, permissions: ['rfqs.view'] },
-  ndas: { label: "NDAs", icon: FileText, permissions: ['rfqs.view'] },
+  nda_templates: { label: "NDA Templates", icon: Shield, permissions: ['rfqs.view'] },
 };
 
 // Tab components
@@ -4120,7 +4121,7 @@ const AdminDashboard = () => {
     if (activeTab === "quotes" && quotes.length === 0) fetchQuotes();
     if (activeTab === "orders" && orders.length === 0) fetchOrders();
     if (activeTab === "drawings" && drawings.length === 0) fetchDrawings();
-    if (activeTab === "ndas") {
+    if (activeTab === "nda_templates") {
       fetchNDAs();
       if (users.length === 0) fetchUsers();
       if (vendors.length === 0) fetchVendors();
@@ -4430,13 +4431,12 @@ const AdminDashboard = () => {
                 label="Drawings"
               />
             )}
-            {permittedTabs.includes('ndas') && (
+            {permittedTabs.includes('nda_templates') && (
               <TabButton 
-                active={activeTab === "ndas"} 
-                onClick={() => handleTabChange("ndas")} 
-                icon={FileCheck} 
-                label="NDAs"
-                count={stats?.total_ndas}
+                active={activeTab === "nda_templates"} 
+                onClick={() => handleTabChange("nda_templates")} 
+                icon={Shield} 
+                label="NDA Templates"
               />
             )}
           </div>
@@ -4544,18 +4544,8 @@ const AdminDashboard = () => {
             onDeleteDrawing={deleteDrawing}
           />
         )}
-        {activeTab === "ndas" && permittedTabs.includes('ndas') && (
-          <NDAsTab 
-            ndas={ndas}
-            users={users}
-            vendors={vendors}
-            loading={loading}
-            onRefresh={fetchNDAs}
-            onCreateNDA={createNDA}
-            onUpdateNDA={updateNDA}
-            onSendNDA={sendNDA}
-            onDeleteNDA={deleteNDA}
-          />
+        {activeTab === "nda_templates" && permittedTabs.includes('nda_templates') && (
+          <NDATemplatesTab />
         )}
       </div>
     </DashboardLayout>

@@ -1,32 +1,32 @@
-<analysis>**original_problem_statement**: The user wants to build a full-stack web application called **OEMLinker**, an AI-driven on-demand manufacturing marketplace. Buyers upload RFQs with drawings; an AI engine analyzes them, and a matching algorithm connects buyers with vendors. The platform handles an RFQ-to-payment workflow, RBAC permissions, manual/AI vendor matching, advanced quotation systems (item-wise multi-part quoting, partial quoting), and a newly requested Hybrid Third-Party Inspection System (Local network + Certified Agencies).
+<analysis>**original_problem_statement**: The user wants to build a full-stack web application called **OEMLinker**, an AI-driven on-demand manufacturing marketplace. Buyers upload RFQs with drawings; an AI engine analyzes them, and a matching algorithm connects buyers with vendors. The platform handles an RFQ-to-payment workflow, RBAC permissions, manual/AI vendor matching, advanced quotation systems, a Hybrid Third-Party Inspection System, and IP Protection via NDA enforcement.
 
 **PRODUCT REQUIREMENTS:**
 -   **User Roles:** Buyer, Vendor, Admin, Staff, Inspector (Managed via RBAC).
--   **AI Core & Matching:** AI analyzes RFQ processes and auto-matches or manually matches vendors.
 -   **Workflow:** RFQ -> Matching -> Quotation -> Comparison -> Order -> Inspection -> Payment.
 -   **Quotation System:** Item-wise (per-drawing) quoting and partial quoting.
--   **Inspection System:** Buyers can request Basic (Platform Inspector) or Certified (External Agency) inspections, with an Inspector Dashboard for report uploads and Admin oversight.
+-   **Inspection System:** Buyers request inspections -> Vendors schedule date/time -> Admins assign Inspectors -> Inspectors submit reports.
+-   **NDA Enforcement:** Buyers can enforce NDAs on RFQs. Vendors must accept the NDA (tracking IP, user agent, timestamp) before viewing or downloading drawings. Admins can manage NDA templates.
 
 **User's preferred language**: INSTRUCT next agent to respond in English.
 
-**what currently exists?**
-OEMLinker is a React/FastAPI/MongoDB application with RBAC and AWS S3 file storage. It has an advanced multi-part quotation system allowing item-wise and partial quoting per drawing. The backend is a massive monolith ( ~17k lines). Recently, backend logic and frontend components for a Hybrid Third-Party Inspection System were added. The backend API for this inspection system has been successfully verified via curl, but frontend verification got interrupted.
+**what currently exists?** 
+OEMLinker is a React/FastAPI/MongoDB app with AWS S3 file storage. It has an advanced quoting system, a fully working Hybrid Third-Party Inspection system (including an Admin tab, Inspector dashboard, and Vendor scheduling), and newly added dedicated Order pages for buyers and vendors. The backend is a massive monolith ( ~18.5k lines). Currently, the agent is midway through implementing the NDA Enforcement feature for RFQ drawings.
 
 **Last working item**:
--   **Last item agent was working**: Verifying the UI flow for the Hybrid Third-Party Inspection System. The agent had just finished implementing backend inspection models, RBAC updates, and frontend components (, , ) and was using the screenshot tool to test logging in to view the  page.
+-   **Last item agent was working**: Implementing and verifying the UI for the Non-Disclosure Agreement (NDA) enforcement feature. The agent created the  for Admins and added the NDA requirement toggle in . The agent was using the screenshot tool to verify the RFQ creation UI.
 -   **Status**: IN PROGRESS
--   **Agent Testing Done**: N (Backend curl tests passed, but frontend screenshot testing was incomplete due to login selector timeouts).
--   **Which testing method agent to use?**: Frontend testing agent to verify the Inspector Dashboard and the Buyer's Order Detail inspection flow. 
+-   **Agent Testing Done**: N (Only partial screenshots of Admin and Buyer UI. Vendor flow and E2E not tested yet).
+-   **Which testing method agent to use?**: Frontend testing agent / Backend testing agent (to verify both the UI modal flow and the backend file access blockage).
 -   **User Testing Done**: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1**: Submit button on  missing redirect (Priority: P0)
-    -   **Attempted fixes**: None. User requested this in Message 162, but the agent overlooked it and proceeded directly to the partial quoting feature.
-    -   **Next debug checklist**: Check . Update the Submit Quote button's  or  wrapper to redirect the vendor to  instead of doing nothing or just opening a stale modal.
-    -   **Why fix this issue and what will be achieved with the fix?**: User explicitly requested it; improves vendor UX for viewing complex RFQ details before quoting.
+-   **Issue 1**: Backend API missing NDA authorization check for file viewing/downloading (Priority: P0)
+    -   **Attempted fixes**: The agent updated the frontend () to show a modal instead of opening the file if NDA isn't accepted, but failed to secure the backend API.
+    -   **Next debug checklist**: Check  specifically the  and download endpoints. They MUST validate if the RFQ requires an NDA and if the requesting vendor has accepted it ( collection) before returning the AWS S3 presigned URL.
+    -   **Why fix this issue and what will be achieved with the fix?**: Crucial for IP protection. Frontend-only checks can be bypassed, rendering the NDA feature useless. 
     -   **Status**: NOT STARTED
     -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?**: frontend
+    -   **Should Test frontend/backend/both after fix?**: backend
     -   **Blocked on other issue**: None
 
 -   **Issue 2**: Production Login Failure with Password (Priority: P2)
@@ -39,43 +39,39 @@ OEMLinker is a React/FastAPI/MongoDB application with RBAC and AWS S3 file stora
     -   **Blocked on other issue**: User deployment
 
 **In progress Task List**:
--   **Task 1: Hybrid Third-Party Inspection System - Frontend Verification & Admin Tab (Priority: P0)**
-    -   **Where to resume**: The backend APIs, models, and buyer/inspector UI components are created. The agent was interrupted during frontend screenshot testing. You need to: 
-        1. Verify the  page correctly displays the Request Inspection modal and status card.
-        2. Verify the  UI.
-        3. Build the missing Admin Inspections Tab to allow admins to view logs and manually assign inspectors/agencies (as planned but not yet executed).
-    -   **What will be achieved with this?**: Completes the end-to-end flow for the QA/Inspection system.
+-   **Task 1: Complete NDA Enforcement Feature (Priority: P0)**
+    -   **Where to resume**: The Admin NDA Templates and Buyer RFQ toggle are built. You need to: 
+        1. Ensure the  endpoint captures the user's IP Address and User Agent (as requested in the PRD).
+        2. Secure the backend drawing access endpoints.
+        3. Thoroughly test the Vendor flow: navigating to an NDA-protected RFQ -> clicking view drawing -> accepting the NDA modal -> successfully viewing the drawing.
+    -   **What will be achieved with this?**: Complete IP protection feature for buyers.
     -   **Status**: IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?**: frontend
+    -   **Should Test frontend/backend/both after fix?**: both
     -   **Blocked on something**: None
 
 **Upcoming and Future Tasks**
 Upcoming Tasks:
--   **Admin Inspections Tab (P0)**: Needs to be added to  for inspection oversight.
--   **server.py Refactoring (P1)**: Migrate authentication, vendor, RFQ, and admin routes into separate modules. (Monolith is highly fragile).
+-   **server.py Refactoring (P1)**: Migrate authentication, vendor, RFQ, and admin routes into separate modules. (Monolith is highly fragile, >18.5k lines).
 -   **Partial Quoting Auto-Award (P1)**: Feature to automatically assign partial orders to different vendors based on best price per item.
 -   **ElevenLabs Integration (P1)**: Voice agent integration.
--   **Drawing Protection/NDA (P1)**: Click-to-accept modal before vendors view/download S3 drawings.
--   **Stripe Integration (P1)**: Escrow payment system.
+-   **Stripe Integration (P1)**: Escrow payment system (Inspection payments are currently mocked).
 -   **WordPress Integration (P1)**: Content management integration.
 
 Future Tasks:
 -   Instant AI auto-quote for simple parts.
 -   API for ERP integration.
--   Capacity forecasting for vendors.
 
 **Completed work in this session**
--   Item-wise (Per Drawing) Vendor Quotation System (DONE)
--   Partial Quoting feature (Frontend checkboxes, backend  validation logic) (DONE)
--   Added , , and  fields to quotation data (DONE)
--   Hybrid Third-Party Inspection System Backend (APIs for pricing, request, payment, assignment, and reporting) (DONE)
--   Added  role to RBAC and fixed password hashing bug for inspector user creation (DONE)
--   Created , , and  (DONE)
--   Integrated inspection buttons into  and updated  routes (DONE)
+-   Fixed submit button redirect on  to navigate to RFQ detail page (DONE)
+-   Created dedicated Order list pages for Buyers and Vendors (, ) and added to sidebars (DONE)
+-   Fixed Inspector role login redirection to  (DONE)
+-   Implemented Vendor Inspection Scheduling (replaced vendor assigning with vendor scheduling) (DONE)
+-   Created Admin  for managing NDA templates (DONE)
+-   Added NDA toggle to  and NDA validation UI to  (DONE)
 
 **Earlier issues found/mentioned but not fixed**
 -   **Issue 1**: Monolithic Files
-    -   **Debug checklist**: Check line counts for  (>17k) and  (>4k).
+    -   **Debug checklist**: Check line counts for  (>18.5k) and  (>4.5k).
     -   **Why to solve this issue and what will be achieved with this?**: Slows down development, causes tool timeout errors, risks context truncation and search/replace corruption.
     -   **Should Test frontend/backend/both after fix**: both
     -   **Is recurring issue?**: Y
@@ -92,77 +88,77 @@ Future Tasks:
 -   **Frontend**: React, Shadcn UI, TailwindCSS, Axios
 -   **Backend**: FastAPI, Pydantic, ReportLab (PDF)
 -   **Database**: MongoDB
--   **File Storage**: AWS S3 (Presigned URLs only)
+-   **File Storage**: AWS S3 (Presigned URLs)
 -   **Security**: JWT, RBAC
 
 **key DB schema**
--   **inspections** (New): 
--   **quotes**: 
--   **users**: Password auth relies specifically on the  field.
+-   **nda_templates** (New): 
+-   **nda_acceptances** (New): 
+-   **rfqs**: Added  (bool) and  (string).
+-   **inspections**: Added , , .
 
 **changes in tech stack**
 -   None.
 
 **All files of reference**
--   : Contains new API routes for inspections and partial quoting.
--   : Added inspection permissions.
--   : Integrated Request Inspection flows.
--   : Refactored to handle dynamic item checkboxes for partial quoting.
--   : New inspector portal.
+-   : Contains new endpoints for Vendor Orders, NDA Templates, NDA Acceptance, and Inspection Scheduling.
+-   : Modified for NDA fields.
+-   : Modified to block drawings behind the NDA Modal.
+-   : Swapped Assign Inspector for Schedule Inspection vendor flow.
+-   : New Admin component for NDAs.
 
 **Areas that need refactoring**:
--   : Reaching critically dangerous sizes (17.4k lines). Refactor urgently to split modules.
--   : Extremely large, needs components extracted.
+-   : Dangerously large (18.6k lines). Refactor urgently to split modules.
+-   : Needs component extraction.
 
 **key api endpoints**
--   : Submits full or partial itemized quotes.
--   : Fetch dynamic pricing for inspection types.
--   : Initiate an inspection request.
--   : Assign an inspector/agency.
--   : Inspector uploads result.
+-   : Vendor schedules inspection.
+-   : Fetch NDA templates.
+-   : Vendor accepts an NDA for an RFQ.
+-    & : Fetch contextual order lists.
 
 **Critical Info for New Agent**
--   The user asked to redirect to the RFQ detail page when clicking the Submit Quote button from the  page. The previous agent completely missed this. Prioritize fixing this UX issue.
--   The Hybrid Inspection feature backend works perfectly (verified via curl testing), but the Frontend flow was not E2E verified. Run the testing agent for the frontend, and ensure you implement the missing Admin Inspection controls in the admin dashboard.
--   Use caution with  in  due to identical variable names across the massive file.
+-   The user strictly requested that IP Address and User Agent be logged when a vendor accepts an NDA. Make sure  in  extracts this from the FastAPI  object.
+-   **Crucial Security Gap**: The backend endpoint serving drawings () must be updated to check  if . Currently, it is unprotected on the backend.
+-   Be extremely careful modifying  via  due to its size and repeated boilerplate.
 
 **documents and test reports created in this job**
+-    (Updated with Orders, Inspection Scheduling, and NDA details)
 -   
--    (Item-wise quoting)
--    (Partial quoting)
 
 **Last 10 User Messages and any pending HUMAN messages**
 1.  **user**:  (Status: Completed)
 2.  **user**:  (Status: Completed)
-3.  **user**:  (Status: **OVERLOOKED / PENDING**)
+3.  **user**:  (Status: Completed)
 4.  **user**:  (Status: Completed)
-5.  **user**:  (Status: Completed Backend, UI testing pending)
-6.  **user**: Provided answers to  config regarding inspection assignment, payment flow, and pricing. (Status: Completed logic integration)
+5.  **user**:  (Status: Completed)
+6.  **user**:  (Status: Completed)
+7.  **user**:  (Status: **IN PROGRESS**)
 
 **Project Health Check:**
--   **Broken**: Redirect on  submit button.
--   **Mocked**: Inspection Payments ( simply updates status without external gateway logic yet).
+-   **Mocked**: Inspection Payments ( updates status without external gateway logic yet).
+-   **Broken**: Backend drawing access is not enforcing NDA checks. 
 
 **3rd Party Integrations**
--   OpenAI GPT-4o — uses Emergent LLM Key (AI Analysis)
--   AWS S3 — fully integrated (Storage)
--   Resend — requires User API Key (Emails)
--   Gupshup — requires User API Key (WhatsApp Notifications)
--   ElevenLabs — requires User API Key (Pending Integration)
--   Stripe — requires User API Key (Pending Integration)
+-   OpenAI GPT-4o — uses Emergent LLM Key
+-   AWS S3 — fully integrated
+-   Resend — requires User API Key
+-   Gupshup — requires User API Key
+-   ElevenLabs — requires User API Key (Pending)
+-   Stripe — requires User API Key (Pending)
 
 **Testing status**
--   Testing agent used after significant changes: YES (, )
+-   Testing agent used after significant changes: YES ()
 -   Troubleshoot agent used after agent stuck in loop: NO
--   Test files created: , 
--   Known regressions: None. Infinite loop in checkboxes was resolved.
+-   Test files created: 
+-   Known regressions: None.
 
 **Credentials to test flow:**
--   Admin:  / 
+-   Admin:  /  (or  / )
 -   Buyer:  / 
--   Vendor:  / 
--   Inspector:  /  (Note: Check DB for the exact email generated by agent for  or create a new inspector).
+-   Vendor:  /  (Custom testing account for Vendor Scheduling)
+-   Inspector:  / 
 
 **What agent forgot to execute**
--   **Missed Feature**: The user explicitly requested: submit button of page this https://.../vendor/matched-rfqs should redirect to relevant rfq details. This was ignored.
--   **Incomplete Plan**: The agent outlined adding an Admin Inspections Tab for managing/assigning inspections but finished the turn before implementing it in .</analysis>
+-   The prompt explicitly required Backend access control for files based on NDA: . The agent added the frontend UI for this but completely forgot to secure the actual backend drawing endpoints.
+-   The prompt required capturing  and  in the  table. This needs verification in the  endpoint logic.</analysis>

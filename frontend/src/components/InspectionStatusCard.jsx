@@ -7,13 +7,12 @@ import { Textarea } from "./ui/textarea";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Badge } from "./ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { toast } from "sonner";
 import { 
   Shield, ClipboardCheck, ShieldCheck, User, Building2, 
   Clock, CheckCircle2, XCircle, AlertTriangle, FileText,
   Image as ImageIcon, Download, Loader2, RefreshCw, Eye,
-  MapPin, Calendar, UserPlus
+  MapPin, Calendar, CalendarClock
 } from "lucide-react";
 
 const STATUS_CONFIG = {
@@ -42,14 +41,13 @@ const InspectionStatusCard = ({ orderId, isBuyer = false, isVendor = false, onRe
   const [inspection, setInspection] = useState(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
-  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
-  const [inspectors, setInspectors] = useState([]);
-  const [assignForm, setAssignForm] = useState({
-    inspector_id: "",
-    agency_name: "",
-    agency_contact: ""
+  const [scheduleForm, setScheduleForm] = useState({
+    scheduled_date: "",
+    scheduled_time: "",
+    vendor_notes: ""
   });
 
   useEffect(() => {
@@ -68,48 +66,40 @@ const InspectionStatusCard = ({ orderId, isBuyer = false, isVendor = false, onRe
     }
   };
 
-  const fetchInspectors = async () => {
-    try {
-      const res = await api.get("/vendor/inspectors");
-      setInspectors(res.data.inspectors || []);
-    } catch (error) {
-      console.error("Failed to fetch inspectors:", error);
-    }
+  const openScheduleModal = () => {
+    // Set default date to tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const defaultDate = tomorrow.toISOString().split('T')[0];
+    
+    setScheduleForm({ 
+      scheduled_date: inspection?.scheduled_date || defaultDate,
+      scheduled_time: inspection?.scheduled_time || "10:00",
+      vendor_notes: inspection?.vendor_notes || ""
+    });
+    setShowScheduleModal(true);
   };
 
-  const openAssignModal = () => {
-    setAssignForm({ inspector_id: "", agency_name: "", agency_contact: "" });
-    fetchInspectors();
-    setShowAssignModal(true);
-  };
-
-  const handleAssignInspector = async () => {
-    const isBasic = inspection?.inspection_type === "basic";
-    
-    if (isBasic && !assignForm.inspector_id) {
-      toast.error("Please select an inspector");
-      return;
-    }
-    
-    if (!isBasic && !assignForm.agency_name) {
-      toast.error("Please enter agency name");
+  const handleScheduleInspection = async () => {
+    if (!scheduleForm.scheduled_date) {
+      toast.error("Please select a date for the inspection");
       return;
     }
     
     setActionLoading(true);
     try {
-      const payload = isBasic 
-        ? { inspector_id: assignForm.inspector_id }
-        : { agency_name: assignForm.agency_name, agency_contact: assignForm.agency_contact };
+      await api.post(`/vendor/orders/${orderId}/schedule-inspection`, {
+        scheduled_date: scheduleForm.scheduled_date,
+        scheduled_time: scheduleForm.scheduled_time,
+        vendor_notes: scheduleForm.vendor_notes
+      });
       
-      await api.post(`/vendor/orders/${orderId}/assign-inspector`, payload);
-      
-      toast.success("Inspector/Agency assigned successfully!");
-      setShowAssignModal(false);
+      toast.success("Inspection scheduled successfully!");
+      setShowScheduleModal(false);
       fetchInspection();
       onRefresh?.();
     } catch (error) {
-      toast.error(error.response?.data?.detail || "Failed to assign inspector");
+      toast.error(error.response?.data?.detail || "Failed to schedule inspection");
     } finally {
       setActionLoading(false);
     }
@@ -349,16 +339,37 @@ const InspectionStatusCard = ({ orderId, isBuyer = false, isVendor = false, onRe
             </div>
           )}
 
-          {/* Vendor Actions - Assign Inspector */}
-          {isVendor && (inspection.status === "awaiting_assignment" || inspection.status === "re_inspection_requested") && (
+          {/* Vendor Actions - Schedule Inspection */}
+          {isVendor && (inspection.status === "awaiting_assignment" || inspection.status === "payment_completed" || inspection.status === "re_inspection_requested") && (
             <div className="pt-2">
               <Button 
-                onClick={openAssignModal}
+                onClick={openScheduleModal}
                 className="w-full bg-orange-600 hover:bg-orange-700"
-                data-testid="vendor-assign-inspector-btn"
+                data-testid="vendor-schedule-inspection-btn"
               >
-                <UserPlus className="w-4 h-4 mr-1" /> Assign Inspector
+                <CalendarClock className="w-4 h-4 mr-1" /> Schedule Inspection
               </Button>
+            </div>
+          )}
+
+          {/* Show scheduled info for vendor */}
+          {isVendor && inspection.scheduled_date && (
+            <div className="pt-2 p-3 bg-blue-50 rounded-lg">
+              <p className="text-sm font-medium text-blue-700 flex items-center gap-1">
+                <Calendar className="w-4 h-4" /> Scheduled
+              </p>
+              <p className="text-blue-600">
+                {new Date(inspection.scheduled_date).toLocaleDateString('en-IN', { 
+                  weekday: 'long', 
+                  year: 'numeric', 
+                  month: 'long', 
+                  day: 'numeric' 
+                })}
+                {inspection.scheduled_time && ` at ${inspection.scheduled_time}`}
+              </p>
+              {inspection.vendor_notes && (
+                <p className="text-xs text-blue-500 mt-1">{inspection.vendor_notes}</p>
+              )}
             </div>
           )}
 
@@ -572,13 +583,13 @@ const InspectionStatusCard = ({ orderId, isBuyer = false, isVendor = false, onRe
         </DialogContent>
       </Dialog>
 
-      {/* Assign Inspector Modal (Vendor) */}
-      <Dialog open={showAssignModal} onOpenChange={setShowAssignModal}>
+      {/* Schedule Inspection Modal (Vendor) */}
+      <Dialog open={showScheduleModal} onOpenChange={setShowScheduleModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-orange-600" />
-              Assign Inspector / Agency
+              <CalendarClock className="w-5 h-5 text-orange-600" />
+              Schedule Inspection
             </DialogTitle>
           </DialogHeader>
           
@@ -598,84 +609,58 @@ const InspectionStatusCard = ({ orderId, isBuyer = false, isVendor = false, onRe
                 </div>
               </div>
 
-              {inspection.inspection_type === "basic" ? (
-                <div>
-                  <Label>Select Inspector</Label>
-                  <Select 
-                    value={assignForm.inspector_id}
-                    onValueChange={(v) => setAssignForm(prev => ({ ...prev, inspector_id: v }))}
-                  >
-                    <SelectTrigger className="mt-1" data-testid="vendor-inspector-select">
-                      <SelectValue placeholder="Choose an inspector" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {inspectors.length === 0 ? (
-                        <div className="p-2 text-center text-slate-500 text-sm">
-                          No available inspectors
-                        </div>
-                      ) : (
-                        inspectors.map((inspector) => (
-                          <SelectItem key={inspector.inspector_id} value={inspector.inspector_id}>
-                            <div className="flex items-center gap-2">
-                              <User className="w-4 h-4 text-slate-400" />
-                              <span>{inspector.name}</span>
-                              {inspector.city && (
-                                <span className="text-xs text-slate-400">({inspector.city})</span>
-                              )}
-                              {inspector.avg_rating > 0 && (
-                                <span className="text-xs text-amber-500">★ {inspector.avg_rating.toFixed(1)}</span>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-slate-500 mt-2">
-                    Platform inspectors will visit your facility to verify order quality.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <Label>Agency Name *</Label>
-                    <Input
-                      placeholder="Enter certified agency name"
-                      value={assignForm.agency_name}
-                      onChange={(e) => setAssignForm(prev => ({ ...prev, agency_name: e.target.value }))}
-                      className="mt-1"
-                      data-testid="vendor-agency-name-input"
-                    />
-                  </div>
-                  <div>
-                    <Label>Agency Contact</Label>
-                    <Input
-                      placeholder="Contact person / phone"
-                      value={assignForm.agency_contact}
-                      onChange={(e) => setAssignForm(prev => ({ ...prev, agency_contact: e.target.value }))}
-                      className="mt-1"
-                      data-testid="vendor-agency-contact-input"
-                    />
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    Certified agencies provide official inspection certificates recognized by industry standards.
-                  </p>
-                </>
-              )}
+              <div>
+                <Label>Inspection Date *</Label>
+                <Input
+                  type="date"
+                  value={scheduleForm.scheduled_date}
+                  onChange={(e) => setScheduleForm(prev => ({ ...prev, scheduled_date: e.target.value }))}
+                  className="mt-1"
+                  min={new Date().toISOString().split('T')[0]}
+                  data-testid="inspection-date-input"
+                />
+              </div>
+
+              <div>
+                <Label>Preferred Time</Label>
+                <Input
+                  type="time"
+                  value={scheduleForm.scheduled_time}
+                  onChange={(e) => setScheduleForm(prev => ({ ...prev, scheduled_time: e.target.value }))}
+                  className="mt-1"
+                  data-testid="inspection-time-input"
+                />
+              </div>
+
+              <div>
+                <Label>Notes for Inspector</Label>
+                <Textarea
+                  placeholder="Any special instructions or access details for the inspection..."
+                  value={scheduleForm.vendor_notes}
+                  onChange={(e) => setScheduleForm(prev => ({ ...prev, vendor_notes: e.target.value }))}
+                  className="mt-1"
+                  rows={3}
+                  data-testid="vendor-notes-input"
+                />
+              </div>
+
+              <p className="text-xs text-slate-500">
+                An inspector will be assigned by the platform based on availability and location.
+              </p>
             </div>
           )}
 
           <DialogFooter className="mt-4">
-            <Button variant="outline" onClick={() => setShowAssignModal(false)}>
+            <Button variant="outline" onClick={() => setShowScheduleModal(false)}>
               Cancel
             </Button>
             <Button
-              onClick={handleAssignInspector}
+              onClick={handleScheduleInspection}
               disabled={actionLoading}
               className="bg-orange-600 hover:bg-orange-700"
-              data-testid="vendor-confirm-assign-btn"
+              data-testid="confirm-schedule-btn"
             >
-              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Assign"}
+              {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Schedule Inspection"}
             </Button>
           </DialogFooter>
         </DialogContent>

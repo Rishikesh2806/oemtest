@@ -13,8 +13,9 @@ import { toast } from "sonner";
 import { 
   Upload, FileText, ArrowRight, ArrowLeft, 
   CheckCircle2, Loader2, X, Cpu, Target, Package,
-  AlertTriangle, Ruler, Scale, MapPin, Truck, Globe, Building2, Clock, Zap
+  AlertTriangle, Ruler, Scale, MapPin, Truck, Globe, Building2, Clock, Zap, Shield
 } from "lucide-react";
+import { Switch } from "../components/ui/switch";
 
 const MATERIALS = [
   "Aluminum", "Steel", "Stainless Steel", "Carbon Steel", 
@@ -164,7 +165,10 @@ const CreateRFQ = () => {
     incoterms: "EXW",
     // Preferred vendor locations
     preferred_vendor_countries: [],
-    preferred_vendor_cities: []
+    preferred_vendor_cities: [],
+    // NDA Protection
+    require_nda: false,
+    nda_id: null
   });
 
   // Incoterms options
@@ -701,6 +705,43 @@ const CreateRFQ = () => {
                     data-testid="payment-notes-textarea"
                   />
                 )}
+              </div>
+
+              {/* IP Protection / NDA Section */}
+              <div className="pt-6 border-t border-slate-200">
+                <div className="flex items-center gap-2 mb-4">
+                  <Shield className="w-5 h-5 text-orange-600" />
+                  <h3 className="font-semibold text-slate-900">IP Protection</h3>
+                </div>
+                
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <Label className="text-sm font-medium text-amber-900 flex items-center gap-2">
+                        <Shield className="w-4 h-4" />
+                        Require NDA for Drawings
+                      </Label>
+                      <p className="text-xs text-amber-700 mt-1">
+                        When enabled, vendors must accept a Non-Disclosure Agreement before they can view 
+                        or download your drawings and technical documents. This helps protect your intellectual property.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={formData.require_nda}
+                      onCheckedChange={(checked) => handleInputChange("require_nda", checked)}
+                      data-testid="require-nda-switch"
+                    />
+                  </div>
+                  
+                  {formData.require_nda && (
+                    <div className="mt-3 pt-3 border-t border-amber-200">
+                      <div className="flex items-center gap-2 text-xs text-amber-700">
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                        <span>Default NDA template will be used. Contact admin for custom NDA.</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Delivery Location Section */}

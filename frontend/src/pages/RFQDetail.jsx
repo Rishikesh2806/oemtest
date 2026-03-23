@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth, api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
+import NDAModal from "../components/NDAModal";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -14,7 +15,7 @@ import {
   FileText, Package, Star, MapPin, Loader2, 
   CheckCircle2, Send, DollarSign, Clock, ArrowLeft,
   Building2, Cpu, Wrench, AlertCircle, Target, MessageSquare, Eye,
-  BarChart3, CreditCard, ExternalLink, Truck, Globe, Zap
+  BarChart3, CreditCard, ExternalLink, Truck, Globe, Zap, Shield, Lock
 } from "lucide-react";
 import QuoteComparison from "../components/quotes/QuoteComparison";
 import QuoteDetailModal from "../components/QuoteDetailModal";
@@ -79,6 +80,11 @@ const RFQDetail = () => {
   const [quoteDialogOpen, setQuoteDialogOpen] = useState(false);
   const [submittingQuote, setSubmittingQuote] = useState(false);
   const [notifyingVendors, setNotifyingVendors] = useState(false);
+  
+  // NDA State
+  const [ndaRequired, setNdaRequired] = useState(false);
+  const [ndaAccepted, setNdaAccepted] = useState(false);
+  const [showNdaModal, setShowNdaModal] = useState(false);
 
   const [quoteForm, setQuoteForm] = useState({
     price: "",
@@ -106,10 +112,60 @@ const RFQDetail = () => {
       setRfq(rfqRes.data);
       setQuotes(quotesRes.data);
       setDrawings(drawingsRes.data);
+      
+      // Check NDA requirement
+      if (rfqRes.data.require_nda && user?.role === "vendor") {
+        setNdaRequired(true);
+        // Check if vendor has accepted NDA
+        try {
+          const ndaRes = await api.get(`/rfqs/${rfqId}/nda`);
+          setNdaAccepted(ndaRes.data.has_accepted || false);
+        } catch (e) {
+          console.error("Failed to check NDA status:", e);
+        }
+      }
     } catch (error) {
       toast.error("Failed to load RFQ details");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleNdaAccepted = () => {
+    setNdaAccepted(true);
+    setShowNdaModal(false);
+    toast.success("NDA accepted! You can now view the drawings.");
+  };
+
+  const handleViewDrawing = (drawingId) => {
+    if (ndaRequired && !ndaAccepted && user?.role === "vendor") {
+      setShowNdaModal(true);
+      return;
+    }
+    // Proceed with viewing
+    const token = localStorage.getItem("token");
+    window.open(`${API_URL}/api/drawings/${drawingId}/view?token=${token}`, '_blank');
+  };
+
+  const handleDownloadDrawing = async (drawing) => {
+    if (ndaRequired && !ndaAccepted && user?.role === "vendor") {
+      setShowNdaModal(true);
+      return;
+    }
+    // Proceed with download
+    try {
+      const response = await api.get(`/drawings/${drawing.drawing_id}/download`, {
+        responseType: 'blob'
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', drawing.filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (error) {
+      toast.error("Failed to download file");
     }
   };
 
@@ -588,6 +644,46 @@ const RFQDetail = () => {
           </Card>
         )}
 
+        {/* NDA Status Banner for Vendors */}
+        {ndaRequired && user?.role === "vendor" && (
+          <Card className={`border-2 ${ndaAccepted ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}>
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    ndaAccepted ? 'bg-green-100' : 'bg-amber-100'
+                  }`}>
+                    {ndaAccepted ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-600" />
+                    ) : (
+                      <Shield className="w-5 h-5 text-amber-600" />
+                    )}
+                  </div>
+                  <div>
+                    <p className={`font-medium ${ndaAccepted ? 'text-green-800' : 'text-amber-800'}`}>
+                      {ndaAccepted ? 'NDA Accepted' : 'NDA Required'}
+                    </p>
+                    <p className={`text-sm ${ndaAccepted ? 'text-green-600' : 'text-amber-600'}`}>
+                      {ndaAccepted 
+                        ? 'You can now access all drawings and documents for this RFQ.'
+                        : 'This RFQ requires you to accept a Non-Disclosure Agreement before viewing drawings.'}
+                    </p>
+                  </div>
+                </div>
+                {!ndaAccepted && (
+                  <Button 
+                    onClick={() => setShowNdaModal(true)}
+                    className="bg-amber-600 hover:bg-amber-700"
+                    data-testid="accept-nda-banner-btn"
+                  >
+                    <Shield className="w-4 h-4 mr-1" /> Accept NDA
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Drawings */}
         {drawings.length > 0 && (
           <Card className="border-slate-200">
@@ -653,43 +749,39 @@ const RFQDetail = () => {
                       </p>
                       
                       <div className="flex gap-2">
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="flex-1"
-                          onClick={() => {
-                            // Open in new tab with auth
-                            window.open(`${API_URL}/api/drawings/${drawing.drawing_id}/view?token=${token}`, '_blank');
-                          }}
-                          data-testid={`view-drawing-${drawing.drawing_id}`}
-                        >
-                          <Eye className="w-4 h-4 mr-1" /> View
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm" 
-                          className="flex-1"
-                          onClick={async () => {
-                            try {
-                              const response = await api.get(`/drawings/${drawing.drawing_id}/download`, {
-                                responseType: 'blob'
-                              });
-                              const url = window.URL.createObjectURL(new Blob([response.data]));
-                              const link = document.createElement('a');
-                              link.href = url;
-                              link.setAttribute('download', drawing.filename);
-                              document.body.appendChild(link);
-                              link.click();
-                              link.remove();
-                              window.URL.revokeObjectURL(url);
-                            } catch (err) {
-                              toast.error("Failed to download file");
-                            }
-                          }}
-                          data-testid={`download-drawing-${drawing.drawing_id}`}
-                        >
-                          <FileText className="w-4 h-4 mr-1" /> Download
-                        </Button>
+                        {/* NDA Lock for vendors */}
+                        {ndaRequired && !ndaAccepted && user?.role === "vendor" ? (
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="flex-1 border-amber-300 text-amber-700 hover:bg-amber-50"
+                            onClick={() => setShowNdaModal(true)}
+                            data-testid={`nda-required-${drawing.drawing_id}`}
+                          >
+                            <Lock className="w-4 h-4 mr-1" /> Accept NDA to View
+                          </Button>
+                        ) : (
+                          <>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="flex-1"
+                              onClick={() => handleViewDrawing(drawing.drawing_id)}
+                              data-testid={`view-drawing-${drawing.drawing_id}`}
+                            >
+                              <Eye className="w-4 h-4 mr-1" /> View
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="flex-1"
+                              onClick={() => handleDownloadDrawing(drawing)}
+                              data-testid={`download-drawing-${drawing.drawing_id}`}
+                            >
+                              <FileText className="w-4 h-4 mr-1" /> Download
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -1199,6 +1291,14 @@ const RFQDetail = () => {
             rfqId={rfqId}
           />
         )}
+
+        {/* NDA Modal */}
+        <NDAModal
+          rfqId={rfqId}
+          isOpen={showNdaModal}
+          onClose={() => setShowNdaModal(false)}
+          onAccept={handleNdaAccepted}
+        />
       </div>
     </DashboardLayout>
   );
