@@ -1337,3 +1337,82 @@ File: `/app/frontend/src/pages/FileManager.jsx`
 - Drawing uploads store files in S3 with metadata in MongoDB
 - Legacy drawings (stored as base64 in MongoDB) are still supported
 - Local filesystem (`/app/uploads/`) is deprecated but legacy files are still served
+
+
+
+## NDA Enforcement for RFQ Drawings (Implemented Mar 23, 2026)
+
+### Overview
+IP Protection feature allowing buyers to enforce Non-Disclosure Agreements (NDAs) on their RFQ drawings. Vendors must accept the NDA before they can view or download any protected drawings.
+
+### Features
+- **Buyer Controls**: Toggle "Require NDA for Drawings" when creating RFQs
+- **Vendor Flow**: NDA modal appears before accessing protected drawings
+- **Admin Management**: NDA Templates tab in Admin Dashboard for template CRUD
+- **Audit Trail**: Captures vendor IP address and User-Agent when accepting NDAs
+
+### Database Collections
+
+**nda_templates**
+```json
+{
+  "nda_id": "nda_{uuid}",
+  "title": "Standard NDA Template",
+  "content": "<html content>",
+  "version": "1.0",
+  "is_default": true,
+  "created_at": "ISO timestamp",
+  "created_by": "admin"
+}
+```
+
+**nda_acceptances**
+```json
+{
+  "acceptance_id": "nda_acc_{uuid}",
+  "vendor_id": "vendor_{id}",
+  "rfq_id": "rfq_{id}",
+  "nda_id": "nda_{id}",
+  "nda_version": "1.0",
+  "vendor_name": "Company Name",
+  "vendor_email": "vendor@email.com",
+  "accepted_at": "ISO timestamp",
+  "ip_address": "10.64.132.199",
+  "user_agent": "Mozilla/5.0 ..."
+}
+```
+
+**rfqs (additions)**
+- `require_nda: boolean` - Whether NDA is required for this RFQ
+- `nda_id: string` - Reference to specific NDA template (optional)
+
+### API Endpoints
+
+**NDA Management (Admin)**
+- `GET /api/admin/nda-templates` - List all NDA templates
+- `POST /api/admin/nda-templates` - Create new template
+- `PUT /api/admin/nda-templates/{nda_id}` - Update template
+- `DELETE /api/admin/nda-templates/{nda_id}` - Delete template
+
+**NDA Acceptance (Vendor)**
+- `GET /api/rfqs/{rfq_id}/nda` - Get NDA details and acceptance status
+- `POST /api/rfqs/{rfq_id}/accept-nda` - Accept NDA (captures IP + User-Agent)
+- `GET /api/rfqs/{rfq_id}/nda-acceptances` - List vendors who accepted (buyer/admin)
+
+**Protected Drawing Access**
+- `GET /api/drawings/{drawing_id}/view` - View drawing (403 if NDA not accepted)
+- `GET /api/drawings/{drawing_id}/download` - Download drawing (403 if NDA not accepted)
+
+### Security Model
+- **Backend Enforcement**: Drawing view/download endpoints check NDA acceptance before serving files
+- **Bypass Rules**: Admins, staff, and RFQ owners (buyers) bypass NDA checks
+- **Audit**: Full tracking of who accepted what NDA, when, from where
+
+### Frontend Components
+- `NDAModal.jsx` - Modal displaying NDA terms with acceptance checkbox
+- `NDATemplatesTab.jsx` - Admin component for managing NDA templates
+- `CreateRFQ.jsx` - Updated with "IP Protection" section and NDA toggle
+- `RFQDetail.jsx` - Updated to show NDA banner and modal for vendors
+
+### Test Report
+`/app/test_reports/iteration_35.json` - Backend 100% (13/13), Frontend 85%
