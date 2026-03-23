@@ -19,7 +19,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - **Payments**: Stripe (test mode) - planned
 - **Email**: Resend API
 
-### Backend Structure (Refactored Mar 11, 2026)
+### Backend Structure (Refactored Mar 23, 2026)
 ```
 /app/backend/
 ├── app/                    # Modular package
@@ -39,12 +39,25 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 │   │   ├── notification_service.py
 │   │   ├── email_service.py
 │   │   └── whatsapp_service.py
-│   └── routes/             # API routes (being extracted)
-├── server.py               # Main entry (~13,400 lines) - being gradually refactored
+│   └── routes/             # API routes (ACTIVE - mounted in server.py)
+│       ├── __init__.py     # Router aggregation
+│       ├── auth.py         # Auth routes (17 endpoints) ✅ MIGRATED
+│       └── users.py        # User profile routes ✅ MIGRATED
+├── server.py               # Main entry (~19k lines) - has legacy duplicates marked for removal
 ├── ARCHITECTURE.md         # Refactoring documentation
 └── .env
 ```
-Migration: Phase 1 complete (core, models, services). Phase 2 next (route extraction).
+
+### Migration Status (Mar 23, 2026)
+- **Phase 1**: Core utilities, models, services - COMPLETE
+- **Phase 2**: Route extraction - IN PROGRESS
+  - ✅ Auth routes migrated to `/app/routes/auth.py` (17 endpoints)
+  - ✅ User profile routes migrated to `/app/routes/users.py` (2 endpoints)
+  - ⏳ Vendor routes - PENDING
+  - ⏳ RFQ routes - PENDING
+  - ⏳ Admin routes - PENDING
+  - ⏳ Order routes - PENDING
+
 See ARCHITECTURE.md for detailed refactoring plan.
 
 ## AI Drawing Analysis - Supported Formats

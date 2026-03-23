@@ -233,6 +233,14 @@ app = FastAPI(title="OEMLinker API", version="1.0.0")
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+# ============== MOUNT MODULAR ROUTES ==============
+# Import and mount routes from the modular structure
+# This enables gradual migration away from the monolithic server.py
+from app.routes import api_router as modular_api_router
+# Mount modular routes - they handle /auth/*, /user/* endpoints
+api_router.include_router(modular_api_router)
+# =================================================
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -1547,6 +1555,26 @@ async def send_verification_email(email: str, name: str, verification_token: str
     '''
     
     await send_email_async(email, "Verify Your OEMLinker Account", email_html)
+
+# =============================================================================
+# LEGACY AUTH ROUTES - TO BE REMOVED
+# These routes have been migrated to /app/backend/app/routes/auth.py
+# and /app/backend/app/routes/users.py
+# 
+# The modular routes are now mounted and take precedence.
+# These legacy routes are kept temporarily for reference during migration.
+# TODO: Remove these routes once migration is fully verified in production
+# Routes covered by modular structure:
+#   - /auth/register, /auth/login, /auth/logout
+#   - /auth/verify-email, /auth/resend-verification
+#   - /auth/verify-otp, /auth/resend-otp
+#   - /auth/2fa/toggle, /auth/2fa/status
+#   - /auth/session, /auth/me
+#   - /auth/magic-link/generate, /auth/magic-link/verify/{token}
+#   - /auth/change-password, /auth/forgot-password, /auth/reset-password
+#   - /auth/role
+#   - /user/profile (GET, PUT)
+# =============================================================================
 
 @api_router.post("/auth/register", response_model=TokenResponse)
 async def register(user_data: UserCreate, request: Request):

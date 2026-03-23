@@ -9,9 +9,6 @@ api_router = APIRouter()
 from app.routes.auth import router as auth_router
 from app.routes.users import router as users_router
 
-# Include routers
-# Note: For gradual migration, these routers are not yet mounted.
-# The main server.py still handles all routes directly.
-# Once migration is complete, uncomment:
-# api_router.include_router(auth_router)
-# api_router.include_router(users_router)
+# Include routers - these will be prefixed by the main app's /api
+api_router.include_router(auth_router)
+api_router.include_router(users_router)

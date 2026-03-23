@@ -830,3 +830,164 @@ async def update_role(request: Request, user: dict = Depends(get_current_user)):
     )
     
     return {"message": "Role updated", "role": new_role}
+
+
+# ============== MAGIC LINK ENDPOINTS ==============
+@router.post("/magic-link/generate")
+async def generate_magic_link(phone: str, redirect_url: Optional[str] = None):
+    """Generate a magic link token for WhatsApp users (internal use only)
+    
+    Args:
+        phone: User's phone number
+        redirect_url: Optional URL to redirect to after successful login (e.g., /vendor/rfq/rfq_123)
+    """
+    import secrets
+    
+    # Normalize phone
+    phone_normalized = phone.replace("+", "").replace(" ", "").replace("-", "")
+    phone_10digit = phone_normalized[-10:] if len(phone_normalized) >= 10 else phone_normalized
+    
+    # Find vendor by phone
+    vendor = await db.vendors.find_one(
+        {"phone": {"$regex": phone_10digit}},
+        {"_id": 0, "user_id": 1, "vendor_id": 1}
+    )
+    
+    if not vendor:
+        return {"success": False, "error": "Vendor not found"}
+    
+    user = await db.users.find_one({"user_id": vendor["user_id"]}, {"_id": 0})
+    if not user:
+        return {"success": False, "error": "User not found"}
+    
+    # Generate secure token
+    token = secrets.token_urlsafe(32)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=30)  # 30 min expiry for RFQ links
+    
+    # Validate and sanitize redirect URL - only allow internal paths
+    safe_redirect = None
+    if redirect_url:
+        # Only allow relative paths starting with /
+        if redirect_url.startswith("/") and not redirect_url.startswith("//"):
+            # Whitelist of allowed redirect patterns
+            allowed_patterns = [
+                "/vendor/", "/buyer/", "/admin/", "/dashboard", "/rfq/", "/quotes", "/orders"
+            ]
+            if any(redirect_url.startswith(pattern) or pattern in redirect_url for pattern in allowed_patterns):
+                safe_redirect = redirect_url
+    
+    # Store token in MongoDB with redirect URL
+    await db.magic_link_tokens.insert_one({
+        "token": token,
+        "user_id": user["user_id"],
+        "phone": phone_normalized,
+        "redirect_url": safe_redirect,  # Store validated redirect URL
+        "expires_at": expires_at.isoformat(),
+        "used": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    # Clean up expired tokens periodically
+    await db.magic_link_tokens.delete_many({
+        "expires_at": {"$lt": datetime.now(timezone.utc).isoformat()}
+    })
+    
+    return {
+        "success": True,
+        "token": token,
+        "expires_in_minutes": 30,
+        "redirect_url": safe_redirect
+    }
+
+
+@router.get("/magic-link/verify/{token}")
+async def verify_magic_link(token: str, response: Response):
+    """Verify magic link token and create session"""
+    import secrets
+    from app.services.security import create_jwt_token
+    
+    # Find token in MongoDB
+    token_doc = await db.magic_link_tokens.find_one({"token": token}, {"_id": 0})
+    
+    if not token_doc:
+        raise HTTPException(status_code=400, detail="Invalid or expired link")
+    
+    # Check expiry
+    expires_at = datetime.fromisoformat(token_doc["expires_at"])
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    
+    if datetime.now(timezone.utc) > expires_at:
+        await db.magic_link_tokens.delete_one({"token": token})
+        raise HTTPException(status_code=400, detail="Link has expired. Please request a new one via WhatsApp.")
+    
+    # Check if already used
+    if token_doc.get("used"):
+        raise HTTPException(status_code=400, detail="Link has already been used. Please request a new one via WhatsApp.")
+    
+    # Mark as used atomically
+    result = await db.magic_link_tokens.update_one(
+        {"token": token, "used": False},
+        {"$set": {"used": True, "used_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=400, detail="Link has already been used. Please request a new one via WhatsApp.")
+    
+    # Get user
+    user = await db.users.find_one({"user_id": token_doc["user_id"]}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Create JWT token
+    jwt_token = create_jwt_token(user["user_id"], user["email"], user["role"])
+    
+    # Create session
+    session_token = secrets.token_urlsafe(32)
+    await db.user_sessions.insert_one({
+        "user_id": user["user_id"],
+        "session_token": session_token,
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "login_method": "magic_link"
+    })
+    
+    # Set cookie
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7*24*60*60
+    )
+    
+    # Update last login
+    await db.users.update_one(
+        {"user_id": user["user_id"]},
+        {"$set": {"last_login": datetime.now(timezone.utc).isoformat()}, "$inc": {"login_count": 1}}
+    )
+    
+    # Get redirect URL from token (if set)
+    redirect_url = token_doc.get("redirect_url") or f"/{user['role']}/dashboard"
+    
+    # Delete used token
+    await db.magic_link_tokens.delete_one({"token": token})
+    
+    return {
+        "success": True,
+        "access_token": jwt_token,
+        "token_type": "bearer",
+        "user": {
+            "user_id": user["user_id"],
+            "email": user["email"],
+            "name": user["name"],
+            "role": user["role"],
+            "picture": user.get("picture"),
+            "company_name": user.get("company_name"),
+            "email_verified": user.get("email_verified", False),
+            "phone_login": user.get("phone_login", False)
+        },
+        "redirect_url": redirect_url
+    }
