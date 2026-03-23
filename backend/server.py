@@ -2777,6 +2777,22 @@ async def update_user_profile(
     )
     return db_user
 
+# =============================================================================
+# LEGACY VENDOR ROUTES - TO BE REMOVED
+# These routes have been migrated to /app/backend/app/routes/vendor.py
+# 
+# The modular routes are now mounted and take precedence.
+# These legacy routes are kept temporarily for reference during migration.
+# TODO: Remove these routes once migration is fully verified in production
+# Routes covered by modular structure:
+#   - /vendors/profile (POST, GET, PUT)
+#   - /vendors/list
+#   - /vendors/experiences (POST, GET)
+#   - /vendors/experiences/{experience_id} (DELETE)
+#   - /vendors/{vendor_id}
+#   - /vendors/{vendor_id}/full
+# =============================================================================
+
 # ============== VENDOR ROUTES ==============
 
 @api_router.post("/vendors/profile", response_model=VendorProfile)
@@ -8282,6 +8298,23 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
             asyncio.create_task(whatsapp_service.send_text_message(vendor["phone"], wa_message))
     
     return {"message": "Quote accepted", "order_id": order_id}
+
+# =============================================================================
+# LEGACY ORDER ROUTES - TO BE REMOVED
+# These routes have been migrated to /app/backend/app/routes/orders.py
+# 
+# Routes covered by modular structure:
+#   - /orders (GET)
+#   - /orders/{order_id} (GET)
+#   - /orders/{order_id}/status (PUT)
+#   - /orders/{order_id}/rate (POST)
+#   - /orders/{order_id}/rating (GET)
+#   - /orders/{order_id}/details (GET)
+#   - /orders/{order_id}/confirm-delivery (POST)
+#   - /orders/{order_id}/add-tracking (POST)
+#   - /buyer/orders (GET)
+#   - /vendor/orders (GET)
+# =============================================================================
 
 # ============== ORDER ROUTES ==============
 

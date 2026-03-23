@@ -53,10 +53,13 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - **Phase 2**: Route extraction - IN PROGRESS
   - ✅ Auth routes migrated to `/app/routes/auth.py` (17 endpoints)
   - ✅ User profile routes migrated to `/app/routes/users.py` (2 endpoints)
-  - ⏳ Vendor routes - PENDING
-  - ⏳ RFQ routes - PENDING
-  - ⏳ Admin routes - PENDING
-  - ⏳ Order routes - PENDING
+  - ✅ Vendor core routes migrated to `/app/routes/vendor.py` (9 endpoints)
+  - ✅ Order routes migrated to `/app/routes/orders.py` (10 endpoints)
+  - **Total migrated: ~1,625 lines across 38 endpoints**
+  - ⏳ RFQ routes - PENDING (16 endpoints)
+  - ⏳ Admin routes - PENDING (83 endpoints - largest section)
+  - ⏳ Inspection routes - PENDING
+  - ⏳ Quote routes - PENDING
 
 See ARCHITECTURE.md for detailed refactoring plan.
 
