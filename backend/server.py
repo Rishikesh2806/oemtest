@@ -14192,6 +14192,8 @@ class ContactFormRequest(BaseModel):
 @api_router.post("/contact")
 async def submit_contact_form(contact: ContactFormRequest):
     """Handle contact form submissions from landing page"""
+    from app.services.email_service import send_email_async
+    
     contact_id = f"contact_{uuid.uuid4().hex[:12]}"
     
     contact_doc = {
@@ -14209,6 +14211,110 @@ async def submit_contact_form(contact: ContactFormRequest):
     
     # Log for admin notification
     logger.info(f"New contact form submission: {contact_id} from {contact.email}")
+    
+    # Send email notification to admin
+    try:
+        admin_email_html = f'''
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); padding: 30px; text-align: center;">
+                <h1 style="color: #f97316; margin: 0; font-size: 24px;">New Contact Form Submission</h1>
+            </div>
+            <div style="padding: 30px; background: #ffffff; border: 1px solid #e2e8f0;">
+                <p style="color: #64748b; margin-bottom: 20px;">You have received a new inquiry from the OEMLinker website.</p>
+                
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; color: #64748b; width: 120px;"><strong>Name:</strong></td>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; color: #1e293b;">{contact.name}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; color: #64748b;"><strong>Email:</strong></td>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; color: #1e293b;"><a href="mailto:{contact.email}" style="color: #f97316;">{contact.email}</a></td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; color: #64748b;"><strong>Phone:</strong></td>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; color: #1e293b;">{contact.phone or 'Not provided'}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; color: #64748b;"><strong>Company:</strong></td>
+                        <td style="padding: 10px 0; border-bottom: 1px solid #e2e8f0; color: #1e293b;">{contact.company or 'Not provided'}</td>
+                    </tr>
+                </table>
+                
+                <div style="margin-top: 20px; padding: 15px; background: #f8fafc; border-radius: 8px;">
+                    <p style="color: #64748b; margin: 0 0 10px 0;"><strong>Message:</strong></p>
+                    <p style="color: #1e293b; margin: 0; line-height: 1.6;">{contact.message}</p>
+                </div>
+                
+                <p style="color: #94a3b8; font-size: 12px; margin-top: 20px;">
+                    Contact ID: {contact_id}<br>
+                    Submitted at: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}
+                </p>
+            </div>
+            <div style="padding: 20px; background: #1e293b; text-align: center;">
+                <p style="color: #94a3b8; margin: 0; font-size: 12px;">OEMLinker - AI-Powered Manufacturing Marketplace</p>
+            </div>
+        </div>
+        '''
+        
+        # Send to support email
+        await send_email_async(
+            "support@oemlinker.com",
+            f"New Contact Inquiry from {contact.name}",
+            admin_email_html
+        )
+        logger.info(f"Contact notification email sent for {contact_id}")
+        
+        # Send confirmation email to the user
+        user_email_html = f'''
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #1e293b 0%, #334155 100%); padding: 30px; text-align: center;">
+                <h1 style="color: #f97316; margin: 0; font-size: 24px;">Thank You for Contacting Us!</h1>
+            </div>
+            <div style="padding: 30px; background: #ffffff; border: 1px solid #e2e8f0;">
+                <p style="color: #1e293b; font-size: 16px;">Dear {contact.name},</p>
+                
+                <p style="color: #64748b; line-height: 1.6;">
+                    Thank you for reaching out to OEMLinker. We have received your inquiry and our team will get back to you within 24 hours.
+                </p>
+                
+                <div style="margin: 20px 0; padding: 15px; background: #f8fafc; border-radius: 8px; border-left: 4px solid #f97316;">
+                    <p style="color: #64748b; margin: 0 0 10px 0;"><strong>Your Message:</strong></p>
+                    <p style="color: #1e293b; margin: 0; line-height: 1.6;">{contact.message}</p>
+                </div>
+                
+                <p style="color: #64748b; line-height: 1.6;">
+                    In the meantime, feel free to explore our platform or reach out to us directly:
+                </p>
+                
+                <ul style="color: #64748b; line-height: 1.8;">
+                    <li>Email: <a href="mailto:support@oemlinker.com" style="color: #f97316;">support@oemlinker.com</a></li>
+                    <li>WhatsApp: <a href="https://wa.me/919831509919" style="color: #f97316;">+91-9831509919</a></li>
+                </ul>
+                
+                <p style="color: #64748b; margin-top: 20px;">
+                    Best regards,<br>
+                    <strong style="color: #1e293b;">The OEMLinker Team</strong>
+                </p>
+            </div>
+            <div style="padding: 20px; background: #1e293b; text-align: center;">
+                <p style="color: #94a3b8; margin: 0; font-size: 12px;">
+                    Simpson & Munro (I) Pvt Ltd | 6th Floor, 4 Lyons Range, Kolkata 700 001
+                </p>
+            </div>
+        </div>
+        '''
+        
+        await send_email_async(
+            contact.email,
+            "Thank you for contacting OEMLinker",
+            user_email_html
+        )
+        logger.info(f"Confirmation email sent to {contact.email}")
+        
+    except Exception as e:
+        logger.error(f"Failed to send contact notification email: {str(e)}")
+        # Don't fail the request if email fails
     
     return {
         "success": True,
