@@ -198,7 +198,9 @@ async def google_callback_redirect(code: str, state: Optional[str] = None):
     """Handle direct redirect from Google (GET request)"""
     # This endpoint handles the redirect from Google
     # It returns HTML that posts the code to the frontend
-    frontend_url = os.environ.get("FRONTEND_URL", "https://nda-enforcement.preview.emergentagent.com")
+    frontend_url = os.environ.get("FRONTEND_URL") or os.environ.get("APP_URL")
+    if not frontend_url:
+        raise HTTPException(status_code=500, detail="FRONTEND_URL or APP_URL not configured")
     
     html = f"""
     <!DOCTYPE html>

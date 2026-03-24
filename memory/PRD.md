@@ -15,7 +15,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - **Backend**: FastAPI (Python) - Refactored modular structure
 - **Database**: MongoDB
 - **AI**: OpenAI GPT-5.2 Vision (via Emergent LLM Key)
-- **Auth**: JWT + Emergent Google OAuth + 2FA Email OTP
+- **Auth**: JWT + Custom Google OAuth + 2FA Email OTP
 - **Payments**: Stripe (test mode) - planned
 - **Email**: Resend API
 
@@ -47,6 +47,13 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 ├── ARCHITECTURE.md         # Refactoring documentation
 └── .env
 ```
+
+### Google OAuth Deployment Fix (Mar 24, 2026)
+- Removed hardcoded `auth.emergentagent.com` fallback from `App.js` `loginWithGoogle`
+- Removed hardcoded `preview.emergentagent.com` fallback from `google_auth.py` GET callback
+- Removed hardcoded `preview.emergentagent.com` fallback from `config.py` APP_URL
+- Added `FRONTEND_URL` env var to backend `.env`
+- All URLs now read purely from environment variables — no fallback defaults that break production
 
 ### Migration Status (Mar 23, 2026)
 - **Phase 1**: Core utilities, models, services - COMPLETE

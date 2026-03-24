@@ -1,164 +1,154 @@
-<analysis>**original_problem_statement**: The user wants to build a full-stack web application called **OEMLinker**, an AI-driven on-demand manufacturing marketplace. Buyers upload RFQs with drawings; an AI engine analyzes them, and a matching algorithm connects buyers with vendors. The platform handles an RFQ-to-payment workflow, RBAC permissions, manual/AI vendor matching, advanced quotation systems, a Hybrid Third-Party Inspection System, and IP Protection via NDA enforcement.
+<analysis>Here is the handover summary based on the LLM message history:
 
-**PRODUCT REQUIREMENTS:**
--   **User Roles:** Buyer, Vendor, Admin, Staff, Inspector (Managed via RBAC).
--   **Workflow:** RFQ -> Matching -> Quotation -> Comparison -> Order -> Inspection -> Payment.
--   **Quotation System:** Item-wise (per-drawing) quoting and partial quoting.
--   **Inspection System:** Buyers request inspections -> Vendors schedule date/time -> Admins assign Inspectors -> Inspectors submit reports.
--   **NDA Enforcement:** Buyers can enforce NDAs on RFQs. Vendors must accept the NDA (tracking IP, user agent, timestamp) before viewing or downloading drawings. Admins can manage NDA templates.
+**original_problem_statement**: The user is building a full-stack web application called **OEMLinker**, an AI-driven on-demand manufacturing marketplace. The platform handles an RFQ-to-payment workflow, RBAC permissions, manual/AI vendor matching, advanced quotation systems, a Hybrid Third-Party Inspection System, IP Protection via NDA enforcement, and a newly requested Textile/Fabric vertical.
 
 **User's preferred language**: INSTRUCT next agent to respond in English.
 
 **what currently exists?** 
-OEMLinker is a React/FastAPI/MongoDB app with AWS S3 file storage. It has an advanced quoting system, a fully working Hybrid Third-Party Inspection system (including an Admin tab, Inspector dashboard, and Vendor scheduling), and newly added dedicated Order pages for buyers and vendors. The backend is a massive monolith ( ~18.5k lines). Currently, the agent is midway through implementing the NDA Enforcement feature for RFQ drawings.
+OEMLinker is a React/FastAPI/MongoDB app with AWS S3 file storage and Resend for emails. Core workflows (Quoting, Inspections, Orders, NDA Enforcement) are functional. The app features a live AI chatbot (OEMBot), a detailed contact page with Google Maps, and Custom Google OAuth. The backend is currently undergoing a massive refactor from a monolithic  file to modular routes.
 
 **Last working item**:
--   **Last item agent was working**: Implementing and verifying the UI for the Non-Disclosure Agreement (NDA) enforcement feature. The agent created the  for Admins and added the NDA requirement toggle in . The agent was using the screenshot tool to verify the RFQ creation UI.
--   **Status**: IN PROGRESS
--   **Agent Testing Done**: N (Only partial screenshots of Admin and Buyer UI. Vendor flow and E2E not tested yet).
--   **Which testing method agent to use?**: Frontend testing agent / Backend testing agent (to verify both the UI modal flow and the backend file access blockage).
--   **User Testing Done**: N
+- **Last item agent was working**: Fixing critical deployment blockers related to Custom Google OAuth setup. The user provided production error logs, and the  identified hardcoded fallback URLs causing an  and  loop.
+- **Status**: IN PROGRESS
+- **Agent Testing Done**: N
+- **Which testing method agent to use?**: backend testing agent (to verify deployment/config readiness) and manual testing by curl/screenshot for OAuth flow.
+- **User Testing Done**: N
 
 **All Pending/In progress Issue list**:
--   **Issue 1**: Backend API missing NDA authorization check for file viewing/downloading (Priority: P0)
-    -   **Attempted fixes**: The agent updated the frontend () to show a modal instead of opening the file if NDA isn't accepted, but failed to secure the backend API.
-    -   **Next debug checklist**: Check  specifically the  and download endpoints. They MUST validate if the RFQ requires an NDA and if the requesting vendor has accepted it ( collection) before returning the AWS S3 presigned URL.
-    -   **Why fix this issue and what will be achieved with the fix?**: Crucial for IP protection. Frontend-only checks can be bypassed, rendering the NDA feature useless. 
-    -   **Status**: NOT STARTED
-    -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?**: backend
-    -   **Blocked on other issue**: None
-
--   **Issue 2**: Production Login Failure with Password (Priority: P2)
-    -   **Attempted fixes**: Previous job diagnosed but pending user deployment of the fix.
-    -   **Next debug checklist**: Verify login flow in production environment once user confirms deployment.
-    -   **Why fix this issue and what will be achieved with the fix?**: Critical for user access in production.
-    -   **Status**: BLOCKED (Pending user deployment)
-    -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?**: backend
-    -   **Blocked on other issue**: User deployment
+- **Issue 1**: Google OAuth Deployment Blockers (Priority: P0)
+    - **Attempted fixes**: Agent updated the  variables for , but the deployment subagent found hardcoded fallback URLs overriding the config during the Kubernetes build.
+    - **Next debug checklist**: Follow the exact output from the :
+      1. Remove the hardcoded  fallback in .
+      2. Remove hardcoded URL fallbacks in .
+      3. Create the necessary supervisor configuration file required for Kubernetes deployment.
+    - **Why fix this issue and what will be achieved with the fix?**: The user's production deployment is currently failing. Fixing this restores their ability to deploy.
+    - **Status**: IN PROGRESS
+    - **Is recurring issue?**: N
+    - **Should Test frontend/backend/both after fix?**: both
+    - **Blocked on other issue**: None
 
 **In progress Task List**:
--   **Task 1: Complete NDA Enforcement Feature (Priority: P0)**
-    -   **Where to resume**: The Admin NDA Templates and Buyer RFQ toggle are built. You need to: 
-        1. Ensure the  endpoint captures the user's IP Address and User Agent (as requested in the PRD).
-        2. Secure the backend drawing access endpoints.
-        3. Thoroughly test the Vendor flow: navigating to an NDA-protected RFQ -> clicking view drawing -> accepting the NDA modal -> successfully viewing the drawing.
-    -   **What will be achieved with this?**: Complete IP protection feature for buyers.
-    -   **Status**: IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?**: both
-    -   **Blocked on something**: None
+- **Task 1**:  Refactoring - Phase 2 (Priority: P1)
+    - **Where to resume**: The agent has successfully extracted , , , and  routes into . You need to continue extracting RFQ, Admin, and Inspection routes. 
+    - **What will be achieved with this?**: Breaking down the 19,000+ line  monolith to prevent context truncation and search/replace timeouts.
+    - **Status**: IN PROGRESS
+    - **Should Test frontend/backend/both after fix?**: both
+    - **Blocked on something**: None (Legacy routes are currently left in  but flagged; FastAPI is prioritizing the modular imports).
 
-**Upcoming and Future Tasks**
+**Upcoming and Future Tasks**:
 Upcoming Tasks:
--   **server.py Refactoring (P1)**: Migrate authentication, vendor, RFQ, and admin routes into separate modules. (Monolith is highly fragile, >18.5k lines).
--   **Partial Quoting Auto-Award (P1)**: Feature to automatically assign partial orders to different vendors based on best price per item.
--   **ElevenLabs Integration (P1)**: Voice agent integration.
--   **Stripe Integration (P1)**: Escrow payment system (Inspection payments are currently mocked).
--   **WordPress Integration (P1)**: Content management integration.
+- **Textile/Fabric Vertical Addition (P1)**: Define textile data models (GSM, weave type, color codes) and create an industry selector (Precision vs Textile) at RFQ creation.
+- **Homepage Redesign (P1)**: Add How It Works 3-step process, split sections for Buyers/Vendors, and feature highlights to attract more customers.
+- **Email Alerts for Chatbot Feedback (P2)**: Send admin email alerts when a user leaves negative (thumbs down) feedback on chatbot responses.
+- **Partial Quoting Auto-Award (P1)**: Auto-assign partial orders based on the best price per item.
+- **ElevenLabs Integration (P1)**: Voice agent integration.
+- **Stripe Integration (P1)**: Escrow payment system.
 
 Future Tasks:
--   Instant AI auto-quote for simple parts.
--   API for ERP integration.
+- Instant AI auto-quote for simple parts.
+- API for ERP integration.
 
-**Completed work in this session**
--   Fixed submit button redirect on  to navigate to RFQ detail page (DONE)
--   Created dedicated Order list pages for Buyers and Vendors (, ) and added to sidebars (DONE)
--   Fixed Inspector role login redirection to  (DONE)
--   Implemented Vendor Inspection Scheduling (replaced vendor assigning with vendor scheduling) (DONE)
--   Created Admin  for managing NDA templates (DONE)
--   Added NDA toggle to  and NDA validation UI to  (DONE)
+**Completed work in this session**:
+- Secured Backend NDA endpoints  and  with validation logic (DONE).
+- Extracted Auth, User, Vendor, and Order routes from  to modular files (DONE).
+- Fixed  bug on the Drawing View button in  (DONE).
+- Added Contact Section with Google Maps embed and Resend email notifications for submissions (DONE).
+- Implemented AI Chatbot Widget (OEMBot) using Gemini 3 Flash, complete with markdown rendering, 👍/👎 feedback, and an Admin Analytics dashboard (DONE).
+- Implemented backend/frontend boilerplate for Custom Google OAuth (DONE).
 
-**Earlier issues found/mentioned but not fixed**
--   **Issue 1**: Monolithic Files
-    -   **Debug checklist**: Check line counts for  (>18.5k) and  (>4.5k).
-    -   **Why to solve this issue and what will be achieved with this?**: Slows down development, causes tool timeout errors, risks context truncation and search/replace corruption.
-    -   **Should Test frontend/backend/both after fix**: both
-    -   **Is recurring issue?**: Y
+**Earlier issues found/mentioned but not fixed**:
+- **Issue 1**: Monolithic  File
+  - **Debug checklist**: Ensure legacy duplicate routes are safely removed from  once modular extraction is 100% verified.
+  - **Why to solve this issue**: Overly large files corrupt tool operations and cause extreme latency.
+  - **Should Test frontend/backend/both after fix**: both
+  - **Is recurring issue?**: Y
 
-**Known issue recurrence from previous fork**
--   Issue recurrence in previous fork: None
--   Recurrence count: 0
--   Status: RESOLVED
+**Known issue recurrence from previous fork**:
+- Issue recurrence in previous fork: None
+- Recurrence count: 0
+- Status: RESOLVED
 
-**Code Architecture**
+**Code Architecture**:
 
 
-**Key Technical Concepts**
--   **Frontend**: React, Shadcn UI, TailwindCSS, Axios
--   **Backend**: FastAPI, Pydantic, ReportLab (PDF)
--   **Database**: MongoDB
--   **File Storage**: AWS S3 (Presigned URLs)
--   **Security**: JWT, RBAC
+**Key Technical Concepts**:
+- **Frontend**: React, Shadcn UI, TailwindCSS, Framer Motion
+- **Backend**: FastAPI, Pydantic
+- **Database**: MongoDB
+- **Security/Integrations**: Custom JWT, Google OAuth 2.0, AWS S3 (Presigned URLs), Resend, Emergent LLM Key.
 
-**key DB schema**
--   **nda_templates** (New): 
--   **nda_acceptances** (New): 
--   **rfqs**: Added  (bool) and  (string).
--   **inspections**: Added , , .
+**key DB schema**:
+- **chat_history**: 
+- **nda_acceptances**: 
 
-**changes in tech stack**
--   None.
+**changes in tech stack**:
+- Added Custom Google OAuth.
+- Added AI Chatbot using Emergent LLM Key (Gemini 3 Flash).
 
-**All files of reference**
--   : Contains new endpoints for Vendor Orders, NDA Templates, NDA Acceptance, and Inspection Scheduling.
--   : Modified for NDA fields.
--   : Modified to block drawings behind the NDA Modal.
--   : Swapped Assign Inspector for Schedule Inspection vendor flow.
--   : New Admin component for NDAs.
+**All files of reference**:
+- : Contains Google Login functions (needs hardcoded URL removal).
+- : Contains OAuth backend logic (needs hardcoded URL removal).
+- : Core backend file requiring further modular refactoring.
+- : Contains frontend chatbot logic and markdown parsing.
 
 **Areas that need refactoring**:
--   : Dangerously large (18.6k lines). Refactor urgently to split modules.
--   : Needs component extraction.
+- : Still dangerously large. Needs extraction of RFQ, Admin, and Inspection routes. Legacy/commented out code from phase 1 & 2 refactoring needs to be cleaned up.
 
-**key api endpoints**
--   : Vendor schedules inspection.
--   : Fetch NDA templates.
--   : Vendor accepts an NDA for an RFQ.
--    & : Fetch contextual order lists.
+**key api endpoints**:
+- : Handles Google auth code exchange.
+- : Chatbot AI generation.
+- : Form submission handling & email firing.
 
-**Critical Info for New Agent**
--   The user strictly requested that IP Address and User Agent be logged when a vendor accepts an NDA. Make sure  in  extracts this from the FastAPI  object.
--   **Crucial Security Gap**: The backend endpoint serving drawings () must be updated to check  if . Currently, it is unprotected on the backend.
--   Be extremely careful modifying  via  due to its size and repeated boilerplate.
+**Critical Info for New Agent**:
+- **DO NOT** use default fallbacks for URLs in your code. The deployment agent explicitly noted that fallbacks pointing to  are causing  errors in production Kubernetes. Read variables purely from .
+- For the  refactoring: Modular routes take precedence due to import order, but the original legacy routes are still sitting inside . You will need to carefully remove them eventually.
 
-**documents and test reports created in this job**
--    (Updated with Orders, Inspection Scheduling, and NDA details)
--   
+**documents and test reports created in this job**:
+-  (Updated)
+- 
 
-**Last 10 User Messages and any pending HUMAN messages**
-1.  **user**:  (Status: Completed)
-2.  **user**:  (Status: Completed)
-3.  **user**:  (Status: Completed)
-4.  **user**:  (Status: Completed)
-5.  **user**:  (Status: Completed)
-6.  **user**:  (Status: Completed)
-7.  **user**:  (Status: **IN PROGRESS**)
+**Last 10 User Messages and any pending HUMAN messages**:
+1. **user**:  (Completed)
+2. **user**:  (Completed)
+3. **user**:  (Completed)
+4. **user**:  (Completed)
+5. **user**:  (Completed)
+6. **user**:  [Markdown fix] (Completed)
+7. **user**:  (Completed)
+8. **user**:  (Completed)
+9. **user**:  (Completed)
+10. **user**:  (**IN PROGRESS**)
 
 **Project Health Check:**
--   **Mocked**: Inspection Payments ( updates status without external gateway logic yet).
--   **Broken**: Backend drawing access is not enforcing NDA checks. 
+- **Broken**: Google OAuth deployment ( /  loops due to hardcoded fallback URLs overriding env vars).
+- **Mocked**: Inspection Payments.
 
-**3rd Party Integrations**
--   OpenAI GPT-4o — uses Emergent LLM Key
--   AWS S3 — fully integrated
--   Resend — requires User API Key
--   Gupshup — requires User API Key
--   ElevenLabs — requires User API Key (Pending)
--   Stripe — requires User API Key (Pending)
+**3rd Party Integrations**:
+- OpenAI GPT-4o — uses Emergent LLM Key
+- Gemini 3 Flash (Chatbot) — uses Emergent LLM Key
+- AWS S3 (Storage) — fully integrated
+- Resend (Emails) — requires User API Key
+- Google OAuth — requires User API Key
 
-**Testing status**
--   Testing agent used after significant changes: YES ()
--   Troubleshoot agent used after agent stuck in loop: NO
--   Test files created: 
--   Known regressions: None.
+**Testing status**:
+- Testing agent used after significant changes: YES
+- Troubleshoot agent used after agent stuck in loop: NO (Deployment subagent used)
+- Test files created: 
+- Known regressions: None.
 
 **Credentials to test flow:**
--   Admin:  /  (or  / )
--   Buyer:  / 
--   Vendor:  /  (Custom testing account for Vendor Scheduling)
--   Inspector:  / 
+- Admin:  / 
+- Vendor:  / 
 
-**What agent forgot to execute**
--   The prompt explicitly required Backend access control for files based on NDA: . The agent added the frontend UI for this but completely forgot to secure the actual backend drawing endpoints.
--   The prompt required capturing  and  in the  table. This needs verification in the  endpoint logic.</analysis>
+**What agent forgot to execute**:
+- The agent ran the  to diagnose the Google OAuth production failure, received a clear list of 3 action items to fix the code, but finished the session before making the actual code edits to  and . 
+
+**Debugging checklist for current issue**
+    Issue: Google OAuth failing in production with invalid_grant / redirect_uri_mismatch
+    
+    Frontend files to check: 
+    - : Locate  and remove the  fallback.
+
+    Backend files to check:
+    - : Remove hardcoded fallback URL in the callback logic.
+    - Create a supervisor configuration file for the Kubernetes deployment as instructed by the subagent.</analysis>

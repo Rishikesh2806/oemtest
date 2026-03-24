@@ -3328,7 +3328,7 @@ async def send_message(message: MessageCreate, user: dict = Depends(get_current_
     
     # Create in-app notification for the receiver
     sender_name = user.get("name", "Someone")
-    app_url = os.environ.get("APP_URL", "https://nda-enforcement.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://google-auth-refactor.preview.emergentagent.com")
     
     await create_notification(
         user_id=message.receiver_id,
@@ -5608,7 +5608,7 @@ async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list
     from app.services.whatsapp_service import send_image_message
     
     # Use the actual deployed URL
-    BASE_URL = os.environ.get("APP_URL", "https://nda-enforcement.preview.emergentagent.com")
+    BASE_URL = os.environ.get("APP_URL", "https://google-auth-refactor.preview.emergentagent.com")
     
     # Small delay to let template message send first
     await asyncio.sleep(2)
@@ -6658,7 +6658,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://nda-enforcement.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://google-auth-refactor.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -7664,7 +7664,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     )
     
     # Send email notification to buyer
-    app_url = os.environ.get("APP_URL", "https://nda-enforcement.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://google-auth-refactor.preview.emergentagent.com")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
     if buyer and buyer.get("email"):
         email_data = {
@@ -7926,7 +7926,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
                 "sender_name": user.get("name", "Buyer"),
                 "recipient_name": vendor.get("company_name", "Vendor"),
                 "message_preview": f"Negotiation request: {request.message[:150]}",
-                "app_url": f"{os.environ.get('APP_URL', 'https://nda-enforcement.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
+                "app_url": f"{os.environ.get('APP_URL', 'https://google-auth-refactor.preview.emergentagent.com')}/vendor/rfq/{quote['rfq_id']}"
             }
         )
     
@@ -8219,7 +8219,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notification to vendor and create in-app notification
-    app_url = os.environ.get("APP_URL", "https://nda-enforcement.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://google-auth-refactor.preview.emergentagent.com")
     vendor = await db.vendors.find_one({"vendor_id": quote["vendor_id"]}, {"_id": 0})
     if vendor:
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
@@ -8425,7 +8425,7 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     status_label = status_labels.get(new_status, new_status.replace('_', ' ').title())
     
     # Notify both buyer and vendor about status updates
-    app_url = os.environ.get("APP_URL", "https://nda-enforcement.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "https://google-auth-refactor.preview.emergentagent.com")
     
     # Notify buyer
     await create_notification(

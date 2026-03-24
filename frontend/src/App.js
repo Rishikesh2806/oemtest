@@ -137,9 +137,7 @@ const AuthProvider = ({ children }) => {
       const redirectUri = window.location.origin + "/auth/google/callback";
       
       if (!clientId) {
-        // Fallback to Emergent auth if no Google client ID configured
-        const redirectUrl = window.location.origin + "/dashboard";
-        window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+        console.error("Google OAuth not configured: REACT_APP_GOOGLE_CLIENT_ID is missing");
         return;
       }
       
@@ -156,7 +154,6 @@ const AuthProvider = ({ children }) => {
       window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
     } catch (error) {
       console.error("Google login error:", error);
-      toast.error("Failed to initiate Google login");
     }
   };
 
