@@ -420,8 +420,8 @@ const LandingPage = () => {
                     <h4 className="font-semibold text-lg mb-2">Head Office</h4>
                     <p className="text-slate-300 leading-relaxed">
                       Simpson & Munro (I) Pvt Ltd<br />
-                      1st Floor, Plot No. 42, Sector 18<br />
-                      Gurugram, Haryana 122015<br />
+                      6th Floor, 4 Lyons Range<br />
+                      Kolkata 700 001<br />
                       India
                     </p>
                   </div>
@@ -457,16 +457,18 @@ const LandingPage = () => {
               {/* Phone Card */}
               <div className="bg-white border border-slate-200 rounded-xl p-6 hover:border-orange-300 transition-colors">
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Phone className="w-6 h-6 text-slate-700" />
+                  <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                    <Phone className="w-6 h-6 text-green-700" />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-slate-900 mb-1">Call Us</h4>
+                    <h4 className="font-semibold text-slate-900 mb-1">WhatsApp Us</h4>
                     <a 
-                      href="tel:+911234567890" 
-                      className="text-orange-600 hover:text-orange-700 font-medium"
+                      href="https://wa.me/919831509919" 
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-green-600 hover:text-green-700 font-medium"
                     >
-                      +91 123 456 7890
+                      +91-9831509919
                     </a>
                     <p className="text-slate-500 text-sm mt-1">Mon - Fri, 9:00 AM - 6:00 PM IST</p>
                   </div>
@@ -477,7 +479,7 @@ const LandingPage = () => {
               <div className="bg-slate-100 rounded-xl h-48 flex items-center justify-center border border-slate-200">
                 <div className="text-center text-slate-500">
                   <MapPin className="w-8 h-8 mx-auto mb-2 text-slate-400" />
-                  <p className="text-sm">Gurugram, Haryana, India</p>
+                  <p className="text-sm">Kolkata, West Bengal, India</p>
                 </div>
               </div>
             </motion.div>
@@ -537,8 +539,8 @@ const LandingPage = () => {
                 info@oemlinker.com
               </a>
               <span className="text-slate-700">|</span>
-              <a href="tel:+911234567890" className="hover:text-orange-400 transition-colors">
-                +91 123 456 7890
+              <a href="https://wa.me/919831509919" target="_blank" rel="noopener noreferrer" className="hover:text-green-400 transition-colors">
+                +91-9831509919
               </a>
             </div>
           </div>
