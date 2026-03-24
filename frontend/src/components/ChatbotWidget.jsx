@@ -9,6 +9,28 @@ import {
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+// Simple markdown parser for chat messages
+const parseMarkdown = (text) => {
+  if (!text) return text;
+  
+  // Convert **bold** to <strong>
+  let parsed = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  
+  // Convert *italic* to <em>
+  parsed = parsed.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  
+  // Convert numbered lists (1. 2. 3. etc)
+  parsed = parsed.replace(/^(\d+)\.\s+/gm, '<span class="font-medium text-orange-600">$1.</span> ');
+  
+  // Convert bullet points
+  parsed = parsed.replace(/^[-•]\s+/gm, '<span class="text-orange-500 mr-1">•</span>');
+  
+  // Convert line breaks
+  parsed = parsed.replace(/\n/g, '<br/>');
+  
+  return parsed;
+};
+
 const ChatbotWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -265,7 +287,14 @@ const ChatbotWidget = () => {
                             ? "bg-orange-500 text-white rounded-br-md"
                             : "bg-white text-slate-700 border border-slate-200 rounded-bl-md shadow-sm"
                         }`}>
-                          <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                          {message.type === "bot" ? (
+                            <p 
+                              className="text-sm leading-relaxed"
+                              dangerouslySetInnerHTML={{ __html: parseMarkdown(message.text) }}
+                            />
+                          ) : (
+                            <p className="text-sm whitespace-pre-wrap">{message.text}</p>
+                          )}
                         </div>
                       </div>
                       
