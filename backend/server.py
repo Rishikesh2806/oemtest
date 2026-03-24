@@ -14180,6 +14180,42 @@ async def root():
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
 
+# ============== CONTACT FORM ==============
+
+class ContactFormRequest(BaseModel):
+    name: str
+    email: str
+    phone: Optional[str] = None
+    company: Optional[str] = None
+    message: str
+
+@api_router.post("/contact")
+async def submit_contact_form(contact: ContactFormRequest):
+    """Handle contact form submissions from landing page"""
+    contact_id = f"contact_{uuid.uuid4().hex[:12]}"
+    
+    contact_doc = {
+        "contact_id": contact_id,
+        "name": contact.name,
+        "email": contact.email,
+        "phone": contact.phone,
+        "company": contact.company,
+        "message": contact.message,
+        "status": "new",
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.contact_submissions.insert_one(contact_doc)
+    
+    # Log for admin notification
+    logger.info(f"New contact form submission: {contact_id} from {contact.email}")
+    
+    return {
+        "success": True,
+        "message": "Thank you for contacting us. We'll get back to you soon.",
+        "contact_id": contact_id
+    }
+
 # ============== NOTIFICATIONS ==============
 
 @api_router.get("/notifications")
