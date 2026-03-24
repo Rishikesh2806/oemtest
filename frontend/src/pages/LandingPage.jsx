@@ -437,19 +437,12 @@ const LandingPage = () => {
                   <div>
                     <h4 className="font-semibold text-slate-900 mb-1">Email Us</h4>
                     <a 
-                      href="mailto:info@oemlinker.com" 
-                      className="text-orange-600 hover:text-orange-700 font-medium"
-                    >
-                      info@oemlinker.com
-                    </a>
-                    <p className="text-slate-500 text-sm mt-1">For general inquiries</p>
-                    <a 
                       href="mailto:support@oemlinker.com" 
-                      className="text-orange-600 hover:text-orange-700 font-medium block mt-2"
+                      className="text-orange-600 hover:text-orange-700 font-medium"
                     >
                       support@oemlinker.com
                     </a>
-                    <p className="text-slate-500 text-sm mt-1">For technical support</p>
+                    <p className="text-slate-500 text-sm mt-1">For inquiries and support</p>
                   </div>
                 </div>
               </div>
@@ -535,8 +528,8 @@ const LandingPage = () => {
           <div className="border-t border-slate-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
             <p className="text-sm">© 2026 Simpson & Munro (I) Pvt Ltd. All rights reserved.</p>
             <div className="flex items-center gap-4 text-sm">
-              <a href="mailto:info@oemlinker.com" className="hover:text-orange-400 transition-colors">
-                info@oemlinker.com
+              <a href="mailto:support@oemlinker.com" className="hover:text-orange-400 transition-colors">
+                support@oemlinker.com
               </a>
               <span className="text-slate-700">|</span>
               <a href="https://wa.me/919831509919" target="_blank" rel="noopener noreferrer" className="hover:text-green-400 transition-colors">
