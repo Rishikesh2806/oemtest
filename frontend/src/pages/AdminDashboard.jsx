@@ -7,6 +7,7 @@ import PermittedActions from "../components/PermittedActions";
 import QuotationComparison from "../components/QuotationComparison";
 import InspectionsTab from "../components/admin/InspectionsTab";
 import NDATemplatesTab from "../components/admin/NDATemplatesTab";
+import ChatAnalyticsTab from "../components/admin/ChatAnalyticsTab";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -19,7 +20,7 @@ import {
   Users, FileText, Package, DollarSign, Building2, Wrench, FileCheck,
   CheckCircle2, XCircle, Loader2, Search, Plus, Edit, Trash2,
   Eye, Send, AlertCircle, RefreshCw, ChevronRight, Clock, Camera, Upload,
-  Link, X, CheckCircle, BarChart3, Zap, Shield
+  Link, X, CheckCircle, BarChart3, Zap, Shield, MessageSquare
 } from "lucide-react";
 import { Checkbox } from "../components/ui/checkbox";
 
@@ -35,6 +36,7 @@ const TAB_CONFIG = {
   inspections: { label: "Inspections", icon: Shield, permissions: ['inspections.view'] },
   drawings: { label: "Drawings", icon: FileCheck, permissions: ['rfqs.view'] },
   nda_templates: { label: "NDA Templates", icon: Shield, permissions: ['rfqs.view'] },
+  chat_analytics: { label: "Chat Analytics", icon: MessageSquare, permissions: ['admin.all'] },
 };
 
 // Tab components
@@ -4439,6 +4441,14 @@ const AdminDashboard = () => {
                 label="NDA Templates"
               />
             )}
+            {permittedTabs.includes('chat_analytics') && (
+              <TabButton 
+                active={activeTab === "chat_analytics"} 
+                onClick={() => handleTabChange("chat_analytics")} 
+                icon={MessageSquare} 
+                label="Chat Analytics"
+              />
+            )}
           </div>
         </div>
 
@@ -4546,6 +4556,9 @@ const AdminDashboard = () => {
         )}
         {activeTab === "nda_templates" && permittedTabs.includes('nda_templates') && (
           <NDATemplatesTab />
+        )}
+        {activeTab === "chat_analytics" && permittedTabs.includes('chat_analytics') && (
+          <ChatAnalyticsTab />
         )}
       </div>
     </DashboardLayout>

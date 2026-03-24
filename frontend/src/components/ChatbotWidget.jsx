@@ -4,7 +4,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { 
   MessageCircle, X, Send, Bot, User, Loader2, 
-  Trash2, Minimize2, Maximize2 
+  Trash2, Minimize2, Maximize2, ThumbsUp, ThumbsDown
 } from "lucide-react";
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -17,7 +17,9 @@ const ChatbotWidget = () => {
       id: "welcome",
       type: "bot",
       text: "Hey there! 👋 I'm OEMBot, your friendly assistant for all things manufacturing. How can I help you today?",
-      timestamp: new Date()
+      timestamp: new Date(),
+      chatId: null,
+      feedback: null
     }
   ]);
   const [inputValue, setInputValue] = useState("");
@@ -95,7 +97,9 @@ const ChatbotWidget = () => {
         id: `bot_${Date.now()}`,
         type: "bot",
         text: data.response || "Sorry, I couldn't process that. Please try again!",
-        timestamp: new Date()
+        timestamp: new Date(),
+        chatId: data.chat_id,
+        feedback: null
       };
 
       setMessages(prev => [...prev, botMessage]);
@@ -105,11 +109,32 @@ const ChatbotWidget = () => {
         id: `error_${Date.now()}`,
         type: "bot",
         text: "Oops! I'm having trouble connecting right now. Please try again or contact support@oemlinker.com 📧",
-        timestamp: new Date()
+        timestamp: new Date(),
+        chatId: null,
+        feedback: null
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const submitFeedback = async (chatId, rating) => {
+    if (!chatId) return;
+    
+    try {
+      await fetch(`${API_URL}/api/chatbot/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, rating })
+      });
+      
+      // Update message to show feedback was submitted
+      setMessages(prev => prev.map(msg => 
+        msg.chatId === chatId ? { ...msg, feedback: rating } : msg
+      ));
+    } catch (error) {
+      console.error("Feedback error:", error);
     }
   };
 
@@ -225,7 +250,7 @@ const ChatbotWidget = () => {
                       key={message.id}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}
+                      className={`flex flex-col ${message.type === "user" ? "items-end" : "items-start"}`}
                     >
                       <div className={`flex items-start gap-2 max-w-[85%] ${message.type === "user" ? "flex-row-reverse" : ""}`}>
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
@@ -243,6 +268,34 @@ const ChatbotWidget = () => {
                           <p className="text-sm whitespace-pre-wrap">{message.text}</p>
                         </div>
                       </div>
+                      
+                      {/* Feedback buttons for bot messages */}
+                      {message.type === "bot" && message.chatId && (
+                        <div className="flex items-center gap-1 mt-1 ml-10">
+                          {message.feedback ? (
+                            <span className="text-xs text-slate-400">
+                              {message.feedback === 5 ? "👍 Thanks!" : "👎 We'll improve!"}
+                            </span>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => submitFeedback(message.chatId, 5)}
+                                className="p-1 hover:bg-green-100 rounded text-slate-400 hover:text-green-600 transition-colors"
+                                title="Helpful"
+                              >
+                                <ThumbsUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => submitFeedback(message.chatId, 1)}
+                                className="p-1 hover:bg-red-100 rounded text-slate-400 hover:text-red-600 transition-colors"
+                                title="Not helpful"
+                              >
+                                <ThumbsDown className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </motion.div>
                   ))}
 
