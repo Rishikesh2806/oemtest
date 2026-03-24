@@ -45,6 +45,7 @@ import DataDeletion from "./pages/DataDeletion";
 import DataDeletionStatus from "./pages/DataDeletionStatus";
 import MagicLogin from "./pages/MagicLogin";
 import InspectorDashboard from "./pages/InspectorDashboard";
+import GoogleCallback from "./pages/GoogleCallback";
 
 // Use window.location.origin for API calls - this ensures requests go to the same domain
 // This fixes issues where REACT_APP_BACKEND_URL might point to a different host
@@ -130,10 +131,33 @@ const AuthProvider = ({ children }) => {
     return response.data.user;
   };
 
-  const loginWithGoogle = () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + "/dashboard";
-    window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+  const loginWithGoogle = async () => {
+    try {
+      const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+      const redirectUri = window.location.origin + "/auth/google/callback";
+      
+      if (!clientId) {
+        // Fallback to Emergent auth if no Google client ID configured
+        const redirectUrl = window.location.origin + "/dashboard";
+        window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
+        return;
+      }
+      
+      // Build Google OAuth URL
+      const params = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        response_type: "code",
+        scope: "openid email profile",
+        access_type: "offline",
+        prompt: "consent"
+      });
+      
+      window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+    } catch (error) {
+      console.error("Google login error:", error);
+      toast.error("Failed to initiate Google login");
+    }
   };
 
   const logout = async () => {
@@ -274,6 +298,7 @@ const AppRouter = () => {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
+      <Route path="/auth/google/callback" element={<GoogleCallback />} />
       
       {/* Generic dashboard redirect */}
       <Route path="/dashboard" element={<DashboardRedirect />} />
