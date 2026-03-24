@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from
 import axios from "axios";
 import { Toaster } from "./components/ui/sonner";
 import { PermissionsProvider } from "./hooks/usePermissions";
+import ChatbotWidget from "./components/ChatbotWidget";
 
 // Pages
 import LandingPage from "./pages/LandingPage";
@@ -486,6 +487,7 @@ function App() {
         <PermissionsProvider>
           <AppRouter />
           <Toaster position="top-right" />
+          <ChatbotWidget />
         </PermissionsProvider>
       </AuthProvider>
     </BrowserRouter>
