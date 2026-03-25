@@ -14,6 +14,9 @@ const LoginPage = () => {
   const { login, loginWithGoogle, updateUser } = useAuth();
   const navigate = useNavigate();
   
+  // Check for redirect param (e.g., from PDF quote link)
+  const redirectPath = new URLSearchParams(window.location.search).get("redirect");
+
   // 2FA state
   const [requires2FA, setRequires2FA] = useState(false);
   const [otp, setOtp] = useState("");
@@ -23,6 +26,12 @@ const LoginPage = () => {
   const handleLoginSuccess = (userData) => {
     updateUser(userData);
     toast.success("Welcome back!");
+    
+    // If there's a redirect path (from PDF link), go there
+    if (redirectPath) {
+      navigate(redirectPath);
+      return;
+    }
     
     // Check for base role first
     if (userData.role === "vendor") {
@@ -298,7 +307,7 @@ const LoginPage = () => {
 
           <p className="mt-8 text-center text-slate-500">
             Don't have an account?{" "}
-            <Link to="/register" className="text-orange-600 hover:text-orange-700 font-medium">
+            <Link to={`/register${redirectPath ? `?redirect=${encodeURIComponent(redirectPath)}` : ''}`} className="text-orange-600 hover:text-orange-700 font-medium">
               Create account
             </Link>
           </p>

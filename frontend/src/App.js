@@ -47,6 +47,7 @@ import MagicLogin from "./pages/MagicLogin";
 import InspectorDashboard from "./pages/InspectorDashboard";
 import GoogleCallback from "./pages/GoogleCallback";
 import SelectRolePage from "./pages/SelectRolePage";
+import QuoteRedirect from "./pages/QuoteRedirect";
 
 // Use window.location.origin for API calls - this ensures requests go to the same domain
 // This fixes issues where REACT_APP_BACKEND_URL might point to a different host
@@ -311,6 +312,9 @@ const AppRouter = () => {
           <SelectRolePage />
         </ProtectedRoute>
       } />
+      
+      {/* Public RFQ Quote Link (from PDF) */}
+      <Route path="/quote/rfq/:rfqId" element={<QuoteRedirect />} />
       
       {/* Generic dashboard redirect */}
       <Route path="/dashboard" element={<DashboardRedirect />} />

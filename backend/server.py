@@ -9642,6 +9642,40 @@ async def admin_generate_rfq_pdf(rfq_id: str, user: dict = Depends(get_current_u
         elements.append(Paragraph(notes_text, description_style))
         elements.append(Spacer(1, 6*mm))
     
+    # ===== SUBMIT QUOTE CTA =====
+    app_url = os.environ.get("APP_URL", "")
+    if app_url:
+        quote_url = f"{app_url}/quote/rfq/{rfq_id}"
+        
+        cta_style = ParagraphStyle(
+            'CTA', fontSize=12, textColor=colors.white, fontName='Helvetica-Bold', 
+            alignment=TA_CENTER, spaceAfter=0
+        )
+        cta_sub_style = ParagraphStyle(
+            'CTASub', fontSize=9, textColor=colors.HexColor('#fed7aa'), 
+            alignment=TA_CENTER, spaceAfter=0
+        )
+        
+        cta_content = [
+            [Paragraph(f'<link href="{quote_url}"><font color="white"><b>SUBMIT YOUR QUOTE FOR THIS RFQ</b></font></link>', cta_style)],
+            [Paragraph(f'<link href="{quote_url}"><font color="#fed7aa">Click here or visit: {quote_url}</font></link>', cta_sub_style)]
+        ]
+        cta_table = Table(cta_content, colWidths=[CONTENT_WIDTH - 4*mm])
+        cta_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), ORANGE),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (0, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (0, 0), 4),
+            ('TOPPADDING', (0, 1), (0, 1), 2),
+            ('BOTTOMPADDING', (0, 1), (0, 1), 12),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+            ('BOX', (0, 0), (-1, -1), 1, ORANGE),
+        ]))
+        elements.append(cta_table)
+        elements.append(Spacer(1, 6*mm))
+    
     # ===== FOOTER SPACER =====
     elements.append(Spacer(1, 10*mm))
     

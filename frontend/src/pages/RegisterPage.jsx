@@ -86,6 +86,8 @@ const RegisterPage = () => {
   const { register, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
   
+  // Check for redirect param (e.g., from PDF quote link)
+  const redirectPath = new URLSearchParams(window.location.search).get("redirect");
   // Password validation
   const passwordValidation = useMemo(() => validatePassword(password), [password]);
 
@@ -219,7 +221,9 @@ const RegisterPage = () => {
         duration: 6000
       });
       
-      if (user.role === "vendor") {
+      if (redirectPath) {
+        navigate(redirectPath);
+      } else if (user.role === "vendor") {
         navigate("/vendor/profile");
       } else {
         navigate("/buyer/dashboard");
@@ -582,7 +586,7 @@ const RegisterPage = () => {
 
           <p className="text-center text-sm text-slate-500 mt-8">
             Already have an account?{" "}
-            <Link to="/login" className="text-orange-600 hover:underline font-medium">
+            <Link to={`/login${redirectPath ? `?redirect=${encodeURIComponent(redirectPath)}` : ''}`} className="text-orange-600 hover:underline font-medium">
               Sign in
             </Link>
           </p>
