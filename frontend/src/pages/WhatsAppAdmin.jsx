@@ -8,7 +8,7 @@ import { Badge } from '../components/ui/badge';
 import { toast } from 'sonner';
 import { MessageSquare, Send, CheckCircle, XCircle, Phone, RefreshCw, Bell, Inbox, FileText, Copy } from 'lucide-react';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = window.location.origin;
 
 export default function WhatsAppAdmin() {
   const [status, setStatus] = useState(null);

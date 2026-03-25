@@ -7,7 +7,7 @@ import {
   Trash2, Minimize2, Maximize2, ThumbsUp, ThumbsDown
 } from "lucide-react";
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = window.location.origin;
 
 // Simple markdown parser for chat messages
 const parseMarkdown = (text) => {

@@ -269,7 +269,7 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
       setLoadingRoles(true);
       try {
         const token = localStorage.getItem('token');
-        const response = await fetch(`${process.env.REACT_APP_BACKEND_URL}/api/admin/roles?include_base_roles=false`, {
+        const response = await fetch(`${window.location.origin}/api/admin/roles?include_base_roles=false`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (response.ok) {

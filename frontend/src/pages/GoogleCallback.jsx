@@ -4,8 +4,6 @@ import { useAuth, api } from "../App";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
-
 const GoogleCallback = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -35,22 +33,12 @@ const GoogleCallback = () => {
       try {
         const redirectUri = window.location.origin + "/auth/google/callback";
         
-        const response = await fetch(`${API_URL}/api/auth/google/callback`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            code: code,
-            redirect_uri: redirectUri
-          })
+        const response = await api.post("/auth/google/callback", {
+          code: code,
+          redirect_uri: redirectUri
         });
 
-        const data = await response.json();
-
-        if (!response.ok) {
-          throw new Error(data.detail || "Failed to complete Google sign-in");
-        }
+        const data = response.data;
 
         if (data.success && data.access_token) {
           // Store token
@@ -78,7 +66,8 @@ const GoogleCallback = () => {
         }
       } catch (err) {
         console.error("Google callback error:", err);
-        setError(err.message || "Failed to complete sign-in");
+        const errorMsg = err.response?.data?.detail || err.message || "Failed to complete sign-in";
+        setError(errorMsg);
         setProcessing(false);
         setTimeout(() => navigate("/login"), 3000);
       }

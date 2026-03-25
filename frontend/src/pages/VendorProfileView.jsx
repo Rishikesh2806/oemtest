@@ -142,7 +142,7 @@ const VendorProfileView = () => {
     if (!imageUrl) return null;
     // Handle relative URLs
     if (imageUrl.startsWith('/api/')) {
-      const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
+      const backendUrl = window.location.origin;
       return `${backendUrl}${imageUrl}`;
     }
     return imageUrl;

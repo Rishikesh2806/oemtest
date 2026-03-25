@@ -44,7 +44,7 @@ import {
   SelectValue,
 } from '../components/ui/select';
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = window.location.origin;
 
 // Color options for roles
 const ROLE_COLORS = [

@@ -22,7 +22,7 @@ import QuoteDetailModal from "../components/QuoteDetailModal";
 import VendorNegotiationPanel from "../components/VendorNegotiationPanel";
 import VendorQuotationForm from "../components/VendorQuotationForm";
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = window.location.origin;
 
 const PAYMENT_TERMS = [
   { value: "net_30", label: "Net 30 Days" },

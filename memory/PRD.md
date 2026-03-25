@@ -53,7 +53,8 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Removed hardcoded `preview.emergentagent.com` fallback from `google_auth.py` GET callback
 - Removed hardcoded `preview.emergentagent.com` fallback from `config.py` APP_URL
 - Added `FRONTEND_URL` env var to backend `.env`
-- All URLs now read purely from environment variables — no fallback defaults that break production
+- **Fixed post-login redirect bug**: Replaced all `process.env.REACT_APP_BACKEND_URL` usages across 10+ files with `window.location.origin` to ensure consistent API routing in production deployments (oemlinker.com). Root cause: build-time env var pointed to preview URL while runtime origin was production domain, causing JWT mismatch on `/auth/me` check.
+- All URLs now read purely from environment variables or `window.location.origin` — no fallback defaults that break production
 
 ### Migration Status (Mar 23, 2026)
 - **Phase 1**: Core utilities, models, services - COMPLETE

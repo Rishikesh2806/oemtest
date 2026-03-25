@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
-const API_URL = process.env.REACT_APP_BACKEND_URL;
+const API_URL = window.location.origin;
 
 const ChatAnalyticsTab = () => {
   const [analytics, setAnalytics] = useState(null);
