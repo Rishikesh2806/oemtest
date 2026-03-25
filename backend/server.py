@@ -6658,7 +6658,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     )
     
     # Send email notifications ONLY to vendors with 50%+ match score (non-blocking)
-    app_url = os.environ.get("APP_URL", "https://google-auth-refactor.preview.emergentagent.com")
+    app_url = os.environ.get("APP_URL", "")
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
@@ -10129,30 +10129,41 @@ async def admin_search_vendors_for_matching(
 async def send_vendor_match_notification_email(vendor: dict, rfq: dict, buyer: dict):
     """Send email notification to vendor about new RFQ match"""
     try:
-        from app.services.notification_service import notification_service
-        
         vendor_user = await db.users.find_one({"user_id": vendor.get("user_id")}, {"_id": 0, "email": 1, "name": 1})
         if not vendor_user or not vendor_user.get("email"):
             return
         
-        data = {
-            "rfq_id": rfq.get("rfq_id"),
-            "rfq_title": rfq.get("title", "New RFQ"),
-            "material_type": rfq.get("material_type", "N/A"),
-            "quantity": rfq.get("quantity", "As Required"),
-            "tolerance": rfq.get("tolerance", "N/A"),
-            "deadline": rfq.get("deadline", "As per RFQ"),
-            "buyer_name": buyer.get("name", "Buyer") if buyer else "Buyer",
-            "match_score": 100,
-            "app_url": f"https://oemlinker.com/vendor/rfq/{rfq.get('rfq_id')}"
-        }
+        vendor_name = vendor_user.get("name", "Vendor")
+        rfq_title = rfq.get("title", "New RFQ")
+        buyer_name = buyer.get("name", "Buyer") if buyer else "Buyer"
+        rfq_id = rfq.get("rfq_id", "")
+        material = rfq.get("material_type", "N/A")
+        quantity = rfq.get("quantity", "N/A")
         
-        await notification_service.send_notification(
-            channel="email",
-            recipient=vendor_user["email"],
-            notification_type="rfq_match",
-            data=data
-        )
+        subject = f"New RFQ Match: {rfq_title} - OEMLinker"
+        html = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f8fafc; padding: 24px;">
+            <div style="background: #ea580c; padding: 20px; border-radius: 8px 8px 0 0; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 22px;">New RFQ Match</h1>
+            </div>
+            <div style="background: white; padding: 24px; border-radius: 0 0 8px 8px; border: 1px solid #e2e8f0;">
+                <p style="font-size: 16px; color: #334155;">Hi {vendor_name},</p>
+                <p style="color: #475569;">You have been matched to a new RFQ on OEMLinker. Here are the details:</p>
+                <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">RFQ Title</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #1e293b;">{rfq_title}</td></tr>
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Material</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #1e293b;">{material}</td></tr>
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Quantity</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #1e293b;">{quantity}</td></tr>
+                    <tr><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Buyer</td><td style="padding: 8px; border-bottom: 1px solid #e2e8f0; color: #1e293b;">{buyer_name}</td></tr>
+                </table>
+                <div style="text-align: center; margin: 24px 0;">
+                    <a href="https://oemlinker.com/vendor/rfq/{rfq_id}" style="background: #ea580c; color: white; padding: 12px 32px; border-radius: 6px; text-decoration: none; font-weight: 600; display: inline-block;">View RFQ &amp; Submit Quote</a>
+                </div>
+                <p style="color: #94a3b8; font-size: 13px; text-align: center;">Please log in to your OEMLinker account to view full details and submit your quotation.</p>
+            </div>
+        </div>
+        """
+        
+        asyncio.create_task(send_email_async(vendor_user["email"], subject, html))
     except Exception as e:
         logger.error(f"Failed to send vendor match email: {e}")
 
