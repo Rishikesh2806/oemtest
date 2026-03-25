@@ -3101,6 +3101,33 @@ async def delete_portfolio_photo(portfolio_id: str, user: dict = Depends(get_cur
     return {"message": "Portfolio photo deleted"}
 
 
+@api_router.put("/vendor/portfolio/{portfolio_id}")
+async def update_portfolio_photo(portfolio_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Update auto-detected fields on a portfolio photo"""
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    body = await request.json()
+    allowed_fields = {"manufacturing_process", "material", "part_category", "surface_finish", "complexity"}
+    updates = {k: v for k, v in body.items() if k in allowed_fields}
+    
+    if not updates:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    
+    result = await db.vendor_portfolio.update_one(
+        {"portfolio_id": portfolio_id, "vendor_id": vendor["vendor_id"]},
+        {"$set": updates}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Portfolio item not found")
+    
+    return {"message": "Updated", "updates": updates}
+
+
+
 # ============== VISUAL MATCHING ==============
 
 @api_router.post("/match/visual")

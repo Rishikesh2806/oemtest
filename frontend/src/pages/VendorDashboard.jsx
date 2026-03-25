@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAuth, api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import VoiceAgent from "../components/VoiceAgent";
+import VendorPortfolio from "../components/VendorPortfolio";
 import PermittedActions from "../components/PermittedActions";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -214,6 +215,9 @@ const VendorDashboard = () => {
           description="Available actions based on your permissions"
           columns={4}
         />
+
+        {/* Portfolio Section */}
+        <VendorPortfolio />
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* Matched RFQs */}
