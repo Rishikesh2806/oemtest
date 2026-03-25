@@ -3101,6 +3101,142 @@ async def delete_portfolio_photo(portfolio_id: str, user: dict = Depends(get_cur
     return {"message": "Portfolio photo deleted"}
 
 
+# ============== VISUAL MATCHING ==============
+
+@api_router.post("/match/visual")
+async def visual_match_vendors(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user)
+):
+    """Match a buyer's drawing/photo against vendor portfolios using AI vision"""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+    
+    allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Only JPG, PNG, and WEBP images are allowed")
+    
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image size must be less than 10MB")
+    
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        raise HTTPException(status_code=500, detail="AI service not configured")
+    
+    # Step 1: Analyze buyer's image
+    image_b64 = base64.b64encode(content).decode("utf-8")
+    
+    analysis_chat = LlmChat(
+        api_key=api_key,
+        session_id=f"visual_match_{user['user_id']}_{uuid.uuid4().hex[:8]}",
+        system_message="You are an expert manufacturing analyst. Analyze photos and drawings of manufactured parts. Always respond with valid JSON only, no extra text."
+    )
+    
+    analysis_msg = UserMessage(
+        text="""Analyze this engineering drawing or part photo. Extract and return ONLY a JSON object with:
+- manufacturing_process: required process
+- material: required material
+- part_category: type of part
+- surface_finish: required finish
+- complexity: low / medium / high
+- special_requirements: list of any tight tolerances, critical features, or special notes observed
+
+Return ONLY the JSON object, nothing else.""",
+        file_contents=[ImageContent(image_base64=image_b64)]
+    )
+    
+    try:
+        analysis_response = await analysis_chat.send_message(analysis_msg)
+        import re as _re
+        json_match = _re.search(r'\{[\s\S]*\}', analysis_response)
+        if json_match:
+            buyer_requirements = json.loads(json_match.group())
+        else:
+            raise ValueError("Could not parse AI response")
+    except Exception as e:
+        logger.error(f"Visual analysis failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to analyze the uploaded image")
+    
+    # Step 2: Fetch all vendor portfolio records
+    all_portfolios = await db.vendor_portfolio.find({}, {"_id": 0}).to_list(500)
+    
+    if not all_portfolios:
+        return {
+            "buyer_requirements": buyer_requirements,
+            "matches": [],
+            "message": "No vendor portfolios found for matching"
+        }
+    
+    # Group portfolios by vendor
+    vendor_profiles = {}
+    for p in all_portfolios:
+        vid = p["vendor_id"]
+        if vid not in vendor_profiles:
+            vendor_profiles[vid] = []
+        vendor_profiles[vid].append({
+            "manufacturing_process": p.get("manufacturing_process", ""),
+            "material": p.get("material", ""),
+            "part_category": p.get("part_category", ""),
+            "surface_finish": p.get("surface_finish", ""),
+            "complexity": p.get("complexity", ""),
+            "industry_fit": p.get("industry_fit", []),
+            "notable_features": p.get("notable_features", [])
+        })
+    
+    # Build vendor profiles summary
+    profiles_summary = []
+    for vid, items in vendor_profiles.items():
+        profiles_summary.append({
+            "vendor_id": vid,
+            "portfolio_items": items,
+            "total_items": len(items)
+        })
+    
+    # Step 3: AI matching
+    match_chat = LlmChat(
+        api_key=api_key,
+        session_id=f"visual_rank_{user['user_id']}_{uuid.uuid4().hex[:8]}",
+        system_message="You are a manufacturing procurement expert. Always respond with valid JSON only, no extra text."
+    )
+    
+    match_msg = UserMessage(
+        text=f"""You are a manufacturing procurement expert. A buyer needs a part with these requirements:
+{json.dumps(buyer_requirements, indent=2)}
+
+Here are vendor portfolio profiles showing their past work:
+{json.dumps(profiles_summary, indent=2)}
+
+Score each vendor from 0-100 based on how well their past work matches the buyer's requirements.
+Consider: process match, material capability, complexity handling, finish quality, industry experience.
+Return ONLY a JSON array sorted by score descending:
+[{{"vendor_id": "", "score": 0, "match_reasons": [], "gaps": []}}]"""
+    )
+    
+    try:
+        match_response = await match_chat.send_message(match_msg)
+        json_match = _re.search(r'\[[\s\S]*\]', match_response)
+        if json_match:
+            ranked_vendors = json.loads(json_match.group())
+        else:
+            raise ValueError("Could not parse ranking response")
+    except Exception as e:
+        logger.error(f"Visual matching failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to match vendors")
+    
+    # Enrich with vendor names
+    for v in ranked_vendors:
+        vendor = await db.vendors.find_one({"vendor_id": v["vendor_id"]}, {"_id": 0, "company_name": 1, "vendor_id": 1})
+        if vendor:
+            v["company_name"] = vendor.get("company_name", "Unknown")
+    
+    return {
+        "buyer_requirements": buyer_requirements,
+        "matches": ranked_vendors,
+        "total_vendors_evaluated": len(profiles_summary)
+    }
+
+
+
 @api_router.get("/vendors/{vendor_id}")
 async def get_vendor_by_id(vendor_id: str):
     vendor = await db.vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
