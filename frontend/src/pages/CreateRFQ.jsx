@@ -547,22 +547,7 @@ const CreateRFQ = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    Tolerance (mm)
-                  </Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min={0.01}
-                    value={formData.tolerance}
-                    onChange={(e) => handleInputChange("tolerance", parseFloat(e.target.value) || 0.1)}
-                    className="mt-1"
-                    data-testid="tolerance-input"
-                  />
-                </div>
-
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
                     Surface Finish
