@@ -57,6 +57,12 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - **Fixed post-login redirect bug (Phase 2)**: Changed GoogleCallback to use `window.location.href` (full page redirect) instead of React Router `navigate()` — ensures `checkAuth` runs on a clean mount with the stored token. Added defensive retry in ProtectedRoute: if token exists but user is null, re-triggers `checkAuth` instead of redirecting to login.
 - **Fixed new Google user registration flow**: Created `/select-role` page for new users with no role. Fixed GoogleCallback to redirect to `/select-role` instead of `/login`. Fixed ProtectedRoute to redirect no-role users to `/select-role` instead of causing redirect loops. Role selection calls `PUT /auth/role` and redirects to the appropriate dashboard.
 
+### Vendor Portfolio Photo Upload & AI Indexing (Mar 25, 2026)
+- `POST /api/vendor/portfolio` — Upload JPG/PNG/WEBP, AI analyzes via vision (manufacturing process, material, category, finish, complexity, industry fit, features), stores in `vendor_portfolio` collection
+- `GET /api/vendor/portfolio` — Authenticated vendor's portfolio
+- `GET /api/vendors/{vendor_id}/portfolio` — Public portfolio view
+- `DELETE /api/vendor/portfolio/{portfolio_id}` — Delete portfolio item
+
 ### Migration Status (Mar 23, 2026)
 - **Phase 1**: Core utilities, models, services - COMPLETE
 - **Phase 2**: Route extraction - IN PROGRESS

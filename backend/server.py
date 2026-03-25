@@ -2955,6 +2955,152 @@ async def delete_experience(experience_id: str, user: dict = Depends(get_current
     
     return {"message": "Experience deleted successfully"}
 
+
+# ============== VENDOR PORTFOLIO ==============
+
+@api_router.post("/vendor/portfolio")
+async def upload_portfolio_photo(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user)
+):
+    """Upload a portfolio photo and analyze it with AI vision"""
+    from app.services.s3_storage_service import upload_file as s3_upload
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+    
+    if user["role"] != "vendor":
+        raise HTTPException(status_code=403, detail="Only vendors can upload portfolio photos")
+    
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor profile not found")
+    
+    allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Only JPG, PNG, and WEBP images are allowed")
+    
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image size must be less than 10MB")
+    
+    # Upload to S3
+    try:
+        result = s3_upload(
+            data=content,
+            filename=file.filename,
+            folder=f"portfolio/{vendor['vendor_id']}",
+            content_type=file.content_type
+        )
+        photo_url = result["url"]
+    except Exception as e:
+        logger.error(f"S3 upload failed for portfolio: {e}")
+        raise HTTPException(status_code=500, detail="Failed to upload image")
+    
+    # Analyze with AI vision
+    ai_analysis = {}
+    try:
+        api_key = os.environ.get("EMERGENT_LLM_KEY")
+        if not api_key:
+            raise Exception("AI service not configured")
+        
+        image_b64 = base64.b64encode(content).decode("utf-8")
+        
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"portfolio_{vendor['vendor_id']}_{uuid.uuid4().hex[:8]}",
+            system_message="You are an expert manufacturing analyst. Analyze photos of manufactured parts and products. Always respond with valid JSON only, no extra text."
+        )
+        
+        user_message = UserMessage(
+            text="""Analyze this photo of a manufactured part or product. Extract and return ONLY a JSON object with these fields:
+- manufacturing_process: (e.g. CNC machining, casting, welding, sheet metal, 3D printing, injection molding)
+- material: (e.g. aluminum, steel, stainless steel, plastic, rubber, brass, titanium)
+- part_category: (e.g. bracket, housing, shaft, enclosure, gear, panel, tube, fitting)
+- surface_finish: (e.g. raw, polished, anodized, powder coated, painted, plated)
+- complexity: (low / medium / high)
+- industry_fit: list of up to 3 industries this part likely serves
+- notable_features: list of up to 5 key visual features observed
+
+Return ONLY the JSON object, nothing else.""",
+            file_contents=[ImageContent(image_base64=image_b64)]
+        )
+        
+        response = await chat.send_message(user_message)
+        
+        import re as _re
+        json_match = _re.search(r'\{[\s\S]*\}', response)
+        if json_match:
+            ai_analysis = json.loads(json_match.group())
+    except Exception as e:
+        logger.error(f"AI analysis failed for portfolio photo: {e}")
+        ai_analysis = {"error": "AI analysis unavailable"}
+    
+    # Save to database
+    portfolio_id = f"port_{uuid.uuid4().hex[:12]}"
+    now = datetime.now(timezone.utc).isoformat()
+    
+    record = {
+        "portfolio_id": portfolio_id,
+        "vendor_id": vendor["vendor_id"],
+        "photo_url": photo_url,
+        "filename": file.filename,
+        "ai_analysis": ai_analysis,
+        "manufacturing_process": ai_analysis.get("manufacturing_process", ""),
+        "material": ai_analysis.get("material", ""),
+        "part_category": ai_analysis.get("part_category", ""),
+        "surface_finish": ai_analysis.get("surface_finish", ""),
+        "complexity": ai_analysis.get("complexity", ""),
+        "industry_fit": ai_analysis.get("industry_fit", []),
+        "notable_features": ai_analysis.get("notable_features", []),
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    await db.vendor_portfolio.insert_one(record)
+    record.pop("_id", None)
+    
+    return record
+
+
+@api_router.get("/vendor/portfolio")
+async def get_vendor_portfolio(user: dict = Depends(get_current_user)):
+    """Get portfolio photos for the authenticated vendor"""
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=404, detail="Vendor profile not found")
+    
+    photos = await db.vendor_portfolio.find(
+        {"vendor_id": vendor["vendor_id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return {"portfolio": photos, "total": len(photos)}
+
+
+@api_router.get("/vendors/{vendor_id}/portfolio")
+async def get_vendor_portfolio_public(vendor_id: str):
+    """Get portfolio photos for a vendor (public)"""
+    photos = await db.vendor_portfolio.find(
+        {"vendor_id": vendor_id}, {"_id": 0}
+    ).sort("created_at", -1).to_list(100)
+    
+    return {"portfolio": photos, "total": len(photos)}
+
+
+@api_router.delete("/vendor/portfolio/{portfolio_id}")
+async def delete_portfolio_photo(portfolio_id: str, user: dict = Depends(get_current_user)):
+    """Delete a portfolio photo"""
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    
+    result = await db.vendor_portfolio.delete_one({
+        "portfolio_id": portfolio_id, "vendor_id": vendor["vendor_id"]
+    })
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Portfolio item not found")
+    
+    return {"message": "Portfolio photo deleted"}
+
+
 @api_router.get("/vendors/{vendor_id}")
 async def get_vendor_by_id(vendor_id: str):
     vendor = await db.vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
