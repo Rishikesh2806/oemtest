@@ -130,7 +130,7 @@ def check_registration_rate_limit(ip: str) -> bool:
         ts for ts in register_attempts[ip]
         if current_time - ts < RATE_LIMIT_WINDOW
     ]
-    return len(register_attempts[ip]) >= MAX_REGISTER_ATTEMPTS
+    return len(register_attempts[ip]) < MAX_REGISTER_ATTEMPTS
 
 
 def record_registration_attempt(ip: str):
