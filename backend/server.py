@@ -9341,7 +9341,7 @@ async def admin_generate_rfq_pdf(rfq_id: str, user: dict = Depends(get_current_u
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, KeepTogether
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, KeepTogether, Image as RLImage
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
     from io import BytesIO
     
@@ -9423,7 +9423,12 @@ async def admin_generate_rfq_pdf(rfq_id: str, user: dict = Depends(get_current_u
     elements = []
     
     # ===== HEADER =====
-    header_left = Paragraph('<b>OEMLinker</b>', logo_style)
+    import os as _os
+    logo_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "frontend", "public", "logo.png")
+    if _os.path.exists(logo_path):
+        header_left = RLImage(logo_path, width=50*mm, height=15.4*mm)
+    else:
+        header_left = Paragraph('<b>OEMLinker</b>', logo_style)
     header_right_text = f'''<para align="right">
         <b>REQUEST FOR QUOTATION</b><br/>
         <font size="9" color="#64748b">{rfq_id}</font>
