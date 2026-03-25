@@ -645,7 +645,7 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
   const downloadPDF = async (rfqId) => {
     setDownloadingPDF(true);
     try {
-      const res = await api.get(`/admin/rfqs/${rfqId}/pdf`, { responseType: 'blob' });
+      const res = await api.get(`/admin/rfqs/${rfqId}/pdf?app_base=${encodeURIComponent(window.location.origin)}`, { responseType: 'blob' });
       const blob = new Blob([res.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');

@@ -9304,7 +9304,7 @@ async def admin_get_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
 
 
 @api_router.get("/admin/rfqs/{rfq_id}/pdf")
-async def admin_generate_rfq_pdf(rfq_id: str, user: dict = Depends(get_current_user)):
+async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Depends(get_current_user)):
     """Generate and return RFQ as a professionally formatted PDF document"""
     if not has_admin_access(user):
         from app.services.rbac_service import rbac_service
@@ -9648,7 +9648,8 @@ async def admin_generate_rfq_pdf(rfq_id: str, user: dict = Depends(get_current_u
         elements.append(Spacer(1, 6*mm))
     
     # ===== SUBMIT QUOTE CTA =====
-    app_url = os.environ.get("APP_URL", "")
+    # Use app_base from query param (sent by frontend) or fall back to APP_URL
+    app_url = request.query_params.get("app_base") or os.environ.get("APP_URL", "")
     if app_url:
         quote_url = f"{app_url}/quote/rfq/{rfq_id}"
         
