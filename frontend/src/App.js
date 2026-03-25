@@ -1,4 +1,4 @@
-import { useState, useEffect, createContext, useContext, useRef } from "react";
+import { useState, useEffect, createContext, useContext, useRef, useCallback } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Toaster } from "./components/ui/sonner";
@@ -81,8 +81,7 @@ const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  const checkAuth = async () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
+  const checkAuth = useCallback(async () => {
     // Skip auth check if returning from OAuth callback
     if (window.location.hash?.includes("session_id=")) {
       setLoading(false);
@@ -104,7 +103,7 @@ const AuthProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     checkAuth();
@@ -241,10 +240,19 @@ const AuthCallback = () => {
 
 // Protected Route Component
 const ProtectedRoute = ({ children, allowedRoles }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, checkAuth } = useAuth();
   const location = useLocation();
+  const [retrying, setRetrying] = useState(false);
 
-  if (loading) {
+  useEffect(() => {
+    // If user is null but token exists, re-validate auth
+    if (!loading && !user && !retrying && localStorage.getItem("token")) {
+      setRetrying(true);
+      checkAuth().finally(() => setRetrying(false));
+    }
+  }, [loading, user, retrying, checkAuth]);
+
+  if (loading || retrying) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="w-8 h-8 border-2 border-orange-600 border-t-transparent rounded-full animate-spin"></div>

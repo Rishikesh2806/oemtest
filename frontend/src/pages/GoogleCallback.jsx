@@ -1,15 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth, api } from "../App";
-import { toast } from "sonner";
+import { api } from "../App";
 import { Loader2 } from "lucide-react";
 
 const GoogleCallback = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { updateUser } = useAuth();
   const [error, setError] = useState(null);
-  const [processing, setProcessing] = useState(true);
 
   useEffect(() => {
     const handleCallback = async () => {
@@ -18,14 +15,12 @@ const GoogleCallback = () => {
 
       if (errorParam) {
         setError("Google sign-in was cancelled or failed");
-        setProcessing(false);
         setTimeout(() => navigate("/login"), 3000);
         return;
       }
 
       if (!code) {
         setError("No authorization code received");
-        setProcessing(false);
         setTimeout(() => navigate("/login"), 3000);
         return;
       }
@@ -41,26 +36,23 @@ const GoogleCallback = () => {
         const data = response.data;
 
         if (data.success && data.access_token) {
-          // Store token
+          // Store token first
           localStorage.setItem("token", data.access_token);
           
-          // Update user context
-          updateUser(data.user);
-          
-          toast.success(`Welcome${data.user.is_new_user ? "!" : " back!"} ${data.user.name || ""}`);
-          
-          // Navigate based on role or if new user
+          // Use full page redirect to ensure clean auth state
+          // This forces checkAuth to run on fresh mount with the stored token
+          let redirectPath = "/buyer/dashboard";
           if (!data.user.role) {
-            navigate("/select-role");
+            redirectPath = "/login";
           } else if (data.user.role === "vendor") {
-            navigate("/vendor/dashboard");
+            redirectPath = "/vendor/dashboard";
           } else if (data.user.role === "admin" || data.user.role === "staff") {
-            navigate("/admin/dashboard");
+            redirectPath = "/admin/dashboard";
           } else if (data.user.role === "inspector") {
-            navigate("/inspector/dashboard");
-          } else {
-            navigate("/buyer/dashboard");
+            redirectPath = "/inspector/dashboard";
           }
+          
+          window.location.href = redirectPath;
         } else {
           throw new Error("Invalid response from server");
         }
@@ -68,17 +60,16 @@ const GoogleCallback = () => {
         console.error("Google callback error:", err);
         const errorMsg = err.response?.data?.detail || err.message || "Failed to complete sign-in";
         setError(errorMsg);
-        setProcessing(false);
         setTimeout(() => navigate("/login"), 3000);
       }
     };
 
     handleCallback();
-  }, [searchParams, navigate, updateUser]);
+  }, [searchParams, navigate]);
 
   if (error) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div data-testid="google-callback-error" className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <svg className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -86,7 +77,7 @@ const GoogleCallback = () => {
             </svg>
           </div>
           <h2 className="text-xl font-semibold text-slate-900 mb-2">Sign In Failed</h2>
-          <p className="text-slate-500 mb-4">{error}</p>
+          <p data-testid="google-callback-error-msg" className="text-slate-500 mb-4">{error}</p>
           <p className="text-sm text-slate-400">Redirecting to login...</p>
         </div>
       </div>
@@ -94,7 +85,7 @@ const GoogleCallback = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+    <div data-testid="google-callback-loading" className="min-h-screen bg-slate-50 flex items-center justify-center">
       <div className="text-center">
         <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
           <Loader2 className="w-8 h-8 text-orange-600 animate-spin" />
