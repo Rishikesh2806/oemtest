@@ -43,7 +43,7 @@ const GoogleCallback = () => {
           // This forces checkAuth to run on fresh mount with the stored token
           let redirectPath = "/buyer/dashboard";
           if (!data.user.role) {
-            redirectPath = "/login";
+            redirectPath = "/select-role";
           } else if (data.user.role === "vendor") {
             redirectPath = "/vendor/dashboard";
           } else if (data.user.role === "admin" || data.user.role === "staff") {

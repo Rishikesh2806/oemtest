@@ -55,7 +55,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - Added `FRONTEND_URL` env var to backend `.env`
 - **Fixed post-login redirect bug (Phase 1)**: Replaced all `process.env.REACT_APP_BACKEND_URL` usages across 10+ files with `window.location.origin`
 - **Fixed post-login redirect bug (Phase 2)**: Changed GoogleCallback to use `window.location.href` (full page redirect) instead of React Router `navigate()` — ensures `checkAuth` runs on a clean mount with the stored token. Added defensive retry in ProtectedRoute: if token exists but user is null, re-triggers `checkAuth` instead of redirecting to login.
-- All URLs now read purely from environment variables or `window.location.origin`
+- **Fixed new Google user registration flow**: Created `/select-role` page for new users with no role. Fixed GoogleCallback to redirect to `/select-role` instead of `/login`. Fixed ProtectedRoute to redirect no-role users to `/select-role` instead of causing redirect loops. Role selection calls `PUT /auth/role` and redirects to the appropriate dashboard.
 
 ### Migration Status (Mar 23, 2026)
 - **Phase 1**: Core utilities, models, services - COMPLETE

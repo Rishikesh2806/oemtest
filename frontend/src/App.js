@@ -46,6 +46,7 @@ import DataDeletionStatus from "./pages/DataDeletionStatus";
 import MagicLogin from "./pages/MagicLogin";
 import InspectorDashboard from "./pages/InspectorDashboard";
 import GoogleCallback from "./pages/GoogleCallback";
+import SelectRolePage from "./pages/SelectRolePage";
 
 // Use window.location.origin for API calls - this ensures requests go to the same domain
 // This fixes issues where REACT_APP_BACKEND_URL might point to a different host
@@ -264,9 +265,11 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Determine effective role for routing
-  // Users with custom_role but no base role are treated as "staff"
+  // If user has no role and is not already on select-role page, redirect there
   const effectiveRole = user.role || (user.custom_role ? "staff" : "");
+  if (!effectiveRole && allowedRoles && location.pathname !== "/select-role") {
+    return <Navigate to="/select-role" replace />;
+  }
 
   if (allowedRoles && !allowedRoles.includes(effectiveRole)) {
     // Redirect to appropriate dashboard based on role or custom_role
@@ -277,10 +280,9 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     } else if (user.role === "buyer") {
       return <Navigate to="/buyer/dashboard" replace />;
     } else if (user.custom_role) {
-      // User has no base role but has a custom role - send to admin dashboard
       return <Navigate to="/admin/dashboard" replace />;
     }
-    return <Navigate to="/buyer/dashboard" replace />;
+    return <Navigate to="/select-role" replace />;
   }
 
   return children;
@@ -304,6 +306,11 @@ const AppRouter = () => {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/auth/google/callback" element={<GoogleCallback />} />
+      <Route path="/select-role" element={
+        <ProtectedRoute>
+          <SelectRolePage />
+        </ProtectedRoute>
+      } />
       
       {/* Generic dashboard redirect */}
       <Route path="/dashboard" element={<DashboardRedirect />} />
