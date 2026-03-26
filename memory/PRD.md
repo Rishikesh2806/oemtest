@@ -256,6 +256,17 @@ See ARCHITECTURE.md for detailed refactoring plan.
 - **Additive Permissions**: Users with custom roles get permissions from BOTH their base role AND custom role
 
 
+### Staff Base Role & Secondary Roles Frontend Integration (Completed - Mar 26, 2026)
+- **Backend**: `UserResponse` model updated to include `custom_role` and `secondary_roles` fields
+- **Backend**: Login (`POST /api/auth/login`), 2FA verify, `/auth/me`, and session endpoints now return `custom_role` and `secondary_roles`
+- **Frontend LoginPage.jsx**: Staff users (`role === "staff"`) now redirect to `/staff/dashboard` instead of `/admin/dashboard`
+- **Frontend GoogleCallback.jsx**: Staff role redirect fixed (`/staff/dashboard`)
+- **Frontend App.js ProtectedRoute**: `effectiveRole` correctly resolves `staff` from both `user.role` and `user.custom_role`; unauthorized staff/custom_role users redirected to `/staff/dashboard`
+- **Frontend DashboardLayout**: Sidebar handles `role === "staff"` explicitly; portal header shows custom_role name (e.g., "Supervisor Portal")
+- **Frontend StaffDashboard**: Shows secondary_roles badges in header
+- **Test Report**: /app/test_reports/iteration_36.json (100% pass - backend + frontend)
+
+
 
 
 

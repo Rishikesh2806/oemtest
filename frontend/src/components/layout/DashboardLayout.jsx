@@ -267,6 +267,7 @@ const DashboardLayout = ({ children }) => {
             <h2 className="text-slate-400 text-sm">
               {user?.role === "vendor" ? "Vendor Portal" : 
                user?.role === "admin" ? "Admin Panel" : 
+               user?.role === "staff" ? (user?.custom_role ? `${user.custom_role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} Portal` : "Staff Portal") :
                user?.role === "buyer" ? "Buyer Portal" :
                user?.custom_role ? `${user.custom_role.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())} Portal` :
                "Portal"}
