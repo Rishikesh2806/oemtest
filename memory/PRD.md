@@ -267,6 +267,16 @@ See ARCHITECTURE.md for detailed refactoring plan.
 - **Test Report**: /app/test_reports/iteration_36.json (100% pass - backend + frontend)
 
 
+### Vendor Portfolio UI Overhaul (Completed - Mar 26, 2026)
+- **Rewrote** `VendorPortfolio.jsx` with improved card layout (4:3 aspect ratio), color-coded editable tags, modal-based tag editor
+- **5 editable tag types**: Process (blue), Material (emerald), Category (violet), Finish (amber), Complexity (rose) — each with pencil icon on hover
+- **TagEditor modal**: Centered overlay with preset option chips + custom text input, replaces the old clipping popover
+- **Complexity badge**: Shown directly on the image corner (green/amber/red by level)
+- **Notable features** and **Industry fit** sections separated below tags
+- **Hint text**: "Click any tag to edit AI-detected properties" shown when portfolio has items
+- **Test Report**: /app/test_reports/iteration_37.json (100% pass - 13 backend + all frontend)
+
+
 
 
 
