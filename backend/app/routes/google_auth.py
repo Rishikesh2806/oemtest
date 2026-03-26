@@ -141,7 +141,8 @@ async def google_callback(token_request: GoogleTokenRequest):
                 "name": name,
                 "google_id": google_id,
                 "picture": picture,
-                "role": "",  # User needs to select role
+                "role": "",
+                "secondary_roles": [],
                 "email_verified": True,
                 "login_method": "google",
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -156,7 +157,7 @@ async def google_callback(token_request: GoogleTokenRequest):
         # Create JWT token
         jwt_token = create_jwt_token(user["user_id"], user["email"], user.get("role", ""))
         
-        # Determine redirect based on role
+        # Determine redirect based on base role only
         role = user.get("role", "")
         if not role:
             redirect_path = "/select-role"
@@ -164,7 +165,9 @@ async def google_callback(token_request: GoogleTokenRequest):
             redirect_path = "/buyer/dashboard"
         elif role == "vendor":
             redirect_path = "/vendor/dashboard"
-        elif role in ["admin", "staff"]:
+        elif role == "staff":
+            redirect_path = "/staff/dashboard"
+        elif role == "admin":
             redirect_path = "/admin/dashboard"
         else:
             redirect_path = "/dashboard"
@@ -178,6 +181,7 @@ async def google_callback(token_request: GoogleTokenRequest):
                 "email": user["email"],
                 "name": user.get("name"),
                 "role": user.get("role", ""),
+                "secondary_roles": user.get("secondary_roles", []),
                 "picture": user.get("picture"),
                 "email_verified": True,
                 "is_new_user": not existing_user

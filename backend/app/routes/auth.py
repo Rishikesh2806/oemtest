@@ -117,6 +117,7 @@ async def register(user_data: UserCreate, request: Request):
         "email": email,
         "name": name,
         "role": user_data.role,
+        "secondary_roles": [],
         "password_hash": hash_password(user_data.password),
         "picture": None,
         "company_name": None,
@@ -193,6 +194,7 @@ async def register(user_data: UserCreate, request: Request):
             email=email,
             name=name,
             role=user_data.role,
+            secondary_roles=[],
             picture=None,
             company_name=vendor_company_name,
             email_verified=False,
@@ -579,6 +581,7 @@ async def exchange_session(request: Request, response: Response):
         "email": user_doc["email"],
         "name": user_doc["name"],
         "role": user_doc["role"],
+        "secondary_roles": user_doc.get("secondary_roles", []),
         "picture": user_doc.get("picture"),
         "company_name": user_doc.get("company_name"),
         "created_at": user_doc["created_at"]
@@ -593,6 +596,7 @@ async def get_me(user: dict = Depends(get_current_user)):
         "email": user["email"],
         "name": user["name"],
         "role": user["role"],
+        "secondary_roles": user.get("secondary_roles", []),
         "picture": user.get("picture"),
         "company_name": user.get("company_name"),
         "email_verified": user.get("email_verified", False),
@@ -817,19 +821,55 @@ async def reset_password(reset_data: PasswordResetConfirmLocal, request: Request
 
 @router.put("/role")
 async def update_role(request: Request, user: dict = Depends(get_current_user)):
-    """Update user role"""
+    """Update user base role and optionally secondary roles"""
+    from app.models.base import SECONDARY_ROLES
     body = await request.json()
     new_role = body.get("role")
+    secondary_roles = body.get("secondary_roles")
     
-    if new_role not in [UserRole.BUYER, UserRole.VENDOR]:
-        raise HTTPException(status_code=400, detail="Invalid role")
+    if new_role not in [UserRole.BUYER, UserRole.VENDOR, UserRole.STAFF]:
+        raise HTTPException(status_code=400, detail="Invalid role. Must be buyer, vendor, or staff")
+    
+    update = {"role": new_role}
+    
+    if new_role == UserRole.STAFF and secondary_roles:
+        valid = [r for r in secondary_roles if r in SECONDARY_ROLES]
+        update["secondary_roles"] = valid
+    elif new_role != UserRole.STAFF:
+        update["secondary_roles"] = []
     
     await db.users.update_one(
         {"user_id": user["user_id"]},
-        {"$set": {"role": new_role}}
+        {"$set": update}
     )
     
-    return {"message": "Role updated", "role": new_role}
+    return {"message": "Role updated", "role": new_role, "secondary_roles": update.get("secondary_roles", [])}
+
+
+@router.put("/secondary-roles")
+async def update_secondary_roles(request: Request, user: dict = Depends(get_current_user)):
+    """Admin endpoint to assign secondary roles to staff users"""
+    from app.models.base import SECONDARY_ROLES
+    body = await request.json()
+    target_user_id = body.get("user_id")
+    new_secondary = body.get("secondary_roles", [])
+    
+    if user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only admins can assign secondary roles")
+    
+    target = await db.users.find_one({"user_id": target_user_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.get("role") != UserRole.STAFF:
+        raise HTTPException(status_code=400, detail="Secondary roles can only be assigned to staff users")
+    
+    valid = [r for r in new_secondary if r in SECONDARY_ROLES]
+    await db.users.update_one(
+        {"user_id": target_user_id},
+        {"$set": {"secondary_roles": valid}}
+    )
+    
+    return {"message": "Secondary roles updated", "user_id": target_user_id, "secondary_roles": valid}
 
 
 # ============== MAGIC LINK ENDPOINTS ==============

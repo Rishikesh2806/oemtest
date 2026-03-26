@@ -21,6 +21,7 @@ import QuoteComparison from "../components/quotes/QuoteComparison";
 import QuoteDetailModal from "../components/QuoteDetailModal";
 import VendorNegotiationPanel from "../components/VendorNegotiationPanel";
 import VendorQuotationForm from "../components/VendorQuotationForm";
+import VisualMatchSection from "../components/VisualMatchSection";
 
 const API_URL = window.location.origin;
 
@@ -792,13 +793,30 @@ const RFQDetail = () => {
           </Card>
         )}
 
-        {/* Matched Vendors (Buyer View) */}
-        {isBuyer && rfq.matched_vendors?.length > 0 && (
+        {/* Vendor Matching Section (Buyer View) */}
+        {isBuyer && (
           <Card className="border-slate-200">
+            <CardHeader>
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <Target className="w-5 h-5 text-orange-600" /> Vendor Matching
+              </CardTitle>
+              <p className="text-sm text-slate-500 mt-1">
+                Match vendors by drawing specs, visual similarity, or both combined
+              </p>
+            </CardHeader>
+            <CardContent>
+              <VisualMatchSection rfq={rfq} drawingVendors={rfq.matched_vendors || []} />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Matched Vendors - Drawing Specs (Buyer View) */}
+        {isBuyer && rfq.matched_vendors?.length > 0 && (
+          <Card className="border-slate-200" data-testid="drawing-matched-vendors">
             <CardHeader className="flex flex-row items-start justify-between">
               <div>
                 <CardTitle className="font-heading text-lg flex items-center gap-2">
-                  <Target className="w-5 h-5 text-orange-600" /> Matched Vendors Based on Drawing Analysis
+                  <Target className="w-5 h-5 text-orange-600" /> Drawing-Based Matches
                 </CardTitle>
                 <p className="text-sm text-slate-500 mt-1">
                   Vendors ranked by machine capability, material compatibility, and tolerance requirements

@@ -10,6 +10,11 @@ class UserRole:
     BUYER = "buyer"
     VENDOR = "vendor"
     ADMIN = "admin"
+    STAFF = "staff"
+    
+    BASE_ROLES = [BUYER, VENDOR, ADMIN, STAFF]
+
+SECONDARY_ROLES = ["supervisor", "qa", "logistics", "operations", "inspector"]
 
 
 class UserBase(BaseModel):
@@ -25,6 +30,7 @@ class UserResponse(BaseModel):
     email: str
     name: str
     role: str
+    secondary_roles: List[str] = []
     picture: Optional[str] = None
     company_name: Optional[str] = None
     email_verified: bool = False
