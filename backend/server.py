@@ -1074,71 +1074,82 @@ MILESTONE_LABELS = {
 VALID_STAGES = ["before_production", "after_production", "after_inspection", "after_dispatch", "on_delivery"]
 
 def _parse_milestone_split(notes: str, total_amount: float) -> list:
-    """Parse milestone percentages and stages from payment_terms_notes using AI."""
+    """Parse milestone percentages and stages from payment_terms_notes."""
     if not notes or not notes.strip():
-        # Default 30/40/30 if no notes
         return [
             {"stage": "before_production", "label": "Advance (30%)", "percentage": 30},
             {"stage": "after_production", "label": "Post-Production (40%)", "percentage": 40},
             {"stage": "after_inspection", "label": "Post-Inspection (30%)", "percentage": 30}
         ]
     
-    # Try regex extraction first for common patterns like "50% advance, 50% after inspection"
     import re
-    pct_matches = re.findall(r'(\d+)\s*%', notes)
+    notes_lower = notes.lower().strip()
     
-    if pct_matches:
-        percentages = [int(p) for p in pct_matches]
-        if sum(percentages) == 100 and 1 <= len(percentages) <= 5:
-            # Try to map stages from keywords in the notes
-            notes_lower = notes.lower()
-            stage_keywords = {
-                "before_production": ["advance", "upfront", "before production", "deposit", "down payment"],
-                "after_production": ["after production", "post-production", "post production", "production complete"],
-                "after_inspection": ["after inspection", "post-inspection", "after qc", "quality check", "after quality"],
-                "after_dispatch": ["delivery", "after dispatch", "on delivery", "after shipping", "dispatch", "shipping"],
-                "on_delivery": ["on delivery", "cod", "cash on delivery", "upon delivery", "at delivery"],
-            }
-            
-            # Split notes by common delimiters to isolate each milestone description
-            parts = re.split(r'[,;]+|(?:\band\b)', notes_lower)
-            parts = [p.strip() for p in parts if p.strip()]
-            
-            # If we have as many parts as percentages, match them 1:1
-            if len(parts) >= len(percentages):
-                milestones = []
-                used_stages = set()
-                for i, pct in enumerate(percentages):
-                    part = parts[i] if i < len(parts) else ""
-                    matched_stage = None
-                    for stage, keywords in stage_keywords.items():
-                        if stage in used_stages:
-                            continue
-                        if any(kw in part for kw in keywords):
-                            matched_stage = stage
-                            break
-                    
-                    if not matched_stage:
-                        # Assign stages in order for unmatched
-                        for s in VALID_STAGES:
-                            if s not in used_stages:
-                                matched_stage = s
-                                break
-                    
-                    if not matched_stage:
-                        matched_stage = VALID_STAGES[min(i, len(VALID_STAGES)-1)]
-                    
-                    used_stages.add(matched_stage)
-                    label = MILESTONE_LABELS.get(matched_stage, matched_stage.replace("_", " ").title())
-                    milestones.append({
-                        "stage": matched_stage,
-                        "label": f"{label} ({pct}%)",
-                        "percentage": pct
-                    })
-                
-                return milestones
+    # Extract explicit percentages (number followed by %)
+    pct_matches = re.findall(r'(\d+)\s*%', notes_lower)
+    percentages = [int(p) for p in pct_matches]
     
-    # Fallback: use AI to parse complex notes
+    # Handle "balance" / "remaining" keyword — means 100 minus sum of explicit percentages
+    has_balance = any(w in notes_lower for w in ["balance", "remaining", "rest", "bal "])
+    if has_balance and percentages:
+        explicit_sum = sum(percentages)
+        if explicit_sum < 100:
+            percentages.append(100 - explicit_sum)
+    
+    stage_keywords = {
+        "before_production": ["advance", "upfront", "before production", "deposit", "down payment"],
+        "after_production": ["after production", "post-production", "post production", "production complete"],
+        "after_inspection": ["after inspection", "post-inspection", "after qc", "quality check", "after quality"],
+        "after_dispatch": ["delivery", "after dispatch", "on delivery", "after shipping", "dispatch", "shipping", "after delivery"],
+        "on_delivery": ["on delivery", "cod", "cash on delivery", "upon delivery", "at delivery"],
+    }
+    
+    if percentages and sum(percentages) == 100 and 1 <= len(percentages) <= 5:
+        # Split notes into parts for stage matching
+        parts = re.split(r'[,;]+|(?:\band\b)', notes_lower)
+        # If "balance" created an extra percentage, add a synthetic part for it
+        if has_balance and len(parts) < len(percentages):
+            # Find the text after "balance"/"remaining" keyword
+            bal_match = re.search(r'(?:balance|remaining|rest)\s+(.+)', notes_lower)
+            if bal_match:
+                parts.append(bal_match.group(0))
+            else:
+                parts.append("after delivery")
+        
+        parts = [p.strip() for p in parts if p.strip()]
+        
+        milestones = []
+        used_stages = set()
+        for i, pct in enumerate(percentages):
+            part = parts[i] if i < len(parts) else ""
+            matched_stage = None
+            for stage, keywords in stage_keywords.items():
+                if stage in used_stages:
+                    continue
+                if any(kw in part for kw in keywords):
+                    matched_stage = stage
+                    break
+            
+            if not matched_stage:
+                for s in VALID_STAGES:
+                    if s not in used_stages:
+                        matched_stage = s
+                        break
+            
+            if not matched_stage:
+                matched_stage = VALID_STAGES[min(i, len(VALID_STAGES)-1)]
+            
+            used_stages.add(matched_stage)
+            label = MILESTONE_LABELS.get(matched_stage, matched_stage.replace("_", " ").title())
+            milestones.append({
+                "stage": matched_stage,
+                "label": f"{label} ({pct}%)",
+                "percentage": pct
+            })
+        
+        return milestones
+    
+    # Fallback: use AI for complex notes
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         import asyncio
@@ -1159,14 +1170,18 @@ Return ONLY a JSON array like:
 
 RULES:
 - Percentages MUST sum to exactly 100
+- "balance" or "remaining" means 100 minus other percentages
+- If days mentioned (e.g., "90 days"), still map to nearest stage
 - Use 2-5 milestones
-- Each stage used only once
-- Label should be short and descriptive"""
+- Each stage used only once"""
 
         llm_key = os.environ.get("EMERGENT_LLM_KEY")
-        chat = LlmChat(api_key=llm_key, model="claude-sonnet-4-20250514")
+        chat = LlmChat(
+            api_key=llm_key,
+            session_id=f"milestone_parse_{uuid.uuid4().hex[:8]}",
+            system_message="You parse payment terms into structured JSON milestones. Respond with only valid JSON."
+        )
         
-        # Run async in sync context
         loop = asyncio.get_event_loop()
         if loop.is_running():
             import concurrent.futures
@@ -1183,7 +1198,7 @@ RULES:
     except Exception as e:
         logger.warning(f"AI milestone parsing failed: {e}")
     
-    # Final fallback: 30/40/30
+    # Final fallback
     return [
         {"stage": "before_production", "label": "Advance (30%)", "percentage": 30},
         {"stage": "after_production", "label": "Post-Production (40%)", "percentage": 40},
@@ -1226,7 +1241,7 @@ def generate_payment_schedule(payment_terms: str, total_amount: float, order_cre
             {"stage": "on_delivery", "label": "Payment Against Delivery", "percentage": 100}
         ]
         schedule_type = "against_delivery"
-    elif payment_terms == "milestone_based":
+    elif payment_terms in ("milestone_based", "custom"):
         # Parse actual milestone split from notes using AI
         milestones = _parse_milestone_split(payment_terms_notes, total_amount)
     elif payment_terms == "letter_of_credit":
@@ -8798,7 +8813,11 @@ Return ONLY a JSON object with exactly these fields:
 {{"payment_terms": "<exact value from valid list>", "notes": "<brief summary of what was agreed>"}}"""
 
         llm_key = os.environ.get("EMERGENT_LLM_KEY")
-        chat = LlmChat(api_key=llm_key, model="claude-sonnet-4-20250514")
+        chat = LlmChat(
+            api_key=llm_key,
+            session_id=f"payment_resolve_{uuid.uuid4().hex[:8]}",
+            system_message="You analyze negotiation history to determine final agreed payment terms. Respond with only valid JSON."
+        )
         response = await chat.send_async(UserMessage(content=prompt))
         
         # Parse AI response
