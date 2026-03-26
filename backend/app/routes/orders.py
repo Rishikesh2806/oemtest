@@ -113,7 +113,7 @@ async def get_order(order_id: str, user: dict = Depends(get_current_user)):
 
 @router.put("/orders/{order_id}/status")
 async def update_order_status(order_id: str, request: Request, user: dict = Depends(get_current_user)):
-    """Update order status"""
+    """Update order status with payment gate enforcement"""
     body = await request.json()
     new_status = body.get("status")
     note = body.get("note", "")
@@ -121,6 +121,31 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Payment gate enforcement
+    admin_override = body.get("admin_override", False)
+    is_admin = user.get("role") == "admin"
+    schedule = order.get("payment_schedule")
+    
+    STAGE_GATE = {
+        "before_production": "in_production",
+        "after_production": "quality_check",
+        "after_inspection": "dispatched",
+        "after_dispatch": "delivered",
+        "on_delivery": "completed",
+    }
+    
+    if schedule and not (admin_override and is_admin):
+        for ms in schedule.get("milestones", []):
+            if ms.get("status") == "pending":
+                gate_target = STAGE_GATE.get(ms.get("stage"))
+                if gate_target and gate_target == new_status:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Payment required: '{ms.get('label', ms['stage'])}' "
+                               f"({ms['percentage']}% = {order.get('currency', 'INR')} "
+                               f"{ms['amount']:,.2f}) must be paid before moving to {new_status.replace('_', ' ')}"
+                    )
     
     # Update order status
     update_data = {

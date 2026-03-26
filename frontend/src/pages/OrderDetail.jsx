@@ -18,6 +18,7 @@ import {
 import RaiseDisputeForm from "../components/RaiseDisputeForm";
 import InspectionRequestModal from "../components/InspectionRequestModal";
 import InspectionStatusCard from "../components/InspectionStatusCard";
+import PaymentTimeline from "../components/PaymentTimeline";
 
 const OrderDetail = () => {
   const { orderId } = useParams();
@@ -162,7 +163,12 @@ const OrderDetail = () => {
       fetchOrder();
       fetchOrderDetails();
     } catch (error) {
-      toast.error("Failed to update status");
+      const detail = error.response?.data?.detail || "Failed to update status";
+      if (detail.includes("Payment required")) {
+        toast.error(detail, { duration: 6000 });
+      } else {
+        toast.error(detail);
+      }
     }
   };
 
@@ -393,14 +399,16 @@ const OrderDetail = () => {
                 <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm font-medium ${
                   order.payment_status === "paid" 
                     ? "bg-green-100 text-green-700" 
-                    : "bg-amber-100 text-amber-700"
+                    : order.payment_status === "partial"
+                    ? "bg-amber-100 text-amber-700"
+                    : "bg-slate-100 text-slate-700"
                 }`}>
                   {order.payment_status === "paid" ? (
                     <CheckCircle2 className="w-4 h-4" />
                   ) : (
                     <Clock className="w-4 h-4" />
                   )}
-                  {order.payment_status}
+                  {order.payment_status === "partial" ? "Partially Paid" : order.payment_status}
                 </span>
               </div>
               <div className="p-4 bg-slate-50 rounded-lg">
@@ -443,24 +451,7 @@ const OrderDetail = () => {
               </div>
             )}
 
-            {/* Payment Button for Buyer */}
-            {isBuyer && order.status === "pending_payment" && order.payment_status !== "paid" && (
-              <div className="mt-6 pt-6 border-t border-slate-200">
-                <Button
-                  onClick={initiatePayment}
-                  disabled={processingPayment}
-                  className="bg-orange-600 hover:bg-orange-700 w-full md:w-auto"
-                  data-testid="pay-now-btn"
-                >
-                  {processingPayment ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : (
-                    <CreditCard className="w-4 h-4 mr-2" />
-                  )}
-                  Pay Now - ${order.total_amount?.toLocaleString(undefined, {minimumFractionDigits: 2})}
-                </Button>
-              </div>
-            )}
+            {/* Payment Button for Buyer - replaced by PaymentTimeline below */}
 
             {/* Confirm Delivery Button for Buyer */}
             {isBuyer && order.status === "dispatched" && !order.delivery_confirmed && (
@@ -480,6 +471,15 @@ const OrderDetail = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Payment Schedule Timeline */}
+        <PaymentTimeline
+          orderId={orderId}
+          orderStatus={order.status}
+          isBuyer={isBuyer}
+          isAdmin={user?.role === "admin"}
+          onPaymentComplete={() => { fetchOrder(); fetchOrderDetails(); }}
+        />
 
         {/* Vendor/Buyer Info Cards */}
         <div className="grid md:grid-cols-2 gap-6">

@@ -1029,6 +1029,102 @@ PAYMENT_TERMS_LABELS = {
     "custom": "Custom Terms"
 }
 
+# ============== PAYMENT SCHEDULE ENGINE ==============
+
+# Stage gate mapping: which payment stages block which order status transitions
+STAGE_GATE_MAP = {
+    "before_production": "in_production",
+    "after_production": "quality_check",
+    "after_inspection": "dispatched",
+    "after_dispatch": "delivered",
+    "on_delivery": "completed",
+}
+
+# Reverse: which order status triggers a milestone becoming due
+STATUS_TRIGGERS_MILESTONE = {
+    "paid": "before_production",
+    "in_production": "after_production",
+    "quality_check": "after_inspection",
+    "dispatched": "after_dispatch",
+    "delivered": "on_delivery",
+}
+
+MILESTONE_LABELS = {
+    "before_production": "Advance Payment",
+    "after_production": "Post-Production Payment",
+    "after_inspection": "Post-Inspection Payment",
+    "after_dispatch": "Final Payment",
+    "on_delivery": "Payment on Delivery",
+    "net_due": "Payment Due",
+}
+
+def generate_payment_schedule(payment_terms: str, total_amount: float, order_created_at: str = None) -> dict:
+    """Generate a structured payment schedule from payment terms type."""
+    milestones = []
+    schedule_type = payment_terms
+
+    if payment_terms == "100_advance":
+        milestones = [
+            {"stage": "before_production", "label": "Full Advance Payment", "percentage": 100}
+        ]
+    elif payment_terms == "50_advance_50_delivery":
+        milestones = [
+            {"stage": "before_production", "label": "Advance Payment (50%)", "percentage": 50},
+            {"stage": "after_dispatch", "label": "Balance on Delivery (50%)", "percentage": 50}
+        ]
+    elif payment_terms == "against_delivery":
+        milestones = [
+            {"stage": "on_delivery", "label": "Payment Against Delivery", "percentage": 100}
+        ]
+        schedule_type = "against_delivery"
+    elif payment_terms == "milestone_based":
+        milestones = [
+            {"stage": "before_production", "label": "Advance (30%)", "percentage": 30},
+            {"stage": "after_production", "label": "Post-Production (40%)", "percentage": 40},
+            {"stage": "after_inspection", "label": "Post-Inspection (30%)", "percentage": 30}
+        ]
+    elif payment_terms == "letter_of_credit":
+        milestones = [
+            {"stage": "before_production", "label": "Letter of Credit Confirmation", "percentage": 100}
+        ]
+    elif payment_terms in ("net_30", "net_45", "net_60"):
+        days = int(payment_terms.split("_")[1])
+        due_date = None
+        if order_created_at:
+            try:
+                created = datetime.fromisoformat(order_created_at.replace("Z", "+00:00"))
+                due_date = (created + timedelta(days=days)).isoformat()
+            except Exception:
+                pass
+        milestones = [
+            {"stage": "net_due", "label": f"Payment Due (Net {days} Days)", "percentage": 100, "due_days": days, "due_date": due_date}
+        ]
+        schedule_type = "credit_terms"
+    else:
+        # Custom / unknown: single milestone before production
+        milestones = [
+            {"stage": "before_production", "label": "Full Payment", "percentage": 100}
+        ]
+
+    # Enrich milestones with amounts and IDs
+    for i, m in enumerate(milestones):
+        m["milestone_id"] = f"ms_{i+1}"
+        m["amount"] = round(total_amount * m["percentage"] / 100, 2)
+        m["status"] = "pending"
+        m["paid_at"] = None
+        m["paid_by"] = None
+        if "due_date" not in m:
+            m["due_date"] = None
+        if "due_days" not in m:
+            m["due_days"] = None
+
+    return {
+        "type": schedule_type,
+        "milestones": milestones,
+        "total_paid": 0,
+        "total_pending": total_amount
+    }
+
 # Incoterms options
 class Incoterms:
     EXW = "EXW"  # Ex Works
@@ -8511,6 +8607,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
         "payment_terms": payment_terms,
         "payment_terms_label": PAYMENT_TERMS_LABELS.get(payment_terms, payment_terms),
         "payment_terms_notes": payment_terms_notes,
+        "payment_schedule": generate_payment_schedule(payment_terms, quote["price"], now),
         "po_number": po_number,
         "tracking_updates": [
             {"status": "Order Created", "timestamp": now, "note": f"Quote accepted. PO #{po_number}. Payment Terms: {PAYMENT_TERMS_LABELS.get(payment_terms, payment_terms)}"}
@@ -8708,6 +8805,24 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
     
     now = datetime.now(timezone.utc).isoformat()
     
+    # Payment gate enforcement: check if a pending payment milestone blocks this transition
+    admin_override = body.get("admin_override", False)
+    is_admin = user.get("role") == "admin"
+    schedule = order.get("payment_schedule")
+    
+    if schedule and not (admin_override and is_admin):
+        milestones = schedule.get("milestones", [])
+        for ms in milestones:
+            if ms.get("status") == "pending":
+                gate_target = STAGE_GATE_MAP.get(ms.get("stage"))
+                if gate_target and gate_target == new_status:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Payment required: '{ms.get('label', ms['stage'])}' "
+                               f"({ms['percentage']}% = {ms.get('currency', order.get('currency', 'INR'))} "
+                               f"{ms['amount']:,.2f}) must be paid before moving to {new_status.replace('_', ' ')}"
+                    )
+    
     await db.orders.update_one(
         {"order_id": order_id},
         {
@@ -8829,6 +8944,273 @@ async def update_order_status(order_id: str, request: Request, user: dict = Depe
             asyncio.create_task(whatsapp_service.send_text_message(buyer["phone"], buyer_wa_message))
     
     return {"message": "Status updated", "status": new_status}
+
+# ============== PAYMENT SCHEDULE ENDPOINTS ==============
+
+@api_router.get("/orders/{order_id}/payment-schedule")
+async def get_payment_schedule(order_id: str, user: dict = Depends(get_current_user)):
+    """Get the payment schedule for an order with milestone details."""
+    order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    is_admin = user.get("role") == "admin"
+    is_buyer = order["buyer_id"] == user["user_id"]
+    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0, "vendor_id": 1})
+    is_vendor = vendor and vendor["vendor_id"] == order["vendor_id"]
+    
+    if not (is_admin or is_buyer or is_vendor):
+        raise HTTPException(status_code=403, detail="Not authorized to view this order")
+    
+    schedule = order.get("payment_schedule")
+    
+    # Backfill schedule for older orders that don't have one
+    if not schedule:
+        payment_terms = order.get("payment_terms", "net_30")
+        total_amount = order.get("total_amount", 0)
+        schedule = generate_payment_schedule(payment_terms, total_amount, order.get("created_at"))
+        
+        # If order payment_status is already "paid", mark first milestone paid
+        if order.get("payment_status") == "paid" and schedule["milestones"]:
+            for ms in schedule["milestones"]:
+                ms["status"] = "paid"
+                ms["paid_at"] = order.get("updated_at")
+            schedule["total_paid"] = total_amount
+            schedule["total_pending"] = 0
+        
+        # Persist the backfilled schedule
+        await db.orders.update_one(
+            {"order_id": order_id},
+            {"$set": {"payment_schedule": schedule}}
+        )
+    
+    # Compute which milestone is currently actionable
+    current_stage = order.get("status", "pending_payment")
+    
+    # Order status progression for determining if a milestone is past-due
+    STATUS_ORDER = ["pending_payment", "paid", "in_production", "quality_check", "dispatched", "delivered", "completed"]
+    current_idx = STATUS_ORDER.index(current_stage) if current_stage in STATUS_ORDER else 0
+    
+    # Stage -> minimum status index where milestone becomes due
+    STAGE_DUE_FROM = {
+        "before_production": 0,   # due from pending_payment onwards
+        "after_production": 2,    # due from in_production onwards
+        "after_inspection": 3,    # due from quality_check onwards
+        "after_dispatch": 4,      # due from dispatched onwards
+        "on_delivery": 5,         # due from delivered onwards
+        "net_due": 0,             # always due (credit terms)
+    }
+    
+    next_due = None
+    for ms in schedule.get("milestones", []):
+        if ms["status"] == "pending":
+            stage = ms.get("stage", "")
+            due_from_idx = STAGE_DUE_FROM.get(stage, 99)
+            is_due = current_idx >= due_from_idx
+            
+            if is_due and not next_due:
+                next_due = ms["milestone_id"]
+            ms["is_due"] = is_due
+            
+            gate_target = STAGE_GATE_MAP.get(stage)
+            ms["blocks_status"] = gate_target
+        else:
+            ms["is_due"] = False
+            ms["blocks_status"] = None
+    
+    return {
+        "order_id": order_id,
+        "total_amount": order.get("total_amount", 0),
+        "currency": order.get("currency", "INR"),
+        "payment_terms": order.get("payment_terms"),
+        "payment_terms_label": order.get("payment_terms_label"),
+        "order_status": current_stage,
+        "schedule": schedule,
+        "next_due_milestone": next_due
+    }
+
+
+@api_router.post("/orders/{order_id}/pay")
+async def record_payment(order_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Record a payment for a specific milestone. (MOCKED - no real payment processor)"""
+    body = await request.json()
+    milestone_id = body.get("milestone_id")
+    
+    if not milestone_id:
+        raise HTTPException(status_code=400, detail="milestone_id is required")
+    
+    order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    is_admin = user.get("role") == "admin"
+    is_buyer = order["buyer_id"] == user["user_id"]
+    if not (is_admin or is_buyer):
+        raise HTTPException(status_code=403, detail="Only buyer or admin can make payments")
+    
+    schedule = order.get("payment_schedule")
+    if not schedule:
+        raise HTTPException(status_code=400, detail="No payment schedule found for this order")
+    
+    milestones = schedule.get("milestones", [])
+    target = None
+    for ms in milestones:
+        if ms["milestone_id"] == milestone_id:
+            target = ms
+            break
+    
+    if not target:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+    
+    if target["status"] == "paid":
+        raise HTTPException(status_code=400, detail="This milestone is already paid")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    target["status"] = "paid"
+    target["paid_at"] = now
+    target["paid_by"] = user["user_id"]
+    
+    # Recalculate totals
+    total_paid = sum(m["amount"] for m in milestones if m["status"] == "paid")
+    total_pending = order.get("total_amount", 0) - total_paid
+    schedule["total_paid"] = round(total_paid, 2)
+    schedule["total_pending"] = round(max(0, total_pending), 2)
+    
+    # Determine overall payment_status
+    all_paid = all(m["status"] == "paid" for m in milestones)
+    any_paid = any(m["status"] == "paid" for m in milestones)
+    payment_status = "paid" if all_paid else ("partial" if any_paid else "pending")
+    
+    # Auto-advance order status if payment unlocks it
+    order_status_update = {}
+    if order["status"] == "pending_payment" and target["stage"] == "before_production":
+        order_status_update["status"] = "paid"
+    
+    update_fields = {
+        "payment_schedule": schedule,
+        "payment_status": payment_status,
+        "updated_at": now
+    }
+    update_fields.update(order_status_update)
+    
+    tracking_note = f"Payment recorded: {target['label']} - {order.get('currency', 'INR')} {target['amount']:,.2f} ({target['percentage']}%)"
+    
+    await db.orders.update_one(
+        {"order_id": order_id},
+        {
+            "$set": update_fields,
+            "$push": {"tracking_updates": {"status": f"Payment: {target['label']}", "timestamp": now, "note": tracking_note}}
+        }
+    )
+    
+    # Record in payment_transactions
+    txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+    await db.payment_transactions.insert_one({
+        "transaction_id": txn_id,
+        "order_id": order_id,
+        "milestone_id": milestone_id,
+        "amount": target["amount"],
+        "currency": order.get("currency", "INR"),
+        "percentage": target["percentage"],
+        "label": target["label"],
+        "stage": target["stage"],
+        "paid_by": user["user_id"],
+        "status": "completed",
+        "method": "manual",
+        "created_at": now
+    })
+    
+    # Notify vendor about payment received
+    vendor = await db.vendors.find_one({"vendor_id": order["vendor_id"]}, {"_id": 0, "user_id": 1})
+    if vendor:
+        rfq = await db.rfqs.find_one({"rfq_id": order["rfq_id"]}, {"_id": 0, "title": 1})
+        rfq_title = rfq.get("title", "Order") if rfq else "Order"
+        await create_notification(
+            user_id=vendor["user_id"],
+            notification_type=NotificationType.PAYMENT_RECEIVED,
+            title=f"Payment Received: {target['label']}",
+            message=f"Payment of {order.get('currency', 'INR')} {target['amount']:,.2f} received for '{rfq_title}' (Order #{order.get('po_number', order_id[:8])})",
+            data={"order_id": order_id, "milestone_id": milestone_id, "amount": target["amount"]}
+        )
+    
+    # Notify buyer confirmation
+    await create_notification(
+        user_id=order["buyer_id"],
+        notification_type=NotificationType.PAYMENT_RECEIVED,
+        title=f"Payment Confirmed: {target['label']}",
+        message=f"Your payment of {order.get('currency', 'INR')} {target['amount']:,.2f} has been recorded",
+        data={"order_id": order_id, "milestone_id": milestone_id, "amount": target["amount"]}
+    )
+    
+    return {
+        "message": "Payment recorded successfully",
+        "transaction_id": txn_id,
+        "milestone": target,
+        "payment_status": payment_status,
+        "total_paid": schedule["total_paid"],
+        "total_pending": schedule["total_pending"],
+        "order_status": update_fields.get("status", order["status"])
+    }
+
+
+@api_router.put("/admin/orders/{order_id}/payment-schedule")
+async def admin_update_payment_schedule(order_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Admin endpoint to override/customize payment schedule for an order."""
+    if user.get("role") not in ("admin", "staff"):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    body = await request.json()
+    milestones_input = body.get("milestones", [])
+    
+    order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    total_amount = order.get("total_amount", 0)
+    
+    # Validate milestones
+    total_pct = sum(m.get("percentage", 0) for m in milestones_input)
+    if total_pct != 100:
+        raise HTTPException(status_code=400, detail=f"Milestone percentages must sum to 100, got {total_pct}")
+    
+    valid_stages = {"before_production", "after_production", "after_inspection", "after_dispatch", "on_delivery", "net_due"}
+    
+    milestones = []
+    for i, m in enumerate(milestones_input):
+        stage = m.get("stage", "before_production")
+        if stage not in valid_stages:
+            raise HTTPException(status_code=400, detail=f"Invalid stage: {stage}")
+        milestones.append({
+            "milestone_id": f"ms_{i+1}",
+            "stage": stage,
+            "label": m.get("label", MILESTONE_LABELS.get(stage, stage)),
+            "percentage": m["percentage"],
+            "amount": round(total_amount * m["percentage"] / 100, 2),
+            "status": "pending",
+            "paid_at": None,
+            "paid_by": None,
+            "due_date": m.get("due_date"),
+            "due_days": m.get("due_days")
+        })
+    
+    schedule = {
+        "type": "custom",
+        "milestones": milestones,
+        "total_paid": 0,
+        "total_pending": total_amount
+    }
+    
+    now = datetime.now(timezone.utc).isoformat()
+    await db.orders.update_one(
+        {"order_id": order_id},
+        {
+            "$set": {"payment_schedule": schedule, "payment_terms": "custom", "payment_terms_label": "Custom Terms", "updated_at": now},
+            "$push": {"tracking_updates": {"status": "Payment Schedule Updated", "timestamp": now, "note": f"Admin customized payment schedule: {len(milestones)} milestones"}}
+        }
+    )
+    
+    return {"message": "Payment schedule updated", "schedule": schedule}
+
 
 # ============== VENDOR RATING SYSTEM ==============
 
