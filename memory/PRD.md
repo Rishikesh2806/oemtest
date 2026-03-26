@@ -276,6 +276,23 @@ See ARCHITECTURE.md for detailed refactoring plan.
 - **Hint text**: "Click any tag to edit AI-detected properties" shown when portfolio has items
 - **Test Report**: /app/test_reports/iteration_37.json (100% pass - 13 backend + all frontend)
 
+### Dynamic Payment Flow & Order Progress Timeline (Completed - Mar 26, 2026)
+- **Backend**: `generate_payment_schedule()` auto-generates structured milestones from payment_terms on order creation
+- **Backend**: `GET /api/orders/{orderId}/payment-schedule` returns milestones with `is_due`, `blocks_status`, amounts
+- **Backend**: `POST /api/orders/{orderId}/pay` records milestone payments (MOCKED), updates payment_status to partial/paid, auto-advances order status
+- **Backend**: Stage-gate enforcement in `PUT /api/orders/{orderId}/status` blocks transitions when payment milestone is pending (e.g., before_production blocks in_production)
+- **Backend**: Admin override (`admin_override: true`) bypasses payment gates
+- **Backend**: `PUT /api/admin/orders/{orderId}/payment-schedule` allows custom schedule (validates percentages sum to 100)
+- **Frontend**: `PaymentTimeline` component shows progress bar, milestones with Pay Now buttons, blocking warnings
+- **Frontend**: Order Progress timeline dynamically adapts based on payment_schedule:
+  - Net 30: In Production → QC → Dispatched → Delivered → Payment Due → Completed
+  - 50/50: 50% Advance → In Production → QC → Dispatched → 50% Delivery → Delivered → Completed
+  - Milestone: 30% → In Production → 40% → QC → 30% → Dispatched → Delivered → Completed
+  - Against Delivery: In Production → QC → Dispatched → Delivered → Payment → Completed
+- **Frontend**: Vendor status buttons show contextually (not blocked by payment_status === "paid" requirement)
+- **Test Reports**: /app/test_reports/iteration_38.json, /app/test_reports/iteration_39.json (100% pass)
+
+
 
 
 
