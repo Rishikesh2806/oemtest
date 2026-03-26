@@ -308,8 +308,10 @@ See ARCHITECTURE.md for detailed refactoring plan.
 - **Fixed**: Milestone-based payment schedules no longer hardcoded to 30/40/30 — now dynamically parsed from `payment_terms_notes`
 - **Backend**: New `_parse_milestone_split()` function extracts percentages via regex and maps keywords to stages (advance→before_production, after production→after_production, after inspection→after_inspection, delivery→after_dispatch)
 - **Backend**: Falls back to Claude AI for complex/ambiguous notes; defaults to 30/40/30 when no notes provided
+- **Backend**: Both `custom` and `milestone_based` payment terms route through `_parse_milestone_split()` — works for direct quote acceptance (no negotiation) AND negotiated flows
+- **Backend**: `accept_quote` response now includes `payment_schedule` field for immediate frontend rendering
 - **Frontend**: Order Progress timeline and Payment Schedule card both dynamically reflect the parsed milestone split
-- **Test Report**: /app/test_reports/iteration_41.json (100% pass - 13 backend + all frontend)
+- **Test Report**: /app/test_reports/iteration_41.json, /app/test_reports/iteration_42.json (100% pass - 10/10 E2E tests)
 
 
 
