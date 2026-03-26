@@ -284,17 +284,114 @@ const OrderDetail = () => {
   const isVendor = user?.role === "vendor";
   const isBuyer = user?.role === "buyer";
 
-  const statusFlow = [
-    { key: "pending_payment", label: "Pending Payment" },
-    { key: "paid", label: "Paid" },
-    { key: "in_production", label: "In Production" },
-    { key: "quality_check", label: "Quality Check" },
-    { key: "dispatched", label: "Dispatched" },
-    { key: "delivered", label: "Delivered" },
-    { key: "completed", label: "Completed" }
-  ];
+  // Dynamic order progress flow based on payment terms
+  const getStatusFlow = () => {
+    const schedule = order.payment_schedule;
+    const milestones = schedule?.milestones || [];
+    const scheduleType = schedule?.type;
 
-  const currentStatusIndex = statusFlow.findIndex(s => s.key === order.status);
+    // Base production steps (without payment)
+    const productionSteps = [
+      { key: "in_production", label: "In Production" },
+      { key: "quality_check", label: "Quality Check" },
+      { key: "dispatched", label: "Dispatched" },
+      { key: "delivered", label: "Delivered" },
+      { key: "completed", label: "Completed" }
+    ];
+
+    // If no schedule, fall back to default advance-first flow
+    if (!milestones.length) {
+      return [
+        { key: "pending_payment", label: "Pending Payment" },
+        { key: "paid", label: "Paid" },
+        ...productionSteps
+      ];
+    }
+
+    // Map milestone stages to where they insert (BEFORE which production step)
+    const stageInsertBefore = {
+      "before_production": "in_production",
+      "after_production": "quality_check",
+      "after_inspection": "dispatched",
+      "after_dispatch": "delivered",
+      "on_delivery": "completed",
+      "net_due": "completed",
+    };
+
+    // Build the flow by interleaving payment milestones at correct positions
+    const flow = [];
+    const usedMilestones = new Set();
+
+    for (const step of productionSteps) {
+      // Insert any milestones that belong before this step
+      for (const ms of milestones) {
+        if (usedMilestones.has(ms.milestone_id)) continue;
+        if (stageInsertBefore[ms.stage] === step.key) {
+          flow.push({
+            key: `pay_${ms.milestone_id}`,
+            label: ms.label || `Pay ${ms.percentage}%`,
+            isPayment: true,
+            milestoneStatus: ms.status,
+            milestoneId: ms.milestone_id
+          });
+          usedMilestones.add(ms.milestone_id);
+        }
+      }
+      flow.push(step);
+    }
+
+    // Add any milestones that didn't match (safety)
+    for (const ms of milestones) {
+      if (!usedMilestones.has(ms.milestone_id)) {
+        flow.push({
+          key: `pay_${ms.milestone_id}`,
+          label: ms.label || `Pay ${ms.percentage}%`,
+          isPayment: true,
+          milestoneStatus: ms.status,
+          milestoneId: ms.milestone_id
+        });
+      }
+    }
+
+    return flow;
+  };
+
+  const statusFlow = getStatusFlow();
+
+  // Determine current active index in the dynamic flow
+  const getCurrentIndex = () => {
+    const orderStatus = order.status;
+
+    // Map the DB order status to the flow
+    // First, find the production step matching the current status
+    const productionIdx = statusFlow.findIndex(s => !s.isPayment && s.key === orderStatus);
+
+    // For pending_payment/paid, find the earliest unpaid payment step or the first production step
+    if (orderStatus === "pending_payment") {
+      const firstPayIdx = statusFlow.findIndex(s => s.isPayment && s.milestoneStatus === "pending");
+      return firstPayIdx >= 0 ? firstPayIdx : 0;
+    }
+    if (orderStatus === "paid") {
+      // All before_production milestones paid, now at "paid" status
+      // Find the production step just after the last paid before_production milestone
+      const firstProdIdx = statusFlow.findIndex(s => !s.isPayment && s.key === "in_production");
+      return firstProdIdx >= 0 ? firstProdIdx - 1 : 0;
+    }
+
+    if (productionIdx >= 0) return productionIdx;
+    return 0;
+  };
+
+  const currentStatusIndex = getCurrentIndex();
+
+  // Determine if a step is "active" (completed/current)
+  const isStepActive = (step, idx) => {
+    if (step.isPayment) {
+      return step.milestoneStatus === "paid";
+    }
+    return idx <= currentStatusIndex;
+  };
+
   const canRate = isBuyer && 
     (order.status === "delivered" || order.status === "completed") && 
     !orderDetails?.is_rated;
@@ -608,28 +705,45 @@ const OrderDetail = () => {
           <CardContent>
             <div className="flex items-center justify-between overflow-x-auto pb-4">
               {statusFlow.map((status, i) => {
-                const isActive = i <= currentStatusIndex;
-                const isCurrent = status.key === order.status;
+                const isActive = isStepActive(status, i);
+                const isCurrent = status.isPayment 
+                  ? (status.milestoneStatus === "pending" && isActive === false && 
+                     (i === 0 || isStepActive(statusFlow[i-1], i-1)))
+                  : status.key === order.status;
+                
+                // Icon for payment steps
+                const stepIcon = status.isPayment 
+                  ? (status.milestoneStatus === "paid" ? <CheckCircle2 className="w-5 h-5" /> : <CreditCard className="w-5 h-5" />)
+                  : getStatusIcon(status.key);
+
+                // Colors for payment steps
+                const activeColor = status.isPayment
+                  ? (status.milestoneStatus === "paid" 
+                      ? "border-green-600 bg-green-50 text-green-600" 
+                      : "border-amber-500 bg-amber-50 text-amber-600")
+                  : "border-orange-600 bg-orange-50 text-orange-600";
                 
                 return (
                   <div key={status.key} className="flex items-center">
                     <div className="flex flex-col items-center">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${
                         isActive 
-                          ? "border-orange-600 bg-orange-50 text-orange-600" 
+                          ? activeColor
                           : "border-slate-200 bg-white text-slate-400"
                       } ${isCurrent ? "ring-4 ring-orange-200" : ""}`}>
-                        {getStatusIcon(status.key)}
+                        {stepIcon}
                       </div>
-                      <span className={`text-xs mt-2 text-center whitespace-nowrap ${
+                      <span className={`text-xs mt-2 text-center max-w-[80px] leading-tight ${
                         isActive ? "text-slate-900 font-medium" : "text-slate-400"
                       }`}>
                         {status.label}
                       </span>
                     </div>
                     {i < statusFlow.length - 1 && (
-                      <div className={`w-8 md:w-16 h-0.5 mx-1 ${
-                        i < currentStatusIndex ? "bg-orange-600" : "bg-slate-200"
+                      <div className={`w-8 md:w-12 h-0.5 mx-1 ${
+                        isActive && isStepActive(statusFlow[i+1], i+1) ? "bg-orange-600" 
+                        : isActive ? "bg-orange-300"
+                        : "bg-slate-200"
                       }`} />
                     )}
                   </div>
@@ -638,38 +752,44 @@ const OrderDetail = () => {
             </div>
 
             {/* Vendor Status Update Buttons */}
-            {isVendor && order.payment_status === "paid" && order.status !== "completed" && (
+            {isVendor && order.status !== "completed" && order.status !== "cancelled" && (
               <div className="mt-6 pt-6 border-t border-slate-200">
                 <p className="text-sm text-slate-500 mb-3">Update order status:</p>
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => updateStatus("in_production", "Production started")}
-                    disabled={currentStatusIndex >= statusFlow.findIndex(s => s.key === "in_production")}
-                    data-testid="status-in_production-btn"
-                  >
-                    <Clock className="w-4 h-4 mr-1" /> Start Production
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => updateStatus("quality_check", "Quality inspection in progress")}
-                    disabled={currentStatusIndex >= statusFlow.findIndex(s => s.key === "quality_check")}
-                    data-testid="status-quality_check-btn"
-                  >
-                    <Box className="w-4 h-4 mr-1" /> Quality Check
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setTrackingDialogOpen(true)}
-                    disabled={currentStatusIndex >= statusFlow.findIndex(s => s.key === "dispatched")}
-                    data-testid="add-tracking-btn"
-                  >
-                    <Truck className="w-4 h-4 mr-1" /> Add Tracking & Ship
-                  </Button>
+                  {["pending_payment", "paid"].includes(order.status) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateStatus("in_production", "Production started")}
+                      data-testid="status-in_production-btn"
+                    >
+                      <Clock className="w-4 h-4 mr-1" /> Start Production
+                    </Button>
+                  )}
+                  {order.status === "in_production" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => updateStatus("quality_check", "Quality inspection in progress")}
+                      data-testid="status-quality_check-btn"
+                    >
+                      <Box className="w-4 h-4 mr-1" /> Quality Check
+                    </Button>
+                  )}
+                  {["in_production", "quality_check"].includes(order.status) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTrackingDialogOpen(true)}
+                      data-testid="add-tracking-btn"
+                    >
+                      <Truck className="w-4 h-4 mr-1" /> Add Tracking & Ship
+                    </Button>
+                  )}
                 </div>
+                <p className="text-xs text-slate-400 mt-2">
+                  Status changes may be blocked if a payment milestone is pending.
+                </p>
               </div>
             )}
           </CardContent>
