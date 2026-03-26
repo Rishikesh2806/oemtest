@@ -1,0 +1,68 @@
+{
+  "summary": "Tested milestone-based payment schedule dynamic parsing feature. Backend _parse_milestone_split() correctly extracts percentages from payment_terms_notes and maps keywords to stages. Frontend Order Progress timeline and Payment Schedule card correctly render dynamic milestone positions and amounts.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_milestone_payment_parsing.py",
+    "/app/test_reports/pytest/milestone_payment_parsing_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_parse_milestone_split() at line 1076 correctly uses regex to extract percentages from notes",
+    "_parse_milestone_split() maps keywords: advance->before_production, after production->after_production, after inspection->after_inspection, delivery->after_dispatch",
+    "_parse_milestone_split() falls back to 30/40/30 when no notes provided (lines 1079-1084)",
+    "_parse_milestone_split() falls back to Claude AI for complex notes parsing (lines 1143-1184)",
+    "generate_payment_schedule() at line 1208 normalizes legacy aliases via PAYMENT_TERMS_ALIASES.get()",
+    "generate_payment_schedule() calls _parse_milestone_split() for milestone_based terms (line 1231)",
+    "OrderDetail.jsx getStatusFlow() at line 288 dynamically builds timeline from payment_schedule.milestones",
+    "PaymentTimeline.jsx correctly renders milestone labels, amounts, percentages, and blocking status"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_milestone_payment_parsing.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13 passed)",
+    "frontend": "100% - All milestone UI elements verified"
+  },
+  "test_credentials": {
+    "admin_email": "admin@offoadex.com",
+    "admin_password": "admin123",
+    "buyer_email": "visualbuyer@test.com",
+    "buyer_password": "buyer123",
+    "vendor_email": "testvendor_nda@test.com",
+    "vendor_password": "vendor123"
+  },
+  "seed_data_creation": "No new seed data created. Used existing test orders: order_4cb307351dbf (50/50), order_1c90e8591aff (30/40/30), order_3669f7e2d825 (no notes)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Milestone-based payment schedule parsing verified working. _parse_milestone_split() extracts percentages from payment_terms_notes using regex and maps keywords to stages. Falls back to 30/40/30 when no notes. Frontend Order Progress timeline dynamically positions payment milestones between production steps. PaymentTimeline component shows correct amounts, labels, and blocking status.",
+  "features_tested": {
+    "Backend_50_50_split_parsing": "PASS - '50% advance, 50% after inspection' generates 50/50 split with correct stages",
+    "Backend_30_40_30_split_parsing": "PASS - '30% advance, 40% post-production, 30% after QC' generates 30/40/30 split",
+    "Backend_no_notes_default": "PASS - milestone_based with no notes defaults to 30/40/30 split",
+    "Backend_stage_mapping_advance": "PASS - 'advance' keyword maps to before_production stage",
+    "Backend_stage_mapping_after_inspection": "PASS - 'after inspection' keyword maps to after_inspection stage",
+    "Backend_stage_mapping_after_production": "PASS - 'after production' keyword maps to after_production stage",
+    "Backend_legacy_aliases_normalization": "PASS - advance_100, advance_50, cod normalized in generate_payment_schedule",
+    "Backend_milestone_blocks_status": "PASS - before_production blocks in_production, after_production blocks quality_check, after_inspection blocks dispatched",
+    "Backend_amount_calculation": "PASS - Milestone amounts correctly calculated from percentages",
+    "Backend_is_due_flag": "PASS - First milestone is_due=True on pending_payment status",
+    "Frontend_Order_Progress_timeline": "PASS - Dynamic milestone positions matching payment schedule",
+    "Frontend_Payment_Schedule_card": "PASS - Correct milestone amounts, labels, percentages displayed",
+    "Frontend_payment_gate_notice": "PASS - Warning displayed about blocked order stages"
+  },
+  "mocked_apis": {
+    "has_mocked_apis": true,
+    "mocked_apis_list": [
+      "POST /api/orders/{orderId}/pay - Payment is MOCKED",
+      "Claude AI used for complex milestone parsing fallback"
+    ]
+  }
+}

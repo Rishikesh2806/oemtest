@@ -1071,7 +1071,141 @@ MILESTONE_LABELS = {
     "net_due": "Payment Due",
 }
 
-def generate_payment_schedule(payment_terms: str, total_amount: float, order_created_at: str = None) -> dict:
+VALID_STAGES = ["before_production", "after_production", "after_inspection", "after_dispatch", "on_delivery"]
+
+def _parse_milestone_split(notes: str, total_amount: float) -> list:
+    """Parse milestone percentages and stages from payment_terms_notes using AI."""
+    if not notes or not notes.strip():
+        # Default 30/40/30 if no notes
+        return [
+            {"stage": "before_production", "label": "Advance (30%)", "percentage": 30},
+            {"stage": "after_production", "label": "Post-Production (40%)", "percentage": 40},
+            {"stage": "after_inspection", "label": "Post-Inspection (30%)", "percentage": 30}
+        ]
+    
+    # Try regex extraction first for common patterns like "50% advance, 50% after inspection"
+    import re
+    pct_matches = re.findall(r'(\d+)\s*%', notes)
+    
+    if pct_matches:
+        percentages = [int(p) for p in pct_matches]
+        if sum(percentages) == 100 and 1 <= len(percentages) <= 5:
+            # Try to map stages from keywords in the notes
+            notes_lower = notes.lower()
+            stage_keywords = {
+                "before_production": ["advance", "upfront", "before production", "deposit", "down payment"],
+                "after_production": ["after production", "post-production", "post production", "production complete"],
+                "after_inspection": ["after inspection", "post-inspection", "after qc", "quality check", "after quality"],
+                "after_dispatch": ["delivery", "after dispatch", "on delivery", "after shipping", "dispatch", "shipping"],
+                "on_delivery": ["on delivery", "cod", "cash on delivery", "upon delivery", "at delivery"],
+            }
+            
+            # Split notes by common delimiters to isolate each milestone description
+            parts = re.split(r'[,;]+|(?:\band\b)', notes_lower)
+            parts = [p.strip() for p in parts if p.strip()]
+            
+            # If we have as many parts as percentages, match them 1:1
+            if len(parts) >= len(percentages):
+                milestones = []
+                used_stages = set()
+                for i, pct in enumerate(percentages):
+                    part = parts[i] if i < len(parts) else ""
+                    matched_stage = None
+                    for stage, keywords in stage_keywords.items():
+                        if stage in used_stages:
+                            continue
+                        if any(kw in part for kw in keywords):
+                            matched_stage = stage
+                            break
+                    
+                    if not matched_stage:
+                        # Assign stages in order for unmatched
+                        for s in VALID_STAGES:
+                            if s not in used_stages:
+                                matched_stage = s
+                                break
+                    
+                    if not matched_stage:
+                        matched_stage = VALID_STAGES[min(i, len(VALID_STAGES)-1)]
+                    
+                    used_stages.add(matched_stage)
+                    label = MILESTONE_LABELS.get(matched_stage, matched_stage.replace("_", " ").title())
+                    milestones.append({
+                        "stage": matched_stage,
+                        "label": f"{label} ({pct}%)",
+                        "percentage": pct
+                    })
+                
+                return milestones
+    
+    # Fallback: use AI to parse complex notes
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        import asyncio
+        
+        prompt = f"""Parse the following payment terms notes into milestone stages with percentages.
+
+NOTES: "{notes}"
+
+VALID STAGES (use ONLY these):
+- before_production (advance/deposit/upfront)
+- after_production (post-production completion)
+- after_inspection (after quality check/inspection)
+- after_dispatch (after shipping/delivery)
+- on_delivery (cash on delivery)
+
+Return ONLY a JSON array like:
+[{{"stage": "before_production", "label": "Advance", "percentage": 50}}, {{"stage": "after_dispatch", "label": "Final Payment", "percentage": 50}}]
+
+RULES:
+- Percentages MUST sum to exactly 100
+- Use 2-5 milestones
+- Each stage used only once
+- Label should be short and descriptive"""
+
+        llm_key = os.environ.get("EMERGENT_LLM_KEY")
+        chat = LlmChat(api_key=llm_key, model="claude-sonnet-4-20250514")
+        
+        # Run async in sync context
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                response = pool.submit(
+                    lambda: asyncio.run(_ai_parse_milestone(chat, prompt))
+                ).result(timeout=15)
+        else:
+            response = asyncio.run(_ai_parse_milestone(chat, prompt))
+        
+        if response:
+            return response
+            
+    except Exception as e:
+        logger.warning(f"AI milestone parsing failed: {e}")
+    
+    # Final fallback: 30/40/30
+    return [
+        {"stage": "before_production", "label": "Advance (30%)", "percentage": 30},
+        {"stage": "after_production", "label": "Post-Production (40%)", "percentage": 40},
+        {"stage": "after_inspection", "label": "Post-Inspection (30%)", "percentage": 30}
+    ]
+
+
+async def _ai_parse_milestone(chat, prompt: str) -> list:
+    """Helper to run AI milestone parsing."""
+    from emergentintegrations.llm.chat import UserMessage
+    response = await chat.send_async(UserMessage(content=prompt))
+    import re
+    json_match = re.search(r'\[.*\]', response.text, re.DOTALL)
+    if json_match:
+        parsed = json.loads(json_match.group())
+        total_pct = sum(m.get("percentage", 0) for m in parsed)
+        if total_pct == 100 and all(m.get("stage") in VALID_STAGES for m in parsed):
+            return parsed
+    return None
+
+
+def generate_payment_schedule(payment_terms: str, total_amount: float, order_created_at: str = None, payment_terms_notes: str = None) -> dict:
     """Generate a structured payment schedule from payment terms type."""
     # Normalize legacy aliases
     payment_terms = PAYMENT_TERMS_ALIASES.get(payment_terms, payment_terms)
@@ -1093,11 +1227,8 @@ def generate_payment_schedule(payment_terms: str, total_amount: float, order_cre
         ]
         schedule_type = "against_delivery"
     elif payment_terms == "milestone_based":
-        milestones = [
-            {"stage": "before_production", "label": "Advance (30%)", "percentage": 30},
-            {"stage": "after_production", "label": "Post-Production (40%)", "percentage": 40},
-            {"stage": "after_inspection", "label": "Post-Inspection (30%)", "percentage": 30}
-        ]
+        # Parse actual milestone split from notes using AI
+        milestones = _parse_milestone_split(payment_terms_notes, total_amount)
     elif payment_terms == "letter_of_credit":
         milestones = [
             {"stage": "before_production", "label": "Letter of Credit Confirmation", "percentage": 100}
@@ -8726,7 +8857,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
         "payment_terms": payment_terms,
         "payment_terms_label": PAYMENT_TERMS_LABELS.get(payment_terms, payment_terms),
         "payment_terms_notes": payment_terms_notes,
-        "payment_schedule": generate_payment_schedule(payment_terms, quote["price"], now),
+        "payment_schedule": generate_payment_schedule(payment_terms, quote["price"], now, payment_terms_notes),
         "po_number": po_number,
         "tracking_updates": [
             {"status": "Order Created", "timestamp": now, "note": f"Quote accepted. PO #{po_number}. Payment Terms: {PAYMENT_TERMS_LABELS.get(payment_terms, payment_terms)}"}
@@ -9096,7 +9227,7 @@ async def get_payment_schedule(order_id: str, user: dict = Depends(get_current_u
     if not schedule:
         payment_terms = order.get("payment_terms", "net_30")
         total_amount = order.get("total_amount", 0)
-        schedule = generate_payment_schedule(payment_terms, total_amount, order.get("created_at"))
+        schedule = generate_payment_schedule(payment_terms, total_amount, order.get("created_at"), order.get("payment_terms_notes"))
         
         # If order payment_status is already "paid", mark first milestone paid
         if order.get("payment_status") == "paid" and schedule["milestones"]:
