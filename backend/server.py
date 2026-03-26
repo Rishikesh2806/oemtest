@@ -1026,7 +1026,20 @@ PAYMENT_TERMS_LABELS = {
     "against_delivery": "Payment Against Delivery",
     "milestone_based": "Milestone-Based Payment",
     "letter_of_credit": "Letter of Credit (LC)",
-    "custom": "Custom Terms"
+    "custom": "Custom Terms",
+    # Legacy aliases from old vendor quotation form
+    "advance_100": "100% Advance",
+    "advance_50": "50% Advance, 50% on Delivery",
+    "net_15": "Net 15 Days",
+    "cod": "Payment Against Delivery",
+}
+
+# Map legacy payment terms values to canonical values
+PAYMENT_TERMS_ALIASES = {
+    "advance_100": "100_advance",
+    "advance_50": "50_advance_50_delivery",
+    "cod": "against_delivery",
+    "net_15": "net_30",  # closest equivalent
 }
 
 # ============== PAYMENT SCHEDULE ENGINE ==============
@@ -1060,6 +1073,8 @@ MILESTONE_LABELS = {
 
 def generate_payment_schedule(payment_terms: str, total_amount: float, order_created_at: str = None) -> dict:
     """Generate a structured payment schedule from payment terms type."""
+    # Normalize legacy aliases
+    payment_terms = PAYMENT_TERMS_ALIASES.get(payment_terms, payment_terms)
     milestones = []
     schedule_type = payment_terms
 
@@ -8563,6 +8578,111 @@ async def get_quote_negotiations(quote_id: str, user: dict = Depends(get_current
     
     return negotiations
 
+async def resolve_final_payment_terms(quote: dict, rfq: dict) -> tuple:
+    """Use Claude AI to analyze negotiation history and determine the final agreed payment terms."""
+    quote_id = quote["quote_id"]
+    
+    # Gather all negotiation records for this quote
+    negotiations = await db.quote_negotiations.find(
+        {"quote_id": quote_id},
+        {"_id": 0}
+    ).sort("created_at", 1).to_list(50)
+    
+    # Normalize legacy payment terms aliases on the quote itself
+    raw_terms = quote.get("proposed_payment_terms", "net_30")
+    canonical_terms = PAYMENT_TERMS_ALIASES.get(raw_terms, raw_terms)
+    notes = quote.get("payment_terms_notes", "")
+    
+    # If no negotiations happened, use the quote's proposed terms directly
+    if not negotiations:
+        return canonical_terms, notes
+    
+    # Check if the last negotiation has a clear resolved payment_terms
+    last_neg = negotiations[-1]
+    last_status = last_neg.get("status", "")
+    
+    # Quick path: if the last negotiation explicitly resolved with payment terms
+    if last_status == "accepted" and last_neg.get("requested_payment_terms"):
+        resolved = PAYMENT_TERMS_ALIASES.get(last_neg["requested_payment_terms"], last_neg["requested_payment_terms"])
+        return resolved, notes
+    if last_status in ("counter_accepted", "counter_offered") and last_neg.get("counter_payment_terms"):
+        resolved = PAYMENT_TERMS_ALIASES.get(last_neg["counter_payment_terms"], last_neg["counter_payment_terms"])
+        return resolved, notes
+    
+    # Complex case: use Claude AI to analyze the full negotiation chain
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        
+        # Build negotiation summary for AI
+        rfq_preferred = rfq.get("preferred_payment_terms", "not specified")
+        rfq_preferred_label = PAYMENT_TERMS_LABELS.get(rfq_preferred, rfq_preferred)
+        vendor_proposed = PAYMENT_TERMS_LABELS.get(raw_terms, raw_terms)
+        
+        neg_history = []
+        for neg in negotiations:
+            entry = f"- Status: {neg.get('status')} | Type: {neg.get('request_type')}"
+            if neg.get("requested_payment_terms"):
+                entry += f" | Buyer requested: {PAYMENT_TERMS_LABELS.get(neg['requested_payment_terms'], neg['requested_payment_terms'])}"
+            if neg.get("counter_payment_terms"):
+                entry += f" | Vendor countered: {PAYMENT_TERMS_LABELS.get(neg['counter_payment_terms'], neg['counter_payment_terms'])}"
+            if neg.get("message"):
+                entry += f" | Message: {neg['message'][:200]}"
+            if neg.get("response"):
+                entry += f" | Response: {neg['response'][:200]}"
+            neg_history.append(entry)
+        
+        valid_terms = list(PAYMENT_TERMS_LABELS.keys())
+        
+        prompt = f"""Analyze the following negotiation history for a manufacturing order and determine the FINAL AGREED payment terms.
+
+VALID PAYMENT TERMS VALUES (return ONLY one of these exact values):
+{', '.join(valid_terms)}
+
+RFQ CONTEXT:
+- Buyer's preferred payment terms: {rfq_preferred_label}
+- Buyer's notes: {rfq.get('payment_terms_notes', 'none')}
+
+VENDOR'S ORIGINAL QUOTE:
+- Proposed payment terms: {vendor_proposed}
+- Notes: {notes or 'none'}
+
+NEGOTIATION HISTORY (chronological):
+{chr(10).join(neg_history)}
+
+RULES:
+1. If negotiations resolved with explicit payment terms, use those.
+2. If the last accepted/counter-accepted negotiation has payment terms, use those.
+3. If no payment terms were negotiated (only price/lead_time), use the vendor's original proposed terms.
+4. If a counter offer was accepted, use the counter offer's terms.
+
+Return ONLY a JSON object with exactly these fields:
+{{"payment_terms": "<exact value from valid list>", "notes": "<brief summary of what was agreed>"}}"""
+
+        llm_key = os.environ.get("EMERGENT_LLM_KEY")
+        chat = LlmChat(api_key=llm_key, model="claude-sonnet-4-20250514")
+        response = await chat.send_async(UserMessage(content=prompt))
+        
+        # Parse AI response
+        import re
+        json_match = re.search(r'\{[^}]+\}', response.text)
+        if json_match:
+            result = json.loads(json_match.group())
+            ai_terms = result.get("payment_terms", canonical_terms)
+            ai_notes = result.get("notes", notes)
+            # Validate the AI returned a valid term
+            if ai_terms in PAYMENT_TERMS_LABELS or ai_terms in PAYMENT_TERMS_ALIASES:
+                final_terms = PAYMENT_TERMS_ALIASES.get(ai_terms, ai_terms)
+                logger.info(f"AI resolved payment terms for quote {quote_id}: {final_terms} (notes: {ai_notes})")
+                return final_terms, ai_notes
+        
+        logger.warning(f"AI response could not be parsed for quote {quote_id}, using fallback")
+    except Exception as e:
+        logger.warning(f"AI payment terms analysis failed for quote {quote_id}: {e}")
+    
+    # Fallback: use the quote's proposed terms
+    return canonical_terms, notes
+
+
 @api_router.post("/quotes/{quote_id}/accept")
 async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     quote = await db.quotes.find_one({"quote_id": quote_id}, {"_id": 0})
@@ -8590,9 +8710,8 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     po_number = f"PO-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
     now = datetime.now(timezone.utc).isoformat()
     
-    # Get payment terms from quote (vendor's proposed terms) 
-    payment_terms = quote.get("proposed_payment_terms", "net_30")
-    payment_terms_notes = quote.get("payment_terms_notes", "")
+    # AI-analyzed payment terms from negotiation history
+    payment_terms, payment_terms_notes = await resolve_final_payment_terms(quote, rfq)
     
     order_doc = {
         "order_id": order_id,
@@ -8703,7 +8822,16 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
 {link_note}"""
             asyncio.create_task(whatsapp_service.send_text_message(vendor["phone"], wa_message))
     
-    return {"message": "Quote accepted", "order_id": order_id}
+    return {
+        "message": "Quote accepted",
+        "order_id": order_id,
+        "po_number": po_number,
+        "payment_terms": payment_terms,
+        "payment_terms_label": PAYMENT_TERMS_LABELS.get(payment_terms, payment_terms),
+        "payment_terms_notes": payment_terms_notes,
+        "total_amount": quote["price"],
+        "currency": quote.get("currency", "USD")
+    }
 
 # =============================================================================
 # LEGACY ORDER ROUTES - TO BE REMOVED

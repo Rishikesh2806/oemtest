@@ -833,15 +833,19 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
           <div>
             <Label htmlFor="paymentTerms">Payment Terms</Label>
             <Select value={paymentTerms} onValueChange={setPaymentTerms}>
-              <SelectTrigger className="mt-1">
+              <SelectTrigger className="mt-1" data-testid="payment-terms-select">
                 <SelectValue placeholder="Select payment terms" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="advance_100">100% Advance</SelectItem>
-                <SelectItem value="advance_50">50% Advance, 50% on Delivery</SelectItem>
-                <SelectItem value="net_15">Net 15 days</SelectItem>
-                <SelectItem value="net_30">Net 30 days</SelectItem>
-                <SelectItem value="cod">Cash on Delivery</SelectItem>
+                <SelectItem value="net_30">Net 30 Days</SelectItem>
+                <SelectItem value="net_45">Net 45 Days</SelectItem>
+                <SelectItem value="net_60">Net 60 Days</SelectItem>
+                <SelectItem value="50_advance_50_delivery">50% Advance, 50% on Delivery</SelectItem>
+                <SelectItem value="100_advance">100% Advance</SelectItem>
+                <SelectItem value="against_delivery">Payment Against Delivery</SelectItem>
+                <SelectItem value="milestone_based">Milestone-Based Payment</SelectItem>
+                <SelectItem value="letter_of_credit">Letter of Credit (LC)</SelectItem>
+                <SelectItem value="custom">Custom Terms</SelectItem>
               </SelectContent>
             </Select>
           </div>
