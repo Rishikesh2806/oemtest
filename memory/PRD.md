@@ -292,6 +292,19 @@ See ARCHITECTURE.md for detailed refactoring plan.
 - **Frontend**: Vendor status buttons show contextually (not blocked by payment_status === "paid" requirement)
 - **Test Reports**: /app/test_reports/iteration_38.json, /app/test_reports/iteration_39.json (100% pass)
 
+### Payment Terms Alignment & AI Negotiation Analysis (Completed - Mar 26, 2026)
+- **Frontend**: Aligned VendorQuotationForm dropdown with RFQ/Negotiation dropdowns — all 4 forms now have matching 9 payment term options
+- **Backend**: Added `PAYMENT_TERMS_ALIASES` to normalize legacy values (`advance_100`→`100_advance`, `advance_50`→`50_advance_50_delivery`, `cod`→`against_delivery`)
+- **Backend**: `generate_payment_schedule()` normalizes legacy aliases before generating milestones
+- **Backend**: New `resolve_final_payment_terms()` function:
+  - Quick-path: uses explicit `counter_payment_terms` from accepted counter offer
+  - Quick-path: uses `requested_payment_terms` from accepted negotiation
+  - AI path: Claude (claude-sonnet-4-20250514) analyzes full negotiation chain for ambiguous cases
+  - Fallback: vendor's proposed terms when no payment terms were negotiated
+- **Backend**: `accept_quote` response now includes `payment_terms`, `payment_terms_label`, `total_amount`, `currency`
+- **Test Report**: /app/test_reports/iteration_40.json (100% pass - 21 backend + frontend verified)
+
+
 
 
 
