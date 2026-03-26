@@ -46,8 +46,10 @@ const GoogleCallback = () => {
             redirectPath = "/select-role";
           } else if (data.user.role === "vendor") {
             redirectPath = "/vendor/dashboard";
-          } else if (data.user.role === "admin" || data.user.role === "staff") {
+          } else if (data.user.role === "admin") {
             redirectPath = "/admin/dashboard";
+          } else if (data.user.role === "staff") {
+            redirectPath = "/staff/dashboard";
           } else if (data.user.role === "inspector") {
             redirectPath = "/inspector/dashboard";
           }

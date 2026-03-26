@@ -38,15 +38,15 @@ const LoginPage = () => {
       navigate("/vendor/dashboard");
     } else if (userData.role === "admin") {
       navigate("/admin/dashboard");
+    } else if (userData.role === "staff") {
+      navigate("/staff/dashboard");
     } else if (userData.role === "inspector") {
       navigate("/inspector/dashboard");
     } else if (userData.role === "buyer") {
       navigate("/buyer/dashboard");
     } else if (userData.custom_role) {
-      // User has no base role but has a custom role - send to admin dashboard
-      navigate("/admin/dashboard");
+      navigate("/staff/dashboard");
     } else {
-      // Default fallback
       navigate("/buyer/dashboard");
     }
   };

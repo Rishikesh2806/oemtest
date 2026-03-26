@@ -113,7 +113,7 @@ const DashboardLayout = ({ children }) => {
     const isAdmin = user?.role === 'admin';
     
     // If no base role but has custom_role, use staff configuration
-    if (!user?.role && user?.custom_role) {
+    if ((!user?.role && user?.custom_role) || user?.role === 'staff') {
       roleType = 'staff';
     }
     

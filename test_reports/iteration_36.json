@@ -1,0 +1,70 @@
+{
+  "summary": "Tested Staff Base Role & Secondary Roles Frontend Integration for OEMLinker. Backend: 6/7 tests passed (1 skipped - no pure buyer test account). Frontend: All login redirects work correctly - staff->staff/dashboard, admin->admin/dashboard, vendor->vendor/dashboard. StaffDashboard renders with secondary_roles badges. ProtectedRoute correctly blocks non-staff users from /staff/dashboard.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "StaffDashboard header",
+        "issues": ["Portal header shows 'Buyer Portal' for staff users - should show 'Staff Portal' or custom_role-based portal name"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_staff_roles.py",
+    "/app/test_reports/pytest/staff_roles_results.xml"
+  ],
+  "action_items": [
+    "Consider updating DashboardLayout portal name logic to show 'Staff Portal' for role='staff' users instead of falling through to custom_role check"
+  ],
+  "critical_code_review_comments": [
+    "Backend: POST /api/auth/login correctly returns custom_role and secondary_roles in UserResponse (auth.py lines 353-367)",
+    "Backend: GET /api/auth/me correctly returns custom_role and secondary_roles (auth.py lines 596-610)",
+    "Frontend: LoginPage.jsx handleLoginSuccess correctly routes staff users to /staff/dashboard (line 41)",
+    "Frontend: GoogleCallback.jsx correctly routes staff users to /staff/dashboard (line 51)",
+    "Frontend: App.js ProtectedRoute correctly handles effectiveRole for staff users (line 270)",
+    "Frontend: StaffDashboard.jsx renders with secondary_roles badges in header (lines 113-116)",
+    "Frontend: DashboardLayout.jsx getNavItems() correctly handles role='staff' (lines 117-119)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_staff_roles.py"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6 tests passed, 1 skipped)",
+    "frontend": "100% - All login redirects and access controls working correctly"
+  },
+  "test_credentials": {
+    "staff_email": "buyer@offoadex.com",
+    "staff_password": "buyer123",
+    "admin_email": "admin@offoadex.com",
+    "admin_password": "admin123",
+    "vendor_email": "testvendor_nda@test.com",
+    "vendor_password": "vendor123"
+  },
+  "seed_data_creation": "Used existing staff user buyer@offoadex.com with role='staff', custom_role='buyer', secondary_roles=['buyer']",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Staff role integration is fully working. Backend APIs return custom_role and secondary_roles correctly. Frontend login redirects staff users to /staff/dashboard. StaffDashboard component renders with secondary_roles badges. ProtectedRoute blocks non-staff/non-admin users from /staff/dashboard. The only minor issue is the portal header showing 'Buyer Portal' instead of 'Staff Portal' for staff users.",
+  "features_tested": {
+    "Backend_Login_Returns_Custom_Role": "PASS - POST /api/auth/login returns custom_role in user object",
+    "Backend_Login_Returns_Secondary_Roles": "PASS - POST /api/auth/login returns secondary_roles array",
+    "Backend_AuthMe_Returns_Custom_Role": "PASS - GET /api/auth/me returns custom_role",
+    "Backend_AuthMe_Returns_Secondary_Roles": "PASS - GET /api/auth/me returns secondary_roles",
+    "Frontend_Staff_Login_Redirect": "PASS - Staff user redirected to /staff/dashboard",
+    "Frontend_Admin_Login_Redirect": "PASS - Admin user redirected to /admin/dashboard",
+    "Frontend_Vendor_Login_Redirect": "PASS - Vendor user redirected to /vendor/dashboard",
+    "Frontend_StaffDashboard_Renders": "PASS - StaffDashboard component renders correctly",
+    "Frontend_Secondary_Roles_Badges": "PASS - Secondary roles badges visible in header",
+    "Frontend_ProtectedRoute_Blocks_Vendor": "PASS - Vendor cannot access /staff/dashboard",
+    "Frontend_ProtectedRoute_Allows_Admin": "PASS - Admin can access /staff/dashboard",
+    "Frontend_Sidebar_Staff_NavItems": "PASS - Sidebar shows correct nav items for staff users"
+  },
+  "mocked_apis": {
+    "has_mocked_apis": false,
+    "mocked_apis_list": []
+  }
+}

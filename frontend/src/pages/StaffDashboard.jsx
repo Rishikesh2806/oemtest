@@ -110,6 +110,11 @@ export default function StaffDashboard() {
             <Badge variant="outline" className="text-sm">
               {user?.name || 'User'}
             </Badge>
+            {user?.secondary_roles?.length > 0 && user.secondary_roles.map(sr => (
+              <Badge key={sr} variant="secondary" className="text-xs capitalize">
+                {sr.replace(/_/g, ' ')}
+              </Badge>
+            ))}
             <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
               <RefreshCw className="h-4 w-4 mr-2" />
               Refresh

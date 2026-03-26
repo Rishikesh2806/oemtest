@@ -2,7 +2,7 @@
 User-related Pydantic Models
 """
 from pydantic import BaseModel, Field, EmailStr, field_validator
-from typing import Optional
+from typing import Optional, List
 import re
 
 
@@ -66,6 +66,8 @@ class UserResponse(BaseModel):
     email: str
     name: str
     role: str
+    custom_role: Optional[str] = None
+    secondary_roles: List[str] = []
     company_name: Optional[str] = None
     picture: Optional[str] = None
     email_verified: bool = False
