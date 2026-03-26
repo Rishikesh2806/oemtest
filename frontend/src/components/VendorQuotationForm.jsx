@@ -40,6 +40,7 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
   const [notes, setNotes] = useState(existingQuote?.notes || "");
   const [costBreakdownRemarks, setCostBreakdownRemarks] = useState(existingQuote?.cost_breakdown_remarks || "");
   const [paymentTerms, setPaymentTerms] = useState(existingQuote?.proposed_payment_terms || "net_30");
+  const [paymentTermsNotes, setPaymentTermsNotes] = useState(existingQuote?.payment_terms_notes || "");
 
   // Item-wise quotation state
   const [itemQuotes, setItemQuotes] = useState({});
@@ -262,7 +263,8 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
           lead_time_days: parseInt(leadTimeDays),
           notes: notes,
           cost_breakdown_remarks: costBreakdownRemarks,
-          proposed_payment_terms: paymentTerms
+          proposed_payment_terms: paymentTerms,
+          payment_terms_notes: paymentTermsNotes
         });
       } else {
         // Single/flat quotation
@@ -282,7 +284,8 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
           lead_time_days: parseInt(leadTimeDays),
           notes: notes,
           cost_breakdown_remarks: costBreakdownRemarks,
-          proposed_payment_terms: paymentTerms
+          proposed_payment_terms: paymentTerms,
+          payment_terms_notes: paymentTermsNotes
         });
       }
 
@@ -849,6 +852,31 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
               </SelectContent>
             </Select>
           </div>
+
+          {/* Payment Terms Notes - shown for milestone/custom */}
+          {(paymentTerms === "milestone_based" || paymentTerms === "custom") && (
+            <div>
+              <Label htmlFor="paymentTermsNotes">
+                {paymentTerms === "milestone_based" ? "Milestone Details" : "Custom Terms Details"}
+              </Label>
+              <Textarea
+                id="paymentTermsNotes"
+                placeholder={paymentTerms === "milestone_based" 
+                  ? "e.g., 50% advance, 50% after inspection" 
+                  : "Describe your custom payment terms..."}
+                value={paymentTermsNotes}
+                onChange={(e) => setPaymentTermsNotes(e.target.value)}
+                className="mt-1"
+                rows={2}
+                data-testid="payment-terms-notes-input"
+              />
+              <p className="text-xs text-slate-400 mt-1">
+                {paymentTerms === "milestone_based" 
+                  ? "Specify percentages and stages (e.g., 30% advance, 40% after production, 30% after inspection)"
+                  : "Describe the payment schedule, due dates, and conditions"}
+              </p>
+            </div>
+          )}
 
           {/* Cost Breakdown Remarks */}
           <div>

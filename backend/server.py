@@ -8399,6 +8399,7 @@ class NegotiationRequest(BaseModel):
     requested_price: Optional[float] = None
     requested_lead_time: Optional[int] = None
     requested_payment_terms: Optional[str] = None
+    payment_terms_notes: Optional[str] = None
 
 @api_router.post("/quotes/{quote_id}/negotiate")
 async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, user: dict = Depends(get_current_user)):
@@ -8432,6 +8433,7 @@ async def request_quote_negotiation(quote_id: str, request: NegotiationRequest, 
         "requested_price": request.requested_price,
         "requested_lead_time": request.requested_lead_time,
         "requested_payment_terms": request.requested_payment_terms,
+        "payment_terms_notes": request.payment_terms_notes,
         "original_price": quote["price"],
         "original_lead_time": quote["lead_time_days"],
         "original_payment_terms": quote.get("proposed_payment_terms"),
@@ -8493,6 +8495,7 @@ class NegotiationResponse(BaseModel):
     counter_price: Optional[float] = None
     counter_lead_time: Optional[int] = None
     counter_payment_terms: Optional[str] = None
+    counter_payment_notes: Optional[str] = None
 
 @api_router.post("/quotes/{quote_id}/negotiate/{negotiation_id}/respond")
 async def respond_to_negotiation(quote_id: str, negotiation_id: str, response: NegotiationResponse, user: dict = Depends(get_current_user)):
@@ -8553,6 +8556,7 @@ async def respond_to_negotiation(quote_id: str, negotiation_id: str, response: N
                 "counter_price": response.counter_price,
                 "counter_lead_time": response.counter_lead_time,
                 "counter_payment_terms": response.counter_payment_terms,
+                "counter_payment_notes": response.counter_payment_notes,
                 "updated_at": now
             }}
         )
@@ -8660,6 +8664,8 @@ async def accept_counter_offer(quote_id: str, negotiation_id: str, user: dict = 
         update_quote["lead_time_days"] = negotiation["counter_lead_time"]
     if negotiation.get("counter_payment_terms"):
         update_quote["proposed_payment_terms"] = negotiation["counter_payment_terms"]
+    if negotiation.get("counter_payment_notes"):
+        update_quote["payment_terms_notes"] = negotiation["counter_payment_notes"]
     
     await db.quotes.update_one({"quote_id": quote_id}, {"$set": update_quote})
     
@@ -8735,10 +8741,12 @@ async def resolve_final_payment_terms(quote: dict, rfq: dict) -> tuple:
     # Quick path: if the last negotiation explicitly resolved with payment terms
     if last_status == "accepted" and last_neg.get("requested_payment_terms"):
         resolved = PAYMENT_TERMS_ALIASES.get(last_neg["requested_payment_terms"], last_neg["requested_payment_terms"])
-        return resolved, notes
+        resolved_notes = last_neg.get("payment_terms_notes") or notes
+        return resolved, resolved_notes
     if last_status in ("counter_accepted", "counter_offered") and last_neg.get("counter_payment_terms"):
         resolved = PAYMENT_TERMS_ALIASES.get(last_neg["counter_payment_terms"], last_neg["counter_payment_terms"])
-        return resolved, notes
+        resolved_notes = last_neg.get("counter_payment_notes") or notes
+        return resolved, resolved_notes
     
     # Complex case: use Claude AI to analyze the full negotiation chain
     try:

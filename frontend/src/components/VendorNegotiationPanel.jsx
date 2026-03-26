@@ -40,7 +40,8 @@ const VendorNegotiationPanel = ({ quoteId, onNegotiationResolved }) => {
     message: "",
     counter_price: "",
     counter_lead_time: "",
-    counter_payment_terms: ""
+    counter_payment_terms: "",
+    counter_payment_notes: ""
   });
 
   useEffect(() => {
@@ -68,7 +69,8 @@ const VendorNegotiationPanel = ({ quoteId, onNegotiationResolved }) => {
         message: responseForm.message || null,
         counter_price: responseForm.counter_price ? parseFloat(responseForm.counter_price) : null,
         counter_lead_time: responseForm.counter_lead_time ? parseInt(responseForm.counter_lead_time) : null,
-        counter_payment_terms: responseForm.counter_payment_terms || null
+        counter_payment_terms: responseForm.counter_payment_terms || null,
+        counter_payment_notes: responseForm.counter_payment_notes || null
       };
       
       await api.post(`/quotes/${quoteId}/negotiate/${negotiationId}/respond`, payload);
@@ -82,7 +84,8 @@ const VendorNegotiationPanel = ({ quoteId, onNegotiationResolved }) => {
         message: "",
         counter_price: "",
         counter_lead_time: "",
-        counter_payment_terms: ""
+        counter_payment_terms: "",
+        counter_payment_notes: ""
       });
       fetchNegotiations();
       if (onNegotiationResolved) onNegotiationResolved();
@@ -226,6 +229,24 @@ const VendorNegotiationPanel = ({ quoteId, onNegotiationResolved }) => {
                             ))}
                           </SelectContent>
                         </Select>
+                        {(responseForm.counter_payment_terms === "milestone_based" || responseForm.counter_payment_terms === "custom") && (
+                          <div className="mt-2">
+                            <Label>{responseForm.counter_payment_terms === "milestone_based" ? "Milestone Details" : "Custom Terms Details"}</Label>
+                            <Textarea
+                              placeholder={responseForm.counter_payment_terms === "milestone_based" 
+                                ? "e.g., 40% advance, 60% after inspection" 
+                                : "Describe your custom payment terms..."}
+                              value={responseForm.counter_payment_notes}
+                              onChange={(e) => setResponseForm({...responseForm, counter_payment_notes: e.target.value})}
+                              className="mt-1"
+                              rows={2}
+                              data-testid="counter-payment-notes"
+                            />
+                            <p className="text-xs text-slate-400 mt-1">
+                              Specify percentages and stages for the payment schedule
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

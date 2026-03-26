@@ -317,6 +317,14 @@ See ARCHITECTURE.md for detailed refactoring plan.
 
 
 
+### Payment Terms Notes in Quote & Negotiation Forms (Completed - Mar 26, 2026)
+- **Frontend**: Added conditional notes textarea in VendorQuotationForm, QuoteDetailModal (buyer negotiation), and VendorNegotiationPanel (vendor counter) — shows when milestone_based or custom terms selected
+- **Backend**: Extended NegotiationRequest with `payment_terms_notes` and NegotiationResponse with `counter_payment_notes`
+- **Backend**: Counter notes propagate to quote's `payment_terms_notes` on accept-counter, then flow to order creation
+- **Backend**: `resolve_final_payment_terms()` picks up notes from counter offers for milestone parsing
+- **Test**: Full E2E verified — Vendor 50/50 → Buyer 30/30/40 → Vendor counter 40/30/30 → Order gets 40/30/30 schedule
+
+
 
 ## What's Been Implemented
 

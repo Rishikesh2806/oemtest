@@ -45,7 +45,8 @@ const QuoteDetailModal = ({ quoteId, open, onOpenChange, onQuoteUpdated, rfqId }
     message: "",
     requested_price: "",
     requested_lead_time: "",
-    requested_payment_terms: ""
+    requested_payment_terms: "",
+    payment_terms_notes: ""
   });
 
   useEffect(() => {
@@ -80,7 +81,8 @@ const QuoteDetailModal = ({ quoteId, open, onOpenChange, onQuoteUpdated, rfqId }
         message: negotiationForm.message,
         requested_price: negotiationForm.requested_price ? parseFloat(negotiationForm.requested_price) : null,
         requested_lead_time: negotiationForm.requested_lead_time ? parseInt(negotiationForm.requested_lead_time) : null,
-        requested_payment_terms: negotiationForm.requested_payment_terms || null
+        requested_payment_terms: negotiationForm.requested_payment_terms || null,
+        payment_terms_notes: negotiationForm.payment_terms_notes || null
       };
       
       await api.post(`/quotes/${quoteId}/negotiate`, payload);
@@ -91,7 +93,8 @@ const QuoteDetailModal = ({ quoteId, open, onOpenChange, onQuoteUpdated, rfqId }
         message: "",
         requested_price: "",
         requested_lead_time: "",
-        requested_payment_terms: ""
+        requested_payment_terms: "",
+        payment_terms_notes: ""
       });
       fetchQuoteDetail();
       if (onQuoteUpdated) onQuoteUpdated();
@@ -545,6 +548,24 @@ const QuoteDetailModal = ({ quoteId, open, onOpenChange, onQuoteUpdated, rfqId }
                             ))}
                           </SelectContent>
                         </Select>
+                        {(negotiationForm.requested_payment_terms === "milestone_based" || negotiationForm.requested_payment_terms === "custom") && (
+                          <div className="mt-2">
+                            <Label>{negotiationForm.requested_payment_terms === "milestone_based" ? "Milestone Details" : "Custom Terms Details"}</Label>
+                            <Textarea
+                              placeholder={negotiationForm.requested_payment_terms === "milestone_based" 
+                                ? "e.g., 50% advance, 50% after inspection" 
+                                : "Describe your custom payment terms..."}
+                              value={negotiationForm.payment_terms_notes}
+                              onChange={(e) => setNegotiationForm({...negotiationForm, payment_terms_notes: e.target.value})}
+                              className="mt-1"
+                              rows={2}
+                              data-testid="negotiation-payment-notes"
+                            />
+                            <p className="text-xs text-slate-400 mt-1">
+                              Specify percentages and stages for the payment schedule
+                            </p>
+                          </div>
+                        )}
                       </div>
                     )}
 
