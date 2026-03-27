@@ -522,7 +522,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #22c55e;">
                         <h3 style="color: #1e293b; margin-top: 0;">{data.get('rfq_title', 'RFQ')}</h3>
                         <p style="color: #64748b; margin: 5px 0;"><strong>Vendor:</strong> {data.get('vendor_name', 'N/A')}</p>
-                        <p style="color: #22c55e; font-size: 24px; margin: 15px 0;"><strong>${data.get('price', '0.00')}</strong></p>
+                        <p style="color: #22c55e; font-size: 24px; margin: 15px 0;"><strong>&#8377;{data.get('price', '0.00')}</strong></p>
                         <p style="color: #64748b; margin: 5px 0;"><strong>Lead Time:</strong> {data.get('lead_time', 'N/A')} days</p>
                     </div>
                     
@@ -552,7 +552,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                     <div style="background: white; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 4px solid #22c55e;">
                         <h3 style="color: #1e293b; margin-top: 0;">{data.get('rfq_title', 'RFQ')}</h3>
                         <p style="color: #64748b; margin: 5px 0;"><strong>Buyer:</strong> {data.get('buyer_name', 'N/A')}</p>
-                        <p style="color: #22c55e; font-size: 24px; margin: 15px 0;"><strong>${data.get('price', '0.00')}</strong></p>
+                        <p style="color: #22c55e; font-size: 24px; margin: 15px 0;"><strong>&#8377;{data.get('price', '0.00')}</strong></p>
                         <p style="color: #64748b; margin: 5px 0;"><strong>Order ID:</strong> {data.get('order_id', 'N/A')}</p>
                     </div>
                     
@@ -8255,7 +8255,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
         user_id=rfq["buyer_id"],
         notification_type=NotificationType.QUOTE_RECEIVED,
         title=f"New Quote from {vendor.get('company_name', 'Vendor')}",
-        message=f"${quote.price:,.2f} for {rfq.get('title', 'your RFQ')[:30]} - {quote.lead_time_days} days lead time",
+        message=f"₹{quote.price:,.2f} for {rfq.get('title', 'your RFQ')[:30]} - {quote.lead_time_days} days lead time",
         data={
             "rfq_id": quote.rfq_id,
             "quote_id": quote_id,
