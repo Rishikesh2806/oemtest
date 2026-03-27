@@ -543,7 +543,7 @@ const VendorProfileView = () => {
                                 <div>
                                   <div className="flex items-center gap-2">
                                     <h3 className="font-semibold text-lg text-slate-900">
-                                      {machine.name || machine.machine_type}
+                                      {(machine.name && machine.name !== "Unknown Unknown") ? machine.name : (machine.machine_type || machine.machine_category)}
                                     </h3>
                                     {machine.machine_category && (
                                       <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full">
@@ -552,7 +552,10 @@ const VendorProfileView = () => {
                                     )}
                                   </div>
                                   <p className="text-sm text-slate-500 mt-1">
-                                    {machine.brand} {machine.model}
+                                    {machine.brand && machine.brand !== "Unknown" ? `${machine.brand} ${machine.model}` : machine.machine_type}
+                                    {machine.source === "whatsapp" && (
+                                      <span className="ml-2 text-[10px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded font-medium">via WhatsApp</span>
+                                    )}
                                   </p>
                                 </div>
                                 <div className="flex flex-col items-end gap-2">
@@ -581,7 +584,7 @@ const VendorProfileView = () => {
                                 </div>
                                 
                                 {/* Dynamic dimensions based on machine type */}
-                                {dimensions.slice(0, 5).map((dim, idx) => (
+                                {dimensions.map((dim, idx) => (
                                   <div key={idx} className="bg-white rounded-lg p-3 border border-slate-100">
                                     <div className="flex items-center gap-2 text-slate-500 mb-1">
                                       <Ruler className="w-4 h-4" />

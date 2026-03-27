@@ -19256,10 +19256,19 @@ async def save_pending_machine(sender: str, vendor: dict) -> str:
         
         # Create machine entry with all possible dimension fields
         machine_id = f"machine_{uuid.uuid4().hex[:12]}"
+        # Generate a meaningful name instead of "Unknown Unknown"
+        raw_name = machine_info.get("name", "")
+        if not raw_name or raw_name == "Unknown Unknown" or raw_name.strip() == "Unknown":
+            # Build a name from category + type
+            raw_name = machine_info.get("machine_type") or machine_info.get("machine_category") or "Machine"
+            brand = machine_info.get("brand", "")
+            if brand and brand != "Unknown":
+                raw_name = f"{brand} {raw_name}"
+
         machine_doc = {
             "machine_id": machine_id,
             "vendor_id": vendor["vendor_id"],
-            "name": machine_info["name"],
+            "name": raw_name,
             "machine_category": machine_info["machine_category"],
             "machine_type": machine_info["machine_type"],
             "brand": machine_info["brand"],

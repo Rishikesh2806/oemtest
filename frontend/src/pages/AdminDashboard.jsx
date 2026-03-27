@@ -2544,38 +2544,37 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
   };
   
   // Helper to get machine display name
-  const getMachineName = (machine) => machine.name || `${machine.brand} ${machine.model}`.trim() || "Unnamed Machine";
+  const getMachineName = (machine) => {
+    const name = machine.name;
+    if (name && name !== "Unknown Unknown" && name.trim()) return name;
+    const brandModel = `${machine.brand || ''} ${machine.model || ''}`.trim();
+    if (brandModel && brandModel !== "Unknown Unknown" && brandModel !== "Unknown") return brandModel;
+    return machine.machine_type || machine.machine_category || "Unnamed Machine";
+  };
   const getMachineTolerance = (machine) => machine.tolerance || machine.tolerance_capability || 0;
   const getMachineMaterials = (machine) => machine.materials || machine.materials_supported || [];
   
-  // Get display dimensions based on machine category/type
+  // Get ALL non-zero dimensions as label | value pairs
   const getMachineDimensions = (machine) => {
     const dims = [];
-    const cat = detectCategoryFromType(machine.machine_type) || machine.machine_category;
-    
-    if (cat === "Turning/Lathe") {
-      if (machine.max_length) dims.push(`L: ${machine.max_length}mm`);
-      if (machine.max_diameter) dims.push(`Ø: ${machine.max_diameter}mm`);
-      if (machine.max_swing) dims.push(`Swing: ${machine.max_swing}mm`);
-    } else if (cat === "Boring") {
-      if (machine.bore_diameter) dims.push(`Bore Ø: ${machine.bore_diameter}mm`);
-      if (machine.outer_diameter) dims.push(`OD: ${machine.outer_diameter}mm`);
-      if (machine.max_length) dims.push(`L: ${machine.max_length}mm`);
-    } else if (cat === "Sheet Metal" || cat === "Welding") {
-      if (machine.max_length) dims.push(`L: ${machine.max_length}mm`);
-      if (machine.max_thickness) dims.push(`T: ${machine.max_thickness}mm`);
-      if (machine.tonnage) dims.push(`${machine.tonnage}T`);
-    } else if (cat === "Cutting") {
-      if (machine.max_x) dims.push(`X: ${machine.max_x}mm`);
-      if (machine.max_y) dims.push(`Y: ${machine.max_y}mm`);
-      if (machine.max_thickness) dims.push(`T: ${machine.max_thickness}mm`);
-    } else {
-      // Default: Milling/VMC style
-      if (machine.max_x || machine.max_y || machine.max_z) {
-        dims.push(`${machine.max_x || 0}×${machine.max_y || 0}×${machine.max_z || 0}mm`);
-      }
-      if (machine.max_diameter) dims.push(`Ø: ${machine.max_diameter}mm`);
+    if (machine.max_x || machine.max_y || machine.max_z) {
+      dims.push(`XYZ: ${machine.max_x || '-'}×${machine.max_y || '-'}×${machine.max_z || '-'}mm`);
     }
+    if (machine.max_diameter) dims.push(`Ø${machine.max_diameter}mm`);
+    if (machine.max_length) dims.push(`L: ${machine.max_length}mm`);
+    if (machine.max_swing) dims.push(`Swing: Ø${machine.max_swing}mm`);
+    if (machine.bore_diameter) dims.push(`Bore: Ø${machine.bore_diameter}mm`);
+    if (machine.spindle_bore) dims.push(`Spindle: Ø${machine.spindle_bore}mm`);
+    if (machine.spindle_travel) dims.push(`Travel: ${machine.spindle_travel}mm`);
+    if (machine.table_diameter) dims.push(`Table: Ø${machine.table_diameter}mm`);
+    if (machine.table_size_x || machine.table_size_y) dims.push(`Table: ${machine.table_size_x || '-'}×${machine.table_size_y || '-'}mm`);
+    if (machine.max_weight) dims.push(`${machine.max_weight}kg`);
+    if (machine.tonnage) dims.push(`${machine.tonnage}T`);
+    if (machine.max_thickness) dims.push(`T: ${machine.max_thickness}mm`);
+    if (machine.laser_power) dims.push(`${machine.laser_power}W`);
+    if (machine.max_stroke || machine.stroke) dims.push(`Stroke: ${machine.max_stroke || machine.stroke}mm`);
+    if (machine.max_temp) dims.push(`${machine.max_temp}°C`);
+    if (machine.amperage) dims.push(`${machine.amperage}A`);
     return dims.join(" | ");
   };
 
@@ -2696,7 +2695,13 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-slate-500">{machine.machine_type} • {machine.brand} {machine.model}</p>
+                      <p className="text-sm text-slate-500">
+                        {machine.machine_type}
+                        {machine.brand && machine.brand !== "Unknown" ? ` • ${machine.brand} ${machine.model}` : ''}
+                        {machine.source === "whatsapp" && (
+                          <span className="ml-1 text-[10px] bg-green-50 text-green-600 px-1 py-0.5 rounded font-medium">WhatsApp</span>
+                        )}
+                      </p>
                       <div className="flex flex-wrap gap-4 mt-2 text-xs text-slate-500">
                         <span>Tolerance: ±{getMachineTolerance(machine)}mm</span>
                         {getMachineDimensions(machine) && <span>{getMachineDimensions(machine)}</span>}
@@ -3187,8 +3192,11 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
                         <span className="text-lg font-bold text-green-600">{vendor.matching_machine_count}</span>
                         <div className="text-xs text-slate-500 max-w-xs">
                           {vendor.matching_machines?.slice(0, 3).map((m, i) => (
-                            <span key={i} className="inline-block bg-slate-100 px-1 rounded mr-1 mb-1">
-                              {m.machine_type || m.name}
+                            <span key={i} className="inline-block bg-slate-100 px-1.5 py-0.5 rounded mr-1 mb-1">
+                              {m.machine_type || ((m.name && m.name !== "Unknown Unknown") ? m.name : m.machine_category)}
+                              {m.max_diameter ? ` Ø${m.max_diameter}` : ''}
+                              {m.max_length ? ` L${m.max_length}` : ''}
+                              {(m.max_x || m.max_y || m.max_z) ? ` ${m.max_x||0}×${m.max_y||0}×${m.max_z||0}` : ''}
                             </span>
                           ))}
                           {vendor.matching_machines?.length > 3 && (
@@ -3449,6 +3457,14 @@ const MachinesTab = ({ machines, loading, onRefresh, vendors, canCreate = true, 
   const [machineImages, setMachineImages] = useState([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const getMachineName = (machine) => {
+    const name = machine.name;
+    if (name && name !== "Unknown Unknown" && name.trim()) return name;
+    const brandModel = `${machine.brand || ''} ${machine.model || ''}`.trim();
+    if (brandModel && brandModel !== "Unknown Unknown" && brandModel !== "Unknown") return brandModel;
+    return machine.machine_type || machine.machine_category || "Unnamed Machine";
+  };
   
   // Load categories
   useEffect(() => {
@@ -3714,8 +3730,13 @@ const MachinesTab = ({ machines, loading, onRefresh, vendors, canCreate = true, 
                   <tr key={machine.machine_id} className="hover:bg-slate-50">
                     <td className="p-3">
                       <div>
-                        <p className="font-medium text-slate-900">{machine.name || machine.model || machine.machine_type}</p>
-                        <p className="text-xs text-slate-500">{machine.brand} {machine.model}</p>
+                        <p className="font-medium text-slate-900">{getMachineName(machine)}</p>
+                        <p className="text-xs text-slate-500">
+                          {machine.brand && machine.brand !== "Unknown" ? `${machine.brand} ${machine.model}` : machine.machine_type}
+                          {machine.source === "whatsapp" && (
+                            <span className="ml-1 text-[10px] bg-green-50 text-green-600 px-1 py-0.5 rounded">WhatsApp</span>
+                          )}
+                        </p>
                       </div>
                     </td>
                     <td className="p-3 text-sm">{getVendorName(machine.vendor_id)}</td>

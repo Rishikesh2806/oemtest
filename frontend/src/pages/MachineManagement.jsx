@@ -176,35 +176,42 @@ const MachineManagement = () => {
     return "";
   };
 
-  // Get display dimensions based on machine category/type
-  const getMachineDimensions = (machine) => {
+  // Get ALL non-zero dimensions as structured label/value pairs
+  const getMachineDimensionsList = (machine) => {
     const dims = [];
-    const cat = detectCategoryFromType(machine.machine_type) || machine.machine_category;
-    
-    if (cat === "Turning/Lathe") {
-      if (machine.max_length) dims.push(`L: ${machine.max_length}mm`);
-      if (machine.max_diameter) dims.push(`Ø: ${machine.max_diameter}mm`);
-      if (machine.max_swing) dims.push(`Swing: ${machine.max_swing}mm`);
-    } else if (cat === "Boring") {
-      if (machine.bore_diameter) dims.push(`Bore Ø: ${machine.bore_diameter}mm`);
-      if (machine.outer_diameter) dims.push(`OD: ${machine.outer_diameter}mm`);
-      if (machine.max_length) dims.push(`L: ${machine.max_length}mm`);
-    } else if (cat === "Sheet Metal" || cat === "Welding") {
-      if (machine.max_length) dims.push(`L: ${machine.max_length}mm`);
-      if (machine.max_thickness) dims.push(`T: ${machine.max_thickness}mm`);
-      if (machine.tonnage) dims.push(`${machine.tonnage}T`);
-    } else if (cat === "Cutting") {
-      if (machine.max_x) dims.push(`X: ${machine.max_x}mm`);
-      if (machine.max_y) dims.push(`Y: ${machine.max_y}mm`);
-      if (machine.max_thickness) dims.push(`T: ${machine.max_thickness}mm`);
-    } else {
-      // Default: Milling/VMC style
-      if (machine.max_x || machine.max_y || machine.max_z) {
-        dims.push(`${machine.max_x || 0}×${machine.max_y || 0}×${machine.max_z || 0}mm`);
-      }
-      if (machine.max_diameter) dims.push(`Ø: ${machine.max_diameter}mm`);
+    // XYZ work envelope
+    if (machine.max_x || machine.max_y || machine.max_z) {
+      const parts = [machine.max_x, machine.max_y, machine.max_z].filter(v => v);
+      if (parts.length > 0) dims.push({ label: "Travel (XYZ)", value: `${machine.max_x || '-'} × ${machine.max_y || '-'} × ${machine.max_z || '-'} mm` });
     }
-    return dims.join(" | ");
+    if (machine.max_diameter) dims.push({ label: "Max Diameter", value: `Ø${machine.max_diameter} mm` });
+    if (machine.max_length) dims.push({ label: "Max Length", value: `${machine.max_length} mm` });
+    if (machine.max_swing) dims.push({ label: "Max Swing", value: `Ø${machine.max_swing} mm` });
+    if (machine.bore_diameter) dims.push({ label: "Bore Diameter", value: `Ø${machine.bore_diameter} mm` });
+    if (machine.outer_diameter) dims.push({ label: "Outer Diameter", value: `Ø${machine.outer_diameter} mm` });
+    if (machine.spindle_bore) dims.push({ label: "Spindle Bore", value: `Ø${machine.spindle_bore} mm` });
+    if (machine.spindle_travel) dims.push({ label: "Spindle Travel", value: `${machine.spindle_travel} mm` });
+    if (machine.table_diameter) dims.push({ label: "Table Diameter", value: `Ø${machine.table_diameter} mm` });
+    if (machine.table_size_x || machine.table_size_y) {
+      dims.push({ label: "Table Size", value: `${machine.table_size_x || '-'} × ${machine.table_size_y || '-'} mm` });
+    }
+    if (machine.max_weight) dims.push({ label: "Max Weight", value: `${machine.max_weight} kg` });
+    if (machine.tonnage) dims.push({ label: "Tonnage", value: `${machine.tonnage} tons` });
+    if (machine.max_thickness) dims.push({ label: "Max Thickness", value: `${machine.max_thickness} mm` });
+    if (machine.laser_power) dims.push({ label: "Laser Power", value: `${machine.laser_power} W` });
+    if (machine.max_module) dims.push({ label: "Max Module", value: `${machine.max_module}` });
+    if (machine.min_teeth) dims.push({ label: "Min Teeth", value: `${machine.min_teeth}` });
+    if (machine.arm_length) dims.push({ label: "Arm Length", value: `${machine.arm_length} mm` });
+    if (machine.max_depth) dims.push({ label: "Max Depth", value: `${machine.max_depth} mm` });
+    if (machine.max_stroke || machine.stroke) dims.push({ label: "Stroke", value: `${machine.max_stroke || machine.stroke} mm` });
+    if (machine.max_temp) dims.push({ label: "Max Temp", value: `${machine.max_temp}°C` });
+    if (machine.max_taper_angle) dims.push({ label: "Taper Angle", value: `${machine.max_taper_angle}°` });
+    if (machine.a_axis_range) dims.push({ label: "A-Axis", value: `${machine.a_axis_range}°` });
+    if (machine.c_axis_range) dims.push({ label: "C-Axis", value: `${machine.c_axis_range}°` });
+    if (machine.amperage) dims.push({ label: "Amperage", value: `${machine.amperage} A` });
+    if (machine.accuracy) dims.push({ label: "Accuracy", value: `±${machine.accuracy} mm` });
+    if (machine.layer_thickness) dims.push({ label: "Layer", value: `${machine.layer_thickness} mm` });
+    return dims;
   };
 
   const handleInputChange = (field, value) => {
@@ -510,7 +517,14 @@ const MachineManagement = () => {
 
   const getMachineImages = (machine) => machine.images || [];
 
-  const getMachineName = (machine) => machine.name || `${machine.brand} ${machine.model}`.trim() || "Unnamed Machine";
+  const getMachineName = (machine) => {
+    // Skip "Unknown Unknown" pattern from WhatsApp auto-detection
+    const name = machine.name;
+    if (name && name !== "Unknown Unknown" && name.trim()) return name;
+    const brandModel = `${machine.brand || ''} ${machine.model || ''}`.trim();
+    if (brandModel && brandModel !== "Unknown Unknown" && brandModel !== "Unknown") return brandModel;
+    return machine.machine_type || machine.machine_category || "Unnamed Machine";
+  };
   const getMachineTolerance = (machine) => machine.tolerance || machine.tolerance_capability || 0;
   const getMachineMaterials = (machine) => machine.materials_supported || machine.materials || [];
 
@@ -984,13 +998,30 @@ const MachineManagement = () => {
                   <div className="space-y-3 text-sm">
                     <div className="flex items-center gap-2">
                       <Settings className="w-4 h-4 text-slate-400" />
-                      <span className="text-slate-600">{machine.brand} {machine.model}</span>
+                      <span className="text-slate-600">
+                        {machine.brand && machine.brand !== "Unknown" ? `${machine.brand} ${machine.model}` : machine.machine_type}
+                      </span>
+                      {machine.source === "whatsapp" && (
+                        <span className="text-[10px] bg-green-50 text-green-600 px-1.5 py-0.5 rounded font-medium">via WhatsApp</span>
+                      )}
                     </div>
                     
-                    {getMachineDimensions(machine) && (
-                      <div className="flex items-center gap-2">
-                        <Maximize2 className="w-4 h-4 text-slate-400" />
-                        <span className="text-slate-600">{getMachineDimensions(machine)}</span>
+                    {/* Dimensions grid */}
+                    {getMachineDimensionsList(machine).length > 0 ? (
+                      <div className="bg-slate-50 rounded-lg p-2.5">
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                          {getMachineDimensionsList(machine).map((dim, i) => (
+                            <div key={i} className="flex items-baseline justify-between gap-1">
+                              <span className="text-[11px] text-slate-400 truncate">{dim.label}</span>
+                              <span className="text-xs font-medium text-slate-700 whitespace-nowrap">{dim.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-amber-50 rounded-lg p-2.5 flex items-center gap-2">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                        <span className="text-xs text-amber-700">No dimensions added — edit to add specs</span>
                       </div>
                     )}
 
