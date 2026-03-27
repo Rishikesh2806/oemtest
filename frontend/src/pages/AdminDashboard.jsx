@@ -2336,12 +2336,25 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
     return machineCategories[machineSearchForm.machine_category].types || [];
   };
   
-  // Get dimension fields based on selected category
+  // Get dimension fields based on selected category (+ any existing machine values)
   const getDimensionFields = () => {
-    if (!machineForm.machine_category || !machineCategories[machineForm.machine_category]) {
-      return [];
-    }
-    return machineCategories[machineForm.machine_category].dimension_fields || [];
+    const catFields = (machineCategories[machineForm.machine_category]?.dimension_fields || []);
+    const catKeys = new Set(catFields.map(f => f.key));
+    const ALL_DIM = [
+      { key: "max_x", label: "X Travel (mm)" }, { key: "max_y", label: "Y Travel (mm)" }, { key: "max_z", label: "Z Travel (mm)" },
+      { key: "max_diameter", label: "Max Diameter (mm)" }, { key: "max_length", label: "Max Length (mm)" }, { key: "max_swing", label: "Max Swing (mm)" },
+      { key: "bore_diameter", label: "Bore Diameter (mm)" }, { key: "outer_diameter", label: "Outer Diameter (mm)" },
+      { key: "spindle_bore", label: "Spindle Bore (mm)" }, { key: "spindle_travel", label: "Spindle Travel (mm)" },
+      { key: "table_diameter", label: "Table Diameter (mm)" }, { key: "table_size_x", label: "Table X (mm)" }, { key: "table_size_y", label: "Table Y (mm)" },
+      { key: "max_weight", label: "Max Weight (kg)" }, { key: "tonnage", label: "Tonnage (tons)" }, { key: "max_thickness", label: "Max Thickness (mm)" },
+      { key: "laser_power", label: "Laser Power (W)" }, { key: "max_module", label: "Max Module" }, { key: "min_teeth", label: "Min Teeth" },
+      { key: "arm_length", label: "Arm Length (mm)" }, { key: "max_depth", label: "Max Depth (mm)" }, { key: "max_stroke", label: "Max Stroke (mm)" },
+      { key: "stroke", label: "Stroke (mm)" }, { key: "max_temp", label: "Max Temp (C)" }, { key: "max_taper_angle", label: "Taper Angle" },
+      { key: "a_axis_range", label: "A-Axis Range" }, { key: "c_axis_range", label: "C-Axis Range" }, { key: "pallet_size", label: "Pallet Size (mm)" },
+      { key: "amperage", label: "Amperage (A)" }, { key: "accuracy", label: "Accuracy (mm)" }, { key: "layer_thickness", label: "Layer (mm)" },
+    ];
+    const extra = ALL_DIM.filter(f => !catKeys.has(f.key) && machineForm[f.key] && parseFloat(machineForm[f.key]) > 0);
+    return [...catFields, ...extra];
   };
   
   // Get machine types for selected category
@@ -2452,31 +2465,33 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
   
   const openEditMachine = (machine) => {
     setEditMachine(machine);
-    // Detect category from machine type
     const detectedCategory = detectCategoryFromType(machine.machine_type) || machine.machine_category || "";
+    const machineName = (machine.name && machine.name !== "Unknown Unknown") ? machine.name : (machine.machine_type || machine.machine_category || "");
     
-    // Handle both old and new field names
     setMachineForm({
-      name: machine.name || machine.model || "",
+      name: machineName,
       machine_category: detectedCategory,
       machine_type: machine.machine_type || "",
-      brand: machine.brand || "",
-      model: machine.model || "",
+      brand: (machine.brand && machine.brand !== "Unknown") ? machine.brand : "",
+      model: (machine.model && machine.model !== "Unknown") ? machine.model : "",
       tolerance: machine.tolerance || machine.tolerance_capability || 0.01,
-      max_x: machine.max_x || 0,
-      max_y: machine.max_y || 0,
-      max_z: machine.max_z || 0,
-      max_diameter: machine.max_diameter || 0,
-      max_length: machine.max_length || 0,
-      max_swing: machine.max_swing || 0,
-      bore_diameter: machine.bore_diameter || 0,
-      outer_diameter: machine.outer_diameter || 0,
-      max_thickness: machine.max_thickness || 0,
-      tonnage: machine.tonnage || 0,
-      max_taper_angle: machine.max_taper_angle || 0,
+      max_x: machine.max_x || 0, max_y: machine.max_y || 0, max_z: machine.max_z || 0,
+      max_diameter: machine.max_diameter || 0, max_length: machine.max_length || 0,
+      max_swing: machine.max_swing || 0, bore_diameter: machine.bore_diameter || 0,
+      outer_diameter: machine.outer_diameter || 0, spindle_bore: machine.spindle_bore || 0,
+      spindle_travel: machine.spindle_travel || 0, table_diameter: machine.table_diameter || 0,
+      table_size_x: machine.table_size_x || 0, table_size_y: machine.table_size_y || 0,
+      max_weight: machine.max_weight || 0, tonnage: machine.tonnage || 0,
+      max_thickness: machine.max_thickness || 0, laser_power: machine.laser_power || 0,
+      max_module: machine.max_module || 0, min_teeth: machine.min_teeth || 0,
+      arm_length: machine.arm_length || 0, max_depth: machine.max_depth || 0,
+      max_stroke: machine.max_stroke || 0, stroke: machine.stroke || 0,
+      max_temp: machine.max_temp || 0, max_taper_angle: machine.max_taper_angle || 0,
+      a_axis_range: machine.a_axis_range || 0, c_axis_range: machine.c_axis_range || 0,
+      pallet_size: machine.pallet_size || 0, amperage: machine.amperage || 0,
+      accuracy: machine.accuracy || 0, layer_thickness: machine.layer_thickness || 0,
       materials: (machine.materials || machine.materials_supported)?.join(", ") || ""
     });
-    // Load machine images
     setMachineImages(machine.images || []);
   };
   
@@ -3465,6 +3480,30 @@ const MachinesTab = ({ machines, loading, onRefresh, vendors, canCreate = true, 
     if (brandModel && brandModel !== "Unknown Unknown" && brandModel !== "Unknown") return brandModel;
     return machine.machine_type || machine.machine_category || "Unnamed Machine";
   };
+
+  const getMachineDimensions = (machine) => {
+    const dims = [];
+    if (machine.max_x || machine.max_y || machine.max_z) {
+      dims.push(`XYZ: ${machine.max_x || '-'}×${machine.max_y || '-'}×${machine.max_z || '-'}mm`);
+    }
+    if (machine.max_diameter) dims.push(`Ø${machine.max_diameter}mm`);
+    if (machine.max_length) dims.push(`L: ${machine.max_length}mm`);
+    if (machine.max_swing) dims.push(`Swing: Ø${machine.max_swing}mm`);
+    if (machine.bore_diameter) dims.push(`Bore: Ø${machine.bore_diameter}mm`);
+    if (machine.spindle_bore) dims.push(`Spindle: Ø${machine.spindle_bore}mm`);
+    if (machine.spindle_travel) dims.push(`Travel: ${machine.spindle_travel}mm`);
+    if (machine.table_diameter) dims.push(`Table: Ø${machine.table_diameter}mm`);
+    if (machine.table_size_x || machine.table_size_y) dims.push(`Table: ${machine.table_size_x || '-'}×${machine.table_size_y || '-'}mm`);
+    if (machine.max_weight) dims.push(`${machine.max_weight}kg`);
+    if (machine.tonnage) dims.push(`${machine.tonnage}T`);
+    if (machine.max_thickness) dims.push(`T: ${machine.max_thickness}mm`);
+    if (machine.laser_power) dims.push(`${machine.laser_power}W`);
+    if (machine.max_stroke || machine.stroke) dims.push(`Stroke: ${machine.max_stroke || machine.stroke}mm`);
+    if (machine.max_temp) dims.push(`${machine.max_temp}°C`);
+    if (machine.amperage) dims.push(`${machine.amperage}A`);
+    if (machine.accuracy) dims.push(`±${machine.accuracy}mm`);
+    return dims.join(" | ");
+  };
   
   // Load categories
   useEffect(() => {
@@ -3492,10 +3531,24 @@ const MachinesTab = ({ machines, loading, onRefresh, vendors, canCreate = true, 
   
   // Get dimension fields for selected category
   const getDimensionFields = () => {
-    if (!machineForm.machine_category || !machineCategories[machineForm.machine_category]) {
-      return [];
-    }
-    return machineCategories[machineForm.machine_category].dimension_fields || [];
+    const catFields = (machineCategories[machineForm.machine_category]?.dimension_fields || []);
+    const catKeys = new Set(catFields.map(f => f.key));
+    // Also include extra fields that have non-zero values on the machine being edited
+    const ALL_DIM = [
+      { key: "max_x", label: "X Travel (mm)" }, { key: "max_y", label: "Y Travel (mm)" }, { key: "max_z", label: "Z Travel (mm)" },
+      { key: "max_diameter", label: "Max Diameter (mm)" }, { key: "max_length", label: "Max Length (mm)" }, { key: "max_swing", label: "Max Swing (mm)" },
+      { key: "bore_diameter", label: "Bore Diameter (mm)" }, { key: "outer_diameter", label: "Outer Diameter (mm)" },
+      { key: "spindle_bore", label: "Spindle Bore (mm)" }, { key: "spindle_travel", label: "Spindle Travel (mm)" },
+      { key: "table_diameter", label: "Table Diameter (mm)" }, { key: "table_size_x", label: "Table X (mm)" }, { key: "table_size_y", label: "Table Y (mm)" },
+      { key: "max_weight", label: "Max Weight (kg)" }, { key: "tonnage", label: "Tonnage (tons)" }, { key: "max_thickness", label: "Max Thickness (mm)" },
+      { key: "laser_power", label: "Laser Power (W)" }, { key: "max_module", label: "Max Module" }, { key: "min_teeth", label: "Min Teeth" },
+      { key: "arm_length", label: "Arm Length (mm)" }, { key: "max_depth", label: "Max Depth (mm)" }, { key: "max_stroke", label: "Max Stroke (mm)" },
+      { key: "stroke", label: "Stroke (mm)" }, { key: "max_temp", label: "Max Temp (C)" }, { key: "max_taper_angle", label: "Taper Angle" },
+      { key: "a_axis_range", label: "A-Axis Range" }, { key: "c_axis_range", label: "C-Axis Range" }, { key: "pallet_size", label: "Pallet Size (mm)" },
+      { key: "amperage", label: "Amperage (A)" }, { key: "accuracy", label: "Accuracy (mm)" }, { key: "layer_thickness", label: "Layer (mm)" },
+    ];
+    const extra = ALL_DIM.filter(f => !catKeys.has(f.key) && machineForm[f.key] && parseFloat(machineForm[f.key]) > 0);
+    return [...catFields, ...extra];
   };
   
   // Filter machines
@@ -3541,17 +3594,27 @@ const MachinesTab = ({ machines, loading, onRefresh, vendors, canCreate = true, 
   const openEditDialog = (machine) => {
     setEditMachine(machine);
     setMachineForm({
-      name: machine.name || machine.model || "",
+      name: getMachineName(machine),
       machine_category: machine.machine_category || "",
       machine_type: machine.machine_type || "",
-      brand: machine.brand || "",
-      model: machine.model || "",
+      brand: (machine.brand && machine.brand !== "Unknown") ? machine.brand : "",
+      model: (machine.model && machine.model !== "Unknown") ? machine.model : "",
       tolerance: machine.tolerance || 0.01,
-      max_x: machine.max_x || 0,
-      max_y: machine.max_y || 0,
-      max_z: machine.max_z || 0,
-      max_diameter: machine.max_diameter || 0,
-      max_length: machine.max_length || 0,
+      max_x: machine.max_x || 0, max_y: machine.max_y || 0, max_z: machine.max_z || 0,
+      max_diameter: machine.max_diameter || 0, max_length: machine.max_length || 0,
+      max_swing: machine.max_swing || 0, bore_diameter: machine.bore_diameter || 0,
+      outer_diameter: machine.outer_diameter || 0, spindle_bore: machine.spindle_bore || 0,
+      spindle_travel: machine.spindle_travel || 0, table_diameter: machine.table_diameter || 0,
+      table_size_x: machine.table_size_x || 0, table_size_y: machine.table_size_y || 0,
+      max_weight: machine.max_weight || 0, tonnage: machine.tonnage || 0,
+      max_thickness: machine.max_thickness || 0, laser_power: machine.laser_power || 0,
+      max_module: machine.max_module || 0, min_teeth: machine.min_teeth || 0,
+      arm_length: machine.arm_length || 0, max_depth: machine.max_depth || 0,
+      max_stroke: machine.max_stroke || 0, stroke: machine.stroke || 0,
+      max_temp: machine.max_temp || 0, max_taper_angle: machine.max_taper_angle || 0,
+      a_axis_range: machine.a_axis_range || 0, c_axis_range: machine.c_axis_range || 0,
+      pallet_size: machine.pallet_size || 0, amperage: machine.amperage || 0,
+      accuracy: machine.accuracy || 0, layer_thickness: machine.layer_thickness || 0,
       materials: (machine.materials || machine.materials_supported)?.join(", ") || ""
     });
     setMachineImages(machine.images || []);
@@ -3745,13 +3808,14 @@ const MachinesTab = ({ machines, loading, onRefresh, vendors, canCreate = true, 
                         {machine.machine_category || machine.machine_type || 'N/A'}
                       </span>
                     </td>
-                    <td className="p-3 text-xs text-slate-500">
-                      {machine.max_x || machine.max_diameter ? (
-                        <span>
-                          {machine.max_x ? `${machine.max_x}×${machine.max_y}×${machine.max_z}mm` : ''}
-                          {machine.max_diameter ? ` Ø${machine.max_diameter}mm` : ''}
-                        </span>
-                      ) : '-'}
+                    <td className="p-3">
+                      {getMachineDimensions(machine) ? (
+                        <div className="text-xs text-slate-600 max-w-[280px] leading-relaxed">
+                          {getMachineDimensions(machine)}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400">-</span>
+                      )}
                     </td>
                     <td className="p-3">
                       <span className="text-sm">{machine.images?.length || 0}</span>
@@ -3823,10 +3887,22 @@ const MachinesTab = ({ machines, loading, onRefresh, vendors, canCreate = true, 
                 <Label>Tolerance (mm)</Label>
                 <Input type="number" step="0.001" value={machineForm.tolerance || 0} onChange={(e) => setMachineForm(f => ({...f, tolerance: parseFloat(e.target.value)}))} />
               </div>
-              <div>
-                <Label>Max Diameter (mm)</Label>
-                <Input type="number" value={machineForm.max_diameter || 0} onChange={(e) => setMachineForm(f => ({...f, max_diameter: parseFloat(e.target.value)}))} />
-              </div>
+              
+              {/* Dynamic dimension fields based on category + existing values */}
+              {getDimensionFields().length > 0 && (
+                <div className="col-span-2 border-t pt-3 mt-1">
+                  <Label className="text-xs text-slate-500 uppercase tracking-wide mb-2 block">Dimensions & Specs</Label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {getDimensionFields().map(field => (
+                      <div key={field.key}>
+                        <Label className="text-xs">{field.label}</Label>
+                        <Input type="number" step="0.01" value={machineForm[field.key] || 0} onChange={(e) => setMachineForm(f => ({...f, [field.key]: parseFloat(e.target.value) || 0}))} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="col-span-2">
                 <Label>Materials (comma-separated)</Label>
                 <Input value={machineForm.materials || ""} onChange={(e) => setMachineForm(f => ({...f, materials: e.target.value}))} placeholder="Steel, Aluminum, Titanium" />
