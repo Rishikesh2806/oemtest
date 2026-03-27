@@ -16,7 +16,7 @@ Build an AI-driven on-demand manufacturing marketplace similar to MFG.com/Xometr
 - **Database**: MongoDB
 - **AI**: OpenAI GPT-5.2 Vision (via Emergent LLM Key)
 - **Auth**: JWT + Custom Google OAuth + 2FA Email OTP
-- **Payments**: Stripe (test mode) - planned
+- **Payments**: Razorpay (live mode) - integrated
 - **Email**: Resend API
 
 ### Backend Structure (Refactored Mar 23, 2026)
@@ -313,6 +313,21 @@ See ARCHITECTURE.md for detailed refactoring plan.
 - **Frontend**: Order Progress timeline and Payment Schedule card both dynamically reflect the parsed milestone split
 - **Test Report**: /app/test_reports/iteration_41.json, /app/test_reports/iteration_42.json (100% pass - 10/10 E2E tests)
 
+### Razorpay Payment Integration (Completed - Mar 27, 2026)
+- **Replaced** mocked payment system with live Razorpay integration
+- **Backend**: New `POST /api/payments/create-order` creates Razorpay orders for milestone payments (amount in paise, auto-capture)
+- **Backend**: New `POST /api/payments/verify` verifies Razorpay payment signatures and records milestone as paid with full audit trail
+- **Backend**: New `POST /api/payments/webhook` handles Razorpay async payment events (payment.captured, payment.failed)
+- **Backend**: `POST /api/orders/{order_id}/pay` now admin-only manual override; buyers use Razorpay checkout
+- **Backend**: New `razorpay_orders` collection tracks all Razorpay order references
+- **Backend**: `payment_transactions` collection now records `method: "razorpay"` with `razorpay_order_id` and `razorpay_payment_id`
+- **Frontend**: `PaymentTimeline.jsx` opens Razorpay checkout popup on "Pay Now" click, verifies payment on callback
+- **Frontend**: "Secured by Razorpay" badge in Payment Schedule card
+- **Frontend**: Admin users see "Admin Override" button instead of "Pay Now"
+- **Frontend**: Razorpay checkout.js loaded via CDN in `index.html`
+- **Env vars**: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` (backend), `REACT_APP_RAZORPAY_KEY_ID` (frontend)
+- **Test Report**: /app/test_reports/iteration_43.json (100% pass - 16 backend + all frontend verified)
+
 
 
 
@@ -495,7 +510,6 @@ Comprehensive platform analytics for business tracking:
 
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check
-- Stripe payment integration (escrow)
 - Revenue analytics charts
 
 ### P2 - Medium Priority
