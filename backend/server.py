@@ -25,6 +25,7 @@ from collections import defaultdict
 import time
 from io import BytesIO
 from passlib.context import CryptContext
+import razorpay
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -69,6 +70,11 @@ db = client[os.environ['DB_NAME']]
 JWT_SECRET = os.environ.get('JWT_SECRET_KEY', 'offloadex_secret_key')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 168  # 7 days
+
+# ============== RAZORPAY CLIENT ==============
+RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
+razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET)) if RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET else None
 
 # ============== SECURITY SETTINGS ==============
 # Rate limiting configuration
@@ -9317,23 +9323,363 @@ async def get_payment_schedule(order_id: str, user: dict = Depends(get_current_u
     }
 
 
+@api_router.post("/payments/create-order")
+async def create_razorpay_order(request: Request, user: dict = Depends(get_current_user)):
+    """Create a Razorpay order for a specific milestone payment."""
+    if not razorpay_client:
+        raise HTTPException(status_code=500, detail="Payment gateway not configured")
+
+    body = await request.json()
+    order_id = body.get("order_id")
+    milestone_id = body.get("milestone_id")
+
+    if not order_id or not milestone_id:
+        raise HTTPException(status_code=400, detail="order_id and milestone_id are required")
+
+    order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    is_admin = user.get("role") == "admin"
+    is_buyer = order["buyer_id"] == user["user_id"]
+    if not (is_admin or is_buyer):
+        raise HTTPException(status_code=403, detail="Only buyer or admin can make payments")
+
+    schedule = order.get("payment_schedule")
+    if not schedule:
+        raise HTTPException(status_code=400, detail="No payment schedule found")
+
+    target = None
+    for ms in schedule.get("milestones", []):
+        if ms["milestone_id"] == milestone_id:
+            target = ms
+            break
+
+    if not target:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+
+    if target["status"] == "paid":
+        raise HTTPException(status_code=400, detail="This milestone is already paid")
+
+    amount_paise = int(round(target["amount"] * 100))
+    currency = order.get("currency", "INR")
+
+    receipt = f"{order_id}_{milestone_id}"[:40]
+
+    try:
+        razorpay_order = razorpay_client.order.create({
+            "amount": amount_paise,
+            "currency": currency,
+            "receipt": receipt,
+            "payment_capture": 1,
+            "notes": {
+                "order_id": order_id,
+                "milestone_id": milestone_id,
+                "po_number": order.get("po_number", ""),
+                "milestone_label": target.get("label", "")
+            }
+        })
+    except Exception as e:
+        logger.error(f"Razorpay order creation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Payment gateway error: {str(e)}")
+
+    # Store the razorpay order reference
+    await db.razorpay_orders.insert_one({
+        "razorpay_order_id": razorpay_order["id"],
+        "order_id": order_id,
+        "milestone_id": milestone_id,
+        "amount": target["amount"],
+        "amount_paise": amount_paise,
+        "currency": currency,
+        "status": "created",
+        "user_id": user["user_id"],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    # Get buyer info for prefill
+    buyer = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "name": 1, "email": 1, "phone": 1})
+
+    return {
+        "razorpay_order_id": razorpay_order["id"],
+        "amount": amount_paise,
+        "currency": currency,
+        "key_id": RAZORPAY_KEY_ID,
+        "milestone": {
+            "milestone_id": target["milestone_id"],
+            "label": target["label"],
+            "amount": target["amount"],
+            "percentage": target["percentage"]
+        },
+        "prefill": {
+            "name": buyer.get("name", "") if buyer else "",
+            "email": buyer.get("email", "") if buyer else "",
+            "contact": buyer.get("phone", "") if buyer else ""
+        },
+        "order_ref": {
+            "order_id": order_id,
+            "po_number": order.get("po_number", "")
+        }
+    }
+
+
+@api_router.post("/payments/verify")
+async def verify_razorpay_payment(request: Request, user: dict = Depends(get_current_user)):
+    """Verify Razorpay payment signature and record the milestone payment."""
+    if not razorpay_client:
+        raise HTTPException(status_code=500, detail="Payment gateway not configured")
+
+    body = await request.json()
+    razorpay_order_id = body.get("razorpay_order_id")
+    razorpay_payment_id = body.get("razorpay_payment_id")
+    razorpay_signature = body.get("razorpay_signature")
+    order_id = body.get("order_id")
+    milestone_id = body.get("milestone_id")
+
+    if not all([razorpay_order_id, razorpay_payment_id, razorpay_signature, order_id, milestone_id]):
+        raise HTTPException(status_code=400, detail="Missing required payment verification fields")
+
+    # Verify signature
+    try:
+        razorpay_client.utility.verify_payment_signature({
+            "razorpay_order_id": razorpay_order_id,
+            "razorpay_payment_id": razorpay_payment_id,
+            "razorpay_signature": razorpay_signature
+        })
+    except razorpay.errors.SignatureVerificationError:
+        logger.warning(f"Payment signature verification failed for order {order_id}, razorpay_order {razorpay_order_id}")
+        await db.razorpay_orders.update_one(
+            {"razorpay_order_id": razorpay_order_id},
+            {"$set": {"status": "signature_failed", "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        raise HTTPException(status_code=400, detail="Payment signature verification failed")
+
+    # Fetch the order
+    order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    schedule = order.get("payment_schedule")
+    if not schedule:
+        raise HTTPException(status_code=400, detail="No payment schedule found")
+
+    milestones = schedule.get("milestones", [])
+    target = None
+    for ms in milestones:
+        if ms["milestone_id"] == milestone_id:
+            target = ms
+            break
+
+    if not target:
+        raise HTTPException(status_code=404, detail="Milestone not found")
+
+    if target["status"] == "paid":
+        return {"message": "Milestone already paid", "milestone": target, "payment_status": order.get("payment_status")}
+
+    now = datetime.now(timezone.utc).isoformat()
+    target["status"] = "paid"
+    target["paid_at"] = now
+    target["paid_by"] = user["user_id"]
+    target["razorpay_payment_id"] = razorpay_payment_id
+
+    # Recalculate totals
+    total_paid = sum(m["amount"] for m in milestones if m["status"] == "paid")
+    total_pending = order.get("total_amount", 0) - total_paid
+    schedule["total_paid"] = round(total_paid, 2)
+    schedule["total_pending"] = round(max(0, total_pending), 2)
+
+    all_paid = all(m["status"] == "paid" for m in milestones)
+    any_paid = any(m["status"] == "paid" for m in milestones)
+    payment_status = "paid" if all_paid else ("partial" if any_paid else "pending")
+
+    # Auto-advance order status if payment unlocks it
+    order_status_update = {}
+    if order["status"] == "pending_payment" and target["stage"] == "before_production":
+        order_status_update["status"] = "paid"
+
+    update_fields = {
+        "payment_schedule": schedule,
+        "payment_status": payment_status,
+        "updated_at": now
+    }
+    update_fields.update(order_status_update)
+
+    tracking_note = f"Razorpay payment verified: {target['label']} - {order.get('currency', 'INR')} {target['amount']:,.2f} ({target['percentage']}%) [Payment ID: {razorpay_payment_id}]"
+
+    await db.orders.update_one(
+        {"order_id": order_id},
+        {
+            "$set": update_fields,
+            "$push": {"tracking_updates": {"status": f"Payment: {target['label']}", "timestamp": now, "note": tracking_note}}
+        }
+    )
+
+    # Record in payment_transactions
+    txn_id = f"txn_{uuid.uuid4().hex[:12]}"
+    await db.payment_transactions.insert_one({
+        "transaction_id": txn_id,
+        "order_id": order_id,
+        "milestone_id": milestone_id,
+        "amount": target["amount"],
+        "currency": order.get("currency", "INR"),
+        "percentage": target["percentage"],
+        "label": target["label"],
+        "stage": target["stage"],
+        "paid_by": user["user_id"],
+        "status": "completed",
+        "method": "razorpay",
+        "razorpay_order_id": razorpay_order_id,
+        "razorpay_payment_id": razorpay_payment_id,
+        "created_at": now
+    })
+
+    # Update razorpay order record
+    await db.razorpay_orders.update_one(
+        {"razorpay_order_id": razorpay_order_id},
+        {"$set": {
+            "status": "paid",
+            "razorpay_payment_id": razorpay_payment_id,
+            "transaction_id": txn_id,
+            "updated_at": now
+        }}
+    )
+
+    # Notify vendor about payment received
+    vendor = await db.vendors.find_one({"vendor_id": order["vendor_id"]}, {"_id": 0, "user_id": 1})
+    if vendor:
+        rfq = await db.rfqs.find_one({"rfq_id": order["rfq_id"]}, {"_id": 0, "title": 1})
+        rfq_title = rfq.get("title", "Order") if rfq else "Order"
+        await create_notification(
+            user_id=vendor["user_id"],
+            notification_type=NotificationType.PAYMENT_RECEIVED,
+            title=f"Payment Received: {target['label']}",
+            message=f"Payment of {order.get('currency', 'INR')} {target['amount']:,.2f} received for '{rfq_title}' (Order #{order.get('po_number', order_id[:8])})",
+            data={"order_id": order_id, "milestone_id": milestone_id, "amount": target["amount"]}
+        )
+
+    # Notify buyer confirmation
+    await create_notification(
+        user_id=order["buyer_id"],
+        notification_type=NotificationType.PAYMENT_RECEIVED,
+        title=f"Payment Confirmed: {target['label']}",
+        message=f"Your payment of {order.get('currency', 'INR')} {target['amount']:,.2f} has been verified and recorded",
+        data={"order_id": order_id, "milestone_id": milestone_id, "amount": target["amount"]}
+    )
+
+    logger.info(f"Razorpay payment verified and recorded: order={order_id}, milestone={milestone_id}, payment={razorpay_payment_id}, txn={txn_id}")
+
+    return {
+        "message": "Payment verified and recorded",
+        "transaction_id": txn_id,
+        "milestone": target,
+        "payment_status": payment_status,
+        "total_paid": schedule["total_paid"],
+        "total_pending": schedule["total_pending"],
+        "order_status": update_fields.get("status", order["status"])
+    }
+
+
+@api_router.post("/payments/webhook")
+async def razorpay_webhook(request: Request):
+    """Handle Razorpay webhook events for payment status updates."""
+    payload = await request.body()
+    signature = request.headers.get("X-Razorpay-Signature", "")
+
+    # Verify webhook signature if secret is configured
+    webhook_secret = os.environ.get("RAZORPAY_WEBHOOK_SECRET")
+    if webhook_secret and signature:
+        try:
+            razorpay_client.utility.verify_webhook_signature(
+                payload.decode("utf-8"),
+                signature,
+                webhook_secret
+            )
+        except Exception:
+            logger.warning("Razorpay webhook signature verification failed")
+            raise HTTPException(status_code=400, detail="Invalid webhook signature")
+
+    try:
+        event = json.loads(payload)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    event_type = event.get("event", "")
+    payment_entity = event.get("payload", {}).get("payment", {}).get("entity", {})
+
+    logger.info(f"Razorpay webhook received: {event_type}")
+
+    if event_type == "payment.captured":
+        razorpay_order_id = payment_entity.get("order_id")
+        razorpay_payment_id = payment_entity.get("id")
+
+        if razorpay_order_id:
+            rp_order = await db.razorpay_orders.find_one(
+                {"razorpay_order_id": razorpay_order_id}, {"_id": 0}
+            )
+            if rp_order and rp_order.get("status") != "paid":
+                # Auto-complete payment if not already verified via frontend
+                order_id = rp_order["order_id"]
+                milestone_id = rp_order["milestone_id"]
+
+                order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
+                if order:
+                    schedule = order.get("payment_schedule", {})
+                    milestones = schedule.get("milestones", [])
+                    for ms in milestones:
+                        if ms["milestone_id"] == milestone_id and ms["status"] != "paid":
+                            now = datetime.now(timezone.utc).isoformat()
+                            ms["status"] = "paid"
+                            ms["paid_at"] = now
+                            ms["razorpay_payment_id"] = razorpay_payment_id
+
+                            total_paid = sum(m["amount"] for m in milestones if m["status"] == "paid")
+                            total_pending = order.get("total_amount", 0) - total_paid
+                            schedule["total_paid"] = round(total_paid, 2)
+                            schedule["total_pending"] = round(max(0, total_pending), 2)
+
+                            all_p = all(m["status"] == "paid" for m in milestones)
+                            any_p = any(m["status"] == "paid" for m in milestones)
+                            pstatus = "paid" if all_p else ("partial" if any_p else "pending")
+
+                            upd = {"payment_schedule": schedule, "payment_status": pstatus, "updated_at": now}
+                            if order["status"] == "pending_payment" and ms["stage"] == "before_production":
+                                upd["status"] = "paid"
+
+                            await db.orders.update_one({"order_id": order_id}, {"$set": upd})
+                            await db.razorpay_orders.update_one(
+                                {"razorpay_order_id": razorpay_order_id},
+                                {"$set": {"status": "paid", "razorpay_payment_id": razorpay_payment_id, "updated_at": now}}
+                            )
+                            logger.info(f"Webhook auto-completed payment: order={order_id}, milestone={milestone_id}")
+                            break
+
+    elif event_type == "payment.failed":
+        razorpay_order_id = payment_entity.get("order_id")
+        if razorpay_order_id:
+            await db.razorpay_orders.update_one(
+                {"razorpay_order_id": razorpay_order_id},
+                {"$set": {"status": "failed", "error": payment_entity.get("error_description", ""), "updated_at": datetime.now(timezone.utc).isoformat()}}
+            )
+
+    return {"status": "ok"}
+
+
 @api_router.post("/orders/{order_id}/pay")
 async def record_payment(order_id: str, request: Request, user: dict = Depends(get_current_user)):
-    """Record a payment for a specific milestone. (MOCKED - no real payment processor)"""
+    """Admin manual payment override for a specific milestone."""
     body = await request.json()
     milestone_id = body.get("milestone_id")
     
     if not milestone_id:
         raise HTTPException(status_code=400, detail="milestone_id is required")
     
+    # Admin-only manual payment recording
+    is_admin = user.get("role") == "admin"
+    if not is_admin:
+        raise HTTPException(status_code=403, detail="Admin only. Buyers should use Razorpay checkout via /payments/create-order")
+    
     order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    
-    is_admin = user.get("role") == "admin"
-    is_buyer = order["buyer_id"] == user["user_id"]
-    if not (is_admin or is_buyer):
-        raise HTTPException(status_code=403, detail="Only buyer or admin can make payments")
     
     schedule = order.get("payment_schedule")
     if not schedule:
@@ -9380,7 +9726,7 @@ async def record_payment(order_id: str, request: Request, user: dict = Depends(g
     }
     update_fields.update(order_status_update)
     
-    tracking_note = f"Payment recorded: {target['label']} - {order.get('currency', 'INR')} {target['amount']:,.2f} ({target['percentage']}%)"
+    tracking_note = f"Admin manual payment: {target['label']} - {order.get('currency', 'INR')} {target['amount']:,.2f} ({target['percentage']}%)"
     
     await db.orders.update_one(
         {"order_id": order_id},

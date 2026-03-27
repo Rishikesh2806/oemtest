@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth, api } from "../App";
 import DashboardLayout from "../components/layout/DashboardLayout";
 import { Button } from "../components/ui/button";
@@ -22,13 +22,11 @@ import PaymentTimeline from "../components/PaymentTimeline";
 
 const OrderDetail = () => {
   const { orderId } = useParams();
-  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [orderDetails, setOrderDetails] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [processingPayment, setProcessingPayment] = useState(false);
   
   // Rating dialog state
   const [ratingDialogOpen, setRatingDialogOpen] = useState(false);
@@ -66,13 +64,6 @@ const OrderDetail = () => {
     fetchDisputeStatus();
   }, [orderId]);
 
-  useEffect(() => {
-    const sessionId = searchParams.get("session_id");
-    if (sessionId) {
-      pollPaymentStatus(sessionId);
-    }
-  }, [searchParams]);
-
   const fetchOrder = async () => {
     try {
       const response = await api.get(`/orders/${orderId}`);
@@ -108,52 +99,6 @@ const OrderDetail = () => {
     setHasDispute(true);
     setExistingDispute(dispute);
     navigate(`/disputes/${dispute.dispute_id}`);
-  };
-
-  const pollPaymentStatus = async (sessionId, attempts = 0) => {
-    const maxAttempts = 5;
-    const pollInterval = 2000;
-
-    if (attempts >= maxAttempts) {
-      toast.error("Payment status check timed out");
-      return;
-    }
-
-    try {
-      const response = await api.get(`/payments/status/${sessionId}`);
-      
-      if (response.data.payment_status === "paid") {
-        toast.success("Payment successful!");
-        fetchOrder();
-        fetchOrderDetails();
-        return;
-      } else if (response.data.status === "expired") {
-        toast.error("Payment session expired");
-        return;
-      }
-
-      setTimeout(() => pollPaymentStatus(sessionId, attempts + 1), pollInterval);
-    } catch (error) {
-      console.error("Error checking payment status:", error);
-    }
-  };
-
-  const initiatePayment = async () => {
-    setProcessingPayment(true);
-    try {
-      const originUrl = window.location.origin;
-      const response = await api.post("/payments/checkout", {
-        order_id: orderId,
-        origin_url: originUrl
-      });
-      
-      if (response.data.url) {
-        window.location.href = response.data.url;
-      }
-    } catch (error) {
-      toast.error("Failed to initiate payment");
-      setProcessingPayment(false);
-    }
   };
 
   const updateStatus = async (newStatus, note = "") => {

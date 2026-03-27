@@ -6,7 +6,7 @@ import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import {
   CreditCard, CheckCircle2, Clock, Loader2, AlertCircle,
-  CircleDot, ArrowRight, Banknote, Lock, ChevronRight
+  CircleDot, Banknote, Lock, ShieldCheck
 } from "lucide-react";
 
 const STAGE_ORDER = [
@@ -36,7 +36,77 @@ const PaymentTimeline = ({ orderId, orderStatus, isBuyer, isAdmin, onPaymentComp
 
   useEffect(() => { fetchSchedule(); }, [fetchSchedule]);
 
-  const handlePay = async (milestoneId) => {
+  const handleRazorpayPayment = async (milestoneId) => {
+    setPayingMilestone(milestoneId);
+    try {
+      // Step 1: Create Razorpay order on backend
+      const createRes = await api.post("/payments/create-order", {
+        order_id: orderId,
+        milestone_id: milestoneId
+      });
+      const data = createRes.data;
+
+      // Step 2: Open Razorpay checkout
+      const options = {
+        key: data.key_id,
+        amount: data.amount,
+        currency: data.currency,
+        name: "OEMLinker",
+        description: `${data.milestone.label} - Order #${data.order_ref.po_number}`,
+        order_id: data.razorpay_order_id,
+        prefill: {
+          name: data.prefill.name,
+          email: data.prefill.email,
+          contact: data.prefill.contact
+        },
+        theme: {
+          color: "#ea580c"
+        },
+        handler: async (response) => {
+          // Step 3: Verify payment on backend
+          try {
+            const verifyRes = await api.post("/payments/verify", {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              order_id: orderId,
+              milestone_id: milestoneId
+            });
+            toast.success(verifyRes.data.message || "Payment successful!");
+            fetchSchedule();
+            if (onPaymentComplete) onPaymentComplete();
+          } catch (verifyErr) {
+            toast.error(verifyErr.response?.data?.detail || "Payment verification failed. Contact support.");
+          }
+          setPayingMilestone(null);
+        },
+        modal: {
+          ondismiss: () => {
+            setPayingMilestone(null);
+            toast.info("Payment cancelled");
+          }
+        }
+      };
+
+      if (!window.Razorpay) {
+        toast.error("Payment gateway not loaded. Please refresh the page.");
+        setPayingMilestone(null);
+        return;
+      }
+
+      const rzp = new window.Razorpay(options);
+      rzp.on("payment.failed", (response) => {
+        toast.error(response.error?.description || "Payment failed");
+        setPayingMilestone(null);
+      });
+      rzp.open();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to initiate payment");
+      setPayingMilestone(null);
+    }
+  };
+
+  const handleAdminPay = async (milestoneId) => {
     setPayingMilestone(milestoneId);
     try {
       const res = await api.post(`/orders/${orderId}/pay`, { milestone_id: milestoneId });
@@ -106,6 +176,12 @@ const PaymentTimeline = ({ orderId, orderStatus, isBuyer, isAdmin, onPaymentComp
         </div>
       </CardHeader>
       <CardContent className="pt-0">
+        {/* Razorpay badge */}
+        <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-3 pb-2 border-b border-slate-100">
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span>Secured by Razorpay</span>
+        </div>
+
         {/* Milestones */}
         <div className="space-y-0">
           {milestones.map((ms, idx) => {
@@ -159,6 +235,11 @@ const PaymentTimeline = ({ orderId, orderStatus, isBuyer, isAdmin, onPaymentComp
                           Paid {new Date(ms.paid_at).toLocaleDateString()}
                         </span>
                       )}
+                      {isPaid && ms.razorpay_payment_id && (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          {ms.razorpay_payment_id}
+                        </span>
+                      )}
                       {!isPaid && ms.due_date && (
                         <span className={`text-xs ${new Date(ms.due_date) < new Date() ? "text-red-600 font-medium" : "text-slate-500"}`}>
                           Due: {new Date(ms.due_date).toLocaleDateString()}
@@ -179,12 +260,12 @@ const PaymentTimeline = ({ orderId, orderStatus, isBuyer, isAdmin, onPaymentComp
                       <Badge variant="outline" className="border-green-200 text-green-700 bg-green-50" data-testid={`milestone-paid-${ms.milestone_id}`}>
                         Paid
                       </Badge>
-                    ) : isDue && (isBuyer || isAdmin) ? (
+                    ) : isDue && isBuyer ? (
                       <Button
                         size="sm"
                         className="bg-orange-600 hover:bg-orange-700 text-white h-8"
                         disabled={payingMilestone === ms.milestone_id}
-                        onClick={() => handlePay(ms.milestone_id)}
+                        onClick={() => handleRazorpayPayment(ms.milestone_id)}
                         data-testid={`pay-milestone-${ms.milestone_id}`}
                       >
                         {payingMilestone === ms.milestone_id ? (
@@ -193,6 +274,22 @@ const PaymentTimeline = ({ orderId, orderStatus, isBuyer, isAdmin, onPaymentComp
                           <Banknote className="w-3.5 h-3.5 mr-1" />
                         )}
                         Pay Now
+                      </Button>
+                    ) : isDue && isAdmin ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="border-orange-300 text-orange-700 hover:bg-orange-50 h-8"
+                        disabled={payingMilestone === ms.milestone_id}
+                        onClick={() => handleAdminPay(ms.milestone_id)}
+                        data-testid={`admin-pay-milestone-${ms.milestone_id}`}
+                      >
+                        {payingMilestone === ms.milestone_id ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" />
+                        ) : (
+                          <ShieldCheck className="w-3.5 h-3.5 mr-1" />
+                        )}
+                        Admin Override
                       </Button>
                     ) : (
                       <Badge variant="outline" className="border-slate-200 text-slate-500" data-testid={`milestone-pending-${ms.milestone_id}`}>

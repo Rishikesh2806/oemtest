@@ -82,6 +82,7 @@ pycodestyle==2.14.0
 pycparser==3.0
 pydantic==2.12.5
 pydantic_core==2.41.5
+pydub==0.25.1
 pyflakes==3.4.0
 Pygments==2.19.2
 PyJWT==2.11.0
@@ -97,11 +98,13 @@ python-magic==0.4.27
 python-multipart==0.0.22
 pytokens==0.4.1
 PyYAML==6.0.3
+razorpay==2.0.1
 referencing==0.37.0
 regex==2026.2.19
 reportlab==4.4.10
 requests==2.32.5
 requests-oauthlib==2.0.0
+resend==2.23.0
 rich==14.3.3
 rpds-py==0.30.0
 rsa==4.9.1
@@ -128,4 +131,3 @@ watchfiles==1.1.1
 websockets==15.0.1
 yarl==1.22.0
 zipp==3.23.0
-pydub==0.25.1
