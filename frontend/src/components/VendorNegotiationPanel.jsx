@@ -145,7 +145,7 @@ const VendorNegotiationPanel = ({ quoteId, onNegotiationResolved }) => {
                 {neg.requested_price && (
                   <p className="flex items-center gap-2">
                     <DollarSign className="w-4 h-4 text-slate-400" />
-                    <span>Requested: <strong>${neg.requested_price.toLocaleString()}</strong></span>
+                    <span>Requested: <strong>₹{neg.requested_price.toLocaleString('en-IN')}</strong></span>
                     <span className="text-slate-400">(Current: ${neg.original_price?.toLocaleString()})</span>
                   </p>
                 )}
@@ -194,7 +194,7 @@ const VendorNegotiationPanel = ({ quoteId, onNegotiationResolved }) => {
                         <Input
                           type="number"
                           step="0.01"
-                          placeholder={`Original: $${neg.original_price}`}
+                          placeholder={`Original: ₹${neg.original_price}`}
                           value={responseForm.counter_price}
                           onChange={(e) => setResponseForm({...responseForm, counter_price: e.target.value})}
                           className="mt-1"

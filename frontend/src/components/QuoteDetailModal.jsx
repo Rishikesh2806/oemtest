@@ -511,7 +511,7 @@ const QuoteDetailModal = ({ quoteId, open, onOpenChange, onQuoteUpdated, rfqId }
                         <Input
                           type="number"
                           step="0.01"
-                          placeholder={`Current: $${quote.price?.toLocaleString()}`}
+                          placeholder={`Current: ₹${quote.price?.toLocaleString('en-IN')}`}
                           value={negotiationForm.requested_price}
                           onChange={(e) => setNegotiationForm({...negotiationForm, requested_price: e.target.value})}
                           className="mt-1"
@@ -627,7 +627,7 @@ const QuoteDetailModal = ({ quoteId, open, onOpenChange, onQuoteUpdated, rfqId }
                         <div className="text-sm space-y-1">
                           {neg.requested_price && (
                             <p className="text-slate-500">
-                              Requested Price: <span className="text-slate-900 font-medium">${neg.requested_price.toLocaleString()}</span>
+                              Requested Price: <span className="text-slate-900 font-medium">₹{neg.requested_price.toLocaleString('en-IN')}</span>
                               <span className="text-slate-400 ml-2">(was ${neg.original_price?.toLocaleString()})</span>
                             </p>
                           )}
@@ -658,7 +658,7 @@ const QuoteDetailModal = ({ quoteId, open, onOpenChange, onQuoteUpdated, rfqId }
                             <p className="text-sm font-medium text-blue-800 mb-2">Counter Offer:</p>
                             <div className="text-sm space-y-1">
                               {neg.counter_price && (
-                                <p>Price: <span className="font-medium">${neg.counter_price.toLocaleString()}</span></p>
+                                <p>Price: <span className="font-medium">₹{neg.counter_price.toLocaleString('en-IN')}</span></p>
                               )}
                               {neg.counter_lead_time && (
                                 <p>Lead Time: <span className="font-medium">{neg.counter_lead_time} days</span></p>

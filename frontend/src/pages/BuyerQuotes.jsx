@@ -386,7 +386,7 @@ const BuyerQuotes = () => {
                         </div>
                         <div className="text-right">
                           <p className="text-xs text-slate-500">Lowest</p>
-                          <p className="font-bold text-slate-900">${lowestPrice.toLocaleString()}</p>
+                          <p className="font-bold text-slate-900">₹{lowestPrice.toLocaleString('en-IN')}</p>
                         </div>
                         <Link 
                           to={`/buyer/rfq/${group.rfq_id}`}
@@ -471,7 +471,7 @@ const BuyerQuotes = () => {
                                         <div className="text-sm text-blue-700">
                                           <p>Your request: {negInfo.type === "price" ? "Price adjustment" : negInfo.type === "lead_time" ? "Lead time change" : negInfo.type === "payment_terms" ? "Payment terms" : "General request"}</p>
                                           {negInfo.requestedPrice && (
-                                            <p>Requested price: <strong>${negInfo.requestedPrice.toLocaleString()}</strong></p>
+                                            <p>Requested price: <strong>₹{negInfo.requestedPrice.toLocaleString('en-IN')}</strong></p>
                                           )}
                                         </div>
                                       )}
@@ -480,7 +480,7 @@ const BuyerQuotes = () => {
                                         <div className="text-sm text-blue-700">
                                           <p className="font-medium">Vendor's counter offer:</p>
                                           {negInfo.counterPrice && (
-                                            <p>Counter price: <strong>${negInfo.counterPrice.toLocaleString()}</strong></p>
+                                            <p>Counter price: <strong>₹{negInfo.counterPrice.toLocaleString('en-IN')}</strong></p>
                                           )}
                                           {negInfo.response && (
                                             <p className="italic mt-1">"{negInfo.response}"</p>

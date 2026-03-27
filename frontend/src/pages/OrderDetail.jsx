@@ -430,7 +430,7 @@ const OrderDetail = () => {
                   Total Amount
                 </p>
                 <p className="text-2xl font-bold text-slate-900">
-                  ${order.total_amount?.toLocaleString(undefined, {minimumFractionDigits: 2})}
+                  ₹{order.total_amount?.toLocaleString('en-IN', {minimumFractionDigits: 2})}
                 </p>
                 <p className="text-sm text-slate-500">{order.currency}</p>
               </div>

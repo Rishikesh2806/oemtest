@@ -8995,7 +8995,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
         "payment_terms_notes": payment_terms_notes,
         "payment_schedule": order_doc["payment_schedule"],
         "total_amount": quote["price"],
-        "currency": quote.get("currency", "USD")
+        "currency": quote.get("currency", "INR")
     }
 
 # =============================================================================

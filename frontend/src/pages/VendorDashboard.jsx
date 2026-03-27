@@ -200,7 +200,7 @@ const VendorDashboard = () => {
               <div>
                 <p className="text-slate-400 text-sm uppercase tracking-wider mb-1">Total Revenue</p>
                 <p className="text-4xl font-bold text-white">
-                  ${stats?.total_revenue?.toLocaleString() || "0"}
+                  ₹{stats?.total_revenue?.toLocaleString('en-IN') || "0"}
                 </p>
               </div>
               <DollarSign className="w-16 h-16 text-slate-700" />
