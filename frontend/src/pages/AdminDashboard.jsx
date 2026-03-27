@@ -34,8 +34,8 @@ const TAB_CONFIG = {
   quotes: { label: "Quotes", icon: DollarSign, permissions: ['quotes.view'] },
   orders: { label: "Orders", icon: Package, permissions: ['orders.view'] },
   inspections: { label: "Inspections", icon: Shield, permissions: ['inspections.view'] },
-  drawings: { label: "Drawings", icon: FileCheck, permissions: ['rfqs.view'] },
-  nda_templates: { label: "NDA Templates", icon: Shield, permissions: ['rfqs.view'] },
+  drawings: { label: "Drawings", icon: FileCheck, permissions: ['admin.all'] },
+  nda_templates: { label: "NDA Templates", icon: Shield, permissions: ['admin.all'] },
   chat_analytics: { label: "Chat Analytics", icon: MessageSquare, permissions: ['admin.all'] },
 };
 
