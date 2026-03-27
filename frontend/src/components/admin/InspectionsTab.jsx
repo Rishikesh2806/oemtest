@@ -82,15 +82,25 @@ const InspectionsTab = ({ canAssign = true, canManageInspectors = true, canManag
     setLoading(true);
     try {
       const statusParam = filterStatus && filterStatus !== "all" ? `?status=${filterStatus}` : "";
-      const [inspectionsRes, inspectorsRes, pricingRes] = await Promise.all([
-        api.get(`/admin/inspections${statusParam}`),
-        api.get("/admin/inspectors"),
-        api.get("/admin/inspection-pricing")
-      ]);
       
+      // Always fetch inspections (base permission)
+      const inspectionsRes = await api.get(`/admin/inspections${statusParam}`);
       setInspections(inspectionsRes.data.inspections || []);
-      setInspectors(inspectorsRes.data.inspectors || []);
-      setPricing(pricingRes.data.pricing || []);
+
+      // Only fetch inspectors/pricing if user has permission (avoid 403 breaking everything)
+      if (canManageInspectors) {
+        try {
+          const inspectorsRes = await api.get("/admin/inspectors");
+          setInspectors(inspectorsRes.data.inspectors || []);
+        } catch { /* no permission — skip */ }
+      }
+
+      if (canManagePricing) {
+        try {
+          const pricingRes = await api.get("/admin/inspection-pricing");
+          setPricing(pricingRes.data.pricing || []);
+        } catch { /* no permission — skip */ }
+      }
     } catch (error) {
       console.error("Failed to fetch inspection data:", error);
       toast.error("Failed to load inspection data");

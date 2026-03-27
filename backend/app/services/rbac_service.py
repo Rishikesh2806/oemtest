@@ -484,7 +484,7 @@ class RBACService:
         """Get all permissions for a user based on their roles"""
         db = await self._get_db()
         
-        user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "role": 1, "custom_role": 1})
+        user = await db.users.find_one({"user_id": user_id}, {"_id": 0, "role": 1, "custom_role": 1, "secondary_roles": 1})
         if not user:
             return []
         
@@ -502,6 +502,14 @@ class RBACService:
             custom_role_doc = await db.roles.find_one({"role_id": custom_role})
             if custom_role_doc:
                 permissions.update(custom_role_doc.get("permissions", []))
+        
+        # Get secondary roles permissions (additive)
+        secondary_roles = user.get("secondary_roles", [])
+        for sec_role in secondary_roles:
+            if sec_role and sec_role != custom_role:
+                sec_role_doc = await db.roles.find_one({"role_id": sec_role})
+                if sec_role_doc:
+                    permissions.update(sec_role_doc.get("permissions", []))
         
         return list(permissions)
     

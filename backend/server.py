@@ -14992,6 +14992,7 @@ async def submit_inspection_report(order_id: str, request: Request, user: dict =
 async def upload_agency_report(order_id: str, request: Request, user: dict = Depends(get_current_user)):
     """Admin uploads report from certified inspection agency"""
     if user["role"] != UserRole.ADMIN:
+        from app.services.rbac_service import rbac_service
         has_permission = await rbac_service.check_permission(user["user_id"], "inspections.assign")
         if not has_permission:
             raise HTTPException(status_code=403, detail="Permission denied")
@@ -15288,6 +15289,7 @@ async def update_inspector_availability(request: Request, user: dict = Depends(g
 async def list_inspectors(status: str = None, user: dict = Depends(get_current_user)):
     """Admin: List all inspectors"""
     if user["role"] != UserRole.ADMIN:
+        from app.services.rbac_service import rbac_service
         has_permission = await rbac_service.check_permission(user["user_id"], "inspections.manage_inspectors")
         if not has_permission:
             raise HTTPException(status_code=403, detail="Permission denied")
@@ -15305,6 +15307,7 @@ async def list_inspectors(status: str = None, user: dict = Depends(get_current_u
 async def approve_inspector(inspector_id: str, request: Request, user: dict = Depends(get_current_user)):
     """Admin: Approve or reject inspector registration"""
     if user["role"] != UserRole.ADMIN:
+        from app.services.rbac_service import rbac_service
         has_permission = await rbac_service.check_permission(user["user_id"], "inspections.manage_inspectors")
         if not has_permission:
             raise HTTPException(status_code=403, detail="Permission denied")
@@ -15378,6 +15381,7 @@ async def approve_inspector(inspector_id: str, request: Request, user: dict = De
 async def admin_create_inspector(request: Request, user: dict = Depends(get_current_user)):
     """Admin: Create inspector account directly"""
     if user["role"] != UserRole.ADMIN:
+        from app.services.rbac_service import rbac_service
         has_permission = await rbac_service.check_permission(user["user_id"], "inspections.manage_inspectors")
         if not has_permission:
             raise HTTPException(status_code=403, detail="Permission denied")
@@ -15452,6 +15456,7 @@ async def admin_create_inspector(request: Request, user: dict = Depends(get_curr
 async def list_all_inspections(status: str = None, user: dict = Depends(get_current_user)):
     """Admin: List all inspections"""
     if user["role"] != UserRole.ADMIN:
+        from app.services.rbac_service import rbac_service
         has_permission = await rbac_service.check_permission(user["user_id"], "inspections.view")
         if not has_permission:
             raise HTTPException(status_code=403, detail="Permission denied")
@@ -15478,6 +15483,7 @@ async def list_all_inspections(status: str = None, user: dict = Depends(get_curr
 async def get_admin_inspection_pricing(user: dict = Depends(get_current_user)):
     """Admin: Get all inspection pricing configurations"""
     if user["role"] != UserRole.ADMIN:
+        from app.services.rbac_service import rbac_service
         has_permission = await rbac_service.check_permission(user["user_id"], "inspections.manage_pricing")
         if not has_permission:
             raise HTTPException(status_code=403, detail="Permission denied")
@@ -15490,6 +15496,7 @@ async def get_admin_inspection_pricing(user: dict = Depends(get_current_user)):
 async def create_inspection_pricing(request: Request, user: dict = Depends(get_current_user)):
     """Admin: Create or update inspection pricing"""
     if user["role"] != UserRole.ADMIN:
+        from app.services.rbac_service import rbac_service
         has_permission = await rbac_service.check_permission(user["user_id"], "inspections.manage_pricing")
         if not has_permission:
             raise HTTPException(status_code=403, detail="Permission denied")
