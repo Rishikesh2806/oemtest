@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { 
-  MessageCircle, X, Send, Bot, User, Loader2, 
+  X, Send, Bot, User, Loader2, 
   Trash2, Minimize2, Maximize2, ThumbsUp, ThumbsDown
 } from "lucide-react";
 
@@ -34,8 +34,6 @@ const parseMarkdown = (text) => {
 const ChatbotWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
-  const [btnPos, setBtnPos] = useState({ x: 0, y: 0 });
-  const constraintsRef = useRef(null);
   const [messages, setMessages] = useState([
     {
       id: "welcome",
@@ -192,61 +190,21 @@ const ChatbotWidget = () => {
 
   return (
     <>
-      {/* Drag constraints (full viewport) */}
-      <div ref={constraintsRef} className="fixed inset-0 pointer-events-none z-40" />
-
-      {/* Draggable AI Agent Button */}
+      {/* Chat Toggle Button — fixed, no drag */}
       <AnimatePresence>
         {!isOpen && (
           <motion.button
-            drag
-            dragConstraints={constraintsRef}
-            dragElastic={0.1}
-            dragMomentum={false}
-            onDragEnd={(_, info) => setBtnPos({ x: info.point.x, y: info.point.y })}
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
-            whileHover={{ scale: 1.08 }}
-            whileTap={{ scale: 0.95, cursor: "grabbing" }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.92 }}
             onClick={() => setIsOpen(true)}
-            className="fixed bottom-6 right-6 z-50 w-16 h-16 rounded-full shadow-xl flex items-center justify-center cursor-grab active:cursor-grabbing select-none"
-            style={{ touchAction: "none" }}
+            className="fixed bottom-5 right-5 z-50 w-12 h-12 md:w-14 md:h-14 rounded-full shadow-lg flex items-center justify-center bg-gradient-to-br from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 transition-all"
             data-testid="chatbot-toggle-btn"
           >
-            {/* AI Agent Face */}
-            <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {/* Head circle */}
-              <circle cx="32" cy="32" r="30" fill="url(#agentGrad)" stroke="#c2410c" strokeWidth="2"/>
-              {/* Inner glow */}
-              <circle cx="32" cy="32" r="24" fill="#1e293b" opacity="0.92"/>
-              {/* Left eye */}
-              <ellipse cx="23" cy="28" rx="4.5" ry="5" fill="#f97316"/>
-              <circle cx="23" cy="27" r="1.8" fill="white" opacity="0.9"/>
-              {/* Right eye */}
-              <ellipse cx="41" cy="28" rx="4.5" ry="5" fill="#f97316"/>
-              <circle cx="41" cy="27" r="1.8" fill="white" opacity="0.9"/>
-              {/* Smile */}
-              <path d="M22 38 Q32 46 42 38" stroke="#f97316" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
-              {/* Antenna */}
-              <line x1="32" y1="6" x2="32" y2="2" stroke="#f97316" strokeWidth="2" strokeLinecap="round"/>
-              <circle cx="32" cy="2" r="2.5" fill="#f97316">
-                <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/>
-              </circle>
-              {/* Ear accents */}
-              <rect x="2" y="26" width="5" height="10" rx="2.5" fill="#f97316" opacity="0.7"/>
-              <rect x="57" y="26" width="5" height="10" rx="2.5" fill="#f97316" opacity="0.7"/>
-              <defs>
-                <linearGradient id="agentGrad" x1="0" y1="0" x2="64" y2="64">
-                  <stop offset="0%" stopColor="#1e293b"/>
-                  <stop offset="100%" stopColor="#0f172a"/>
-                </linearGradient>
-              </defs>
-            </svg>
-            {/* Online indicator */}
-            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-full border-2 border-white">
-              <span className="absolute inset-0 bg-green-400 rounded-full animate-ping opacity-50"></span>
-            </span>
+            <Bot className="w-6 h-6 md:w-7 md:h-7 text-white" />
+            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-white" />
           </motion.button>
         )}
       </AnimatePresence>
@@ -260,11 +218,11 @@ const ChatbotWidget = () => {
               opacity: 1, 
               y: 0, 
               scale: 1,
-              height: isMinimized ? "60px" : "500px"
+              height: isMinimized ? "60px" : "min(500px, calc(100dvh - 100px))"
             }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="fixed bottom-6 right-6 z-50 w-[380px] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col"
+            className="fixed bottom-5 right-5 z-50 w-[min(380px,calc(100vw-40px))] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col"
             data-testid="chatbot-window"
           >
             {/* Header */}
