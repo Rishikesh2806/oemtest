@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useAuth } from "../App";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import ChatbotWidget from "../components/ChatbotWidget";
 import { Textarea } from "../components/ui/textarea";
 import { Label } from "../components/ui/label";
 import { motion } from "framer-motion";
@@ -545,6 +546,7 @@ const LandingPage = () => {
           </div>
         </div>
       </footer>
+      <ChatbotWidget />
     </div>
   );
 };
