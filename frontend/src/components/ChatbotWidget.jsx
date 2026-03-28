@@ -34,6 +34,8 @@ const parseMarkdown = (text) => {
 const ChatbotWidget = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [btnPos, setBtnPos] = useState({ x: 0, y: 0 });
+  const constraintsRef = useRef(null);
   const [messages, setMessages] = useState([
     {
       id: "welcome",
@@ -190,21 +192,61 @@ const ChatbotWidget = () => {
 
   return (
     <>
-      {/* Chat Button */}
+      {/* Drag constraints (full viewport) */}
+      <div ref={constraintsRef} className="fixed inset-0 pointer-events-none z-40" />
+
+      {/* Draggable AI Agent Button */}
       <AnimatePresence>
         {!isOpen && (
           <motion.button
+            drag
+            dragConstraints={constraintsRef}
+            dragElastic={0.1}
+            dragMomentum={false}
+            onDragEnd={(_, info) => setBtnPos({ x: info.point.x, y: info.point.y })}
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.95, cursor: "grabbing" }}
             onClick={() => setIsOpen(true)}
-            className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full shadow-lg flex items-center justify-center text-white hover:from-orange-600 hover:to-orange-700 transition-all"
+            className="fixed bottom-6 right-6 z-50 w-16 h-16 rounded-full shadow-xl flex items-center justify-center cursor-grab active:cursor-grabbing select-none"
+            style={{ touchAction: "none" }}
             data-testid="chatbot-toggle-btn"
           >
-            <MessageCircle className="w-6 h-6" />
-            <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></span>
+            {/* AI Agent Face */}
+            <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              {/* Head circle */}
+              <circle cx="32" cy="32" r="30" fill="url(#agentGrad)" stroke="#c2410c" strokeWidth="2"/>
+              {/* Inner glow */}
+              <circle cx="32" cy="32" r="24" fill="#1e293b" opacity="0.92"/>
+              {/* Left eye */}
+              <ellipse cx="23" cy="28" rx="4.5" ry="5" fill="#f97316"/>
+              <circle cx="23" cy="27" r="1.8" fill="white" opacity="0.9"/>
+              {/* Right eye */}
+              <ellipse cx="41" cy="28" rx="4.5" ry="5" fill="#f97316"/>
+              <circle cx="41" cy="27" r="1.8" fill="white" opacity="0.9"/>
+              {/* Smile */}
+              <path d="M22 38 Q32 46 42 38" stroke="#f97316" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+              {/* Antenna */}
+              <line x1="32" y1="6" x2="32" y2="2" stroke="#f97316" strokeWidth="2" strokeLinecap="round"/>
+              <circle cx="32" cy="2" r="2.5" fill="#f97316">
+                <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/>
+              </circle>
+              {/* Ear accents */}
+              <rect x="2" y="26" width="5" height="10" rx="2.5" fill="#f97316" opacity="0.7"/>
+              <rect x="57" y="26" width="5" height="10" rx="2.5" fill="#f97316" opacity="0.7"/>
+              <defs>
+                <linearGradient id="agentGrad" x1="0" y1="0" x2="64" y2="64">
+                  <stop offset="0%" stopColor="#1e293b"/>
+                  <stop offset="100%" stopColor="#0f172a"/>
+                </linearGradient>
+              </defs>
+            </svg>
+            {/* Online indicator */}
+            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-full border-2 border-white">
+              <span className="absolute inset-0 bg-green-400 rounded-full animate-ping opacity-50"></span>
+            </span>
           </motion.button>
         )}
       </AnimatePresence>
