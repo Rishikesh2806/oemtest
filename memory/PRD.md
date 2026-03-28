@@ -523,6 +523,11 @@ Comprehensive platform analytics for business tracking:
   - RFQ-YYYY-XXXXX, QT-YYYY-XXXXX, ORD-YYYY-XXXXX
   - Atomic MongoDB counters, item_name inheritance, copy-to-clipboard
 
+### Bug Fixes
+- Google OAuth Role Selection Fix (Mar 28, 2026)
+  - Root cause: `UserRole` class in `app/models/user.py` was missing `STAFF` attribute, causing `AttributeError` crash on `PUT /auth/role`
+  - Fix: Added `STAFF = "staff"` and `BASE_ROLES` to `UserRole` in `app/models/user.py`
+
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check
 - Revenue analytics charts

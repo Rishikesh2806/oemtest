@@ -10,6 +10,9 @@ class UserRole:
     BUYER = "buyer"
     VENDOR = "vendor"
     ADMIN = "admin"
+    STAFF = "staff"
+    
+    BASE_ROLES = [BUYER, VENDOR, ADMIN, STAFF]
 
 
 class UserBase(BaseModel):
