@@ -328,7 +328,19 @@ See ARCHITECTURE.md for detailed refactoring plan.
 - **Env vars**: `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` (backend), `REACT_APP_RAZORPAY_KEY_ID` (frontend)
 - **Test Report**: /app/test_reports/iteration_43.json (100% pass - 16 backend + all frontend verified)
 
-
+### Unified Reference Number System (Completed - Mar 28, 2026)
+- **Backend**: Atomic sequential reference number generator using MongoDB `counters` collection with `findOneAndUpdate` + upsert
+- **Backend**: Format `PREFIX-YYYY-XXXXX` (e.g., `RFQ-2026-00001`, `QT-2026-00001`, `ORD-2026-00001`)
+- **Backend**: `create_rfq` generates `rfq_number` at RFQ creation
+- **Backend**: `submit_vendor_quotation`, `submit_itemwise_quotation`, `create_quote` generate `quotation_number` and inherit `rfq_number` + `item_name` from parent RFQ
+- **Backend**: `accept_quote` generates `order_number` and inherits `rfq_number`, `quotation_number`, `item_name`
+- **Backend**: `POST /api/admin/migrate-reference-numbers` backfills existing records (217 RFQs, 71 quotes, 50 orders migrated)
+- **Backend**: `item_name` locked from RFQ title — flows downstream immutably (vendors cannot re-enter)
+- **Frontend**: `RefNumber` component (`/app/frontend/src/components/RefNumber.jsx`) — mono-font badge with click-to-copy + visual Check icon feedback
+- **Frontend**: Updated 12+ pages: AdminDashboard (RFQs/Quotes/Orders tabs), BuyerDashboard, VendorDashboard, BuyerOrders, VendorOrders, OrderDetail, BuyerRFQList, VendorMatchedRFQs, RFQDetail, QuotesList, BuyerQuotes
+- **Frontend**: Search/filter on all list pages now supports searching by reference numbers
+- **Frontend**: Internal MongoDB IDs (`rfq_id`, `quote_id`, `order_id`) still used for routing but hidden from user-facing displays
+- **Test Report**: /app/test_reports/iteration_45.json (93% backend, 100% frontend)
 
 
 
@@ -507,6 +519,9 @@ Comprehensive platform analytics for business tracking:
   - Added /vendor/orders/{order_id}/schedule-inspection API
   - Vendor can add notes for inspector (access details, contact info)
   - Inspection assignment remains admin-only
+- Unified Reference Number System ✓ (Mar 28, 2026)
+  - RFQ-YYYY-XXXXX, QT-YYYY-XXXXX, ORD-YYYY-XXXXX
+  - Atomic MongoDB counters, item_name inheritance, copy-to-clipboard
 
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check
