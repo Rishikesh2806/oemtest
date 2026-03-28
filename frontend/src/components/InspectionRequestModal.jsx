@@ -102,15 +102,43 @@ const InspectionRequestModal = ({ orderId, isOpen, onClose, onSuccess }) => {
         throw new Error("Inspection not found");
       }
 
-      // Simulate payment (integrate with Stripe/Razorpay later)
-      const res = await api.post(`/inspections/${inspectionId}/pay`, {
-        payment_method: "simulated"
-      });
-      
-      if (res.data.success) {
-        toast.success("Payment successful! Inspector will be assigned shortly.");
-        onSuccess?.();
-        onClose();
+      // Create Razorpay order for inspection fee
+      const { data } = await api.post(`/inspections/${inspectionId}/create-razorpay-order`);
+
+      // Open Razorpay checkout
+      const options = {
+        key: data.key_id,
+        amount: data.amount,
+        currency: data.currency,
+        name: "OEMLinker",
+        description: `${selectedTypeConfig.label} Fee`,
+        order_id: data.razorpay_order_id,
+        handler: async (response) => {
+          try {
+            await api.post(`/inspections/${inspectionId}/verify-payment`, {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+            toast.success("Payment successful! Inspector will be assigned shortly.");
+            onSuccess?.();
+            onClose();
+          } catch (err) {
+            toast.error(err.response?.data?.detail || "Payment verification failed");
+          }
+        },
+        prefill: data.prefill || {},
+        theme: { color: "#f97316" },
+        modal: { ondismiss: () => setLoading(false) }
+      };
+
+      if (!window.Razorpay) {
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.onload = () => { new window.Razorpay(options).open(); };
+        document.body.appendChild(script);
+      } else {
+        new window.Razorpay(options).open();
       }
     } catch (error) {
       toast.error(error.response?.data?.detail || "Payment failed");
@@ -270,7 +298,7 @@ const InspectionRequestModal = ({ orderId, isOpen, onClose, onSuccess }) => {
             <Button 
               onClick={handlePayment}
               disabled={loading}
-              className="w-full bg-green-600 hover:bg-green-700"
+              className="w-full bg-orange-500 hover:bg-orange-600"
               data-testid="pay-inspection-fee"
             >
               {loading ? (
@@ -278,13 +306,13 @@ const InspectionRequestModal = ({ orderId, isOpen, onClose, onSuccess }) => {
               ) : (
                 <>
                   <CreditCard className="w-4 h-4 mr-2" />
-                  Pay ₹{selectedPrice.toLocaleString('en-IN')}
+                  Pay ₹{selectedPrice.toLocaleString('en-IN')} via Razorpay
                 </>
               )}
             </Button>
 
             <p className="text-xs text-slate-400 text-center">
-              Secure payment powered by OEMLinker
+              Secure payment powered by Razorpay
             </p>
           </div>
         )}
