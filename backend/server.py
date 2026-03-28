@@ -71,6 +71,26 @@ JWT_SECRET = os.environ.get('JWT_SECRET_KEY', 'offloadex_secret_key')
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 168  # 7 days
 
+# ============== REFERENCE NUMBER GENERATOR ==============
+async def get_next_sequence(prefix: str) -> str:
+    """
+    Atomically generate the next sequential reference number.
+    Uses MongoDB findOneAndUpdate with upsert for atomic increment.
+    Format: PREFIX-YYYY-XXXXX (e.g., RFQ-2026-00001)
+    """
+    year = datetime.now(timezone.utc).strftime("%Y")
+    counter_id = f"{prefix}_{year}"
+    
+    result = await db.counters.find_one_and_update(
+        {"_id": counter_id},
+        {"$inc": {"seq": 1}},
+        upsert=True,
+        return_document=True
+    )
+    seq = result["seq"]
+    return f"{prefix}-{year}-{seq:05d}"
+
+
 # ============== RAZORPAY CLIENT ==============
 RAZORPAY_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "")
@@ -917,6 +937,7 @@ class SupplyType:
 class RFQ(BaseModel):
     model_config = ConfigDict(extra="ignore")
     rfq_id: str
+    rfq_number: Optional[str] = None  # Reference number: RFQ-YYYY-XXXXX
     buyer_id: str
     title: str
     description: Optional[str] = None
@@ -4838,10 +4859,12 @@ async def bulk_import_machines(
 @api_router.post("/rfqs", response_model=RFQ)
 async def create_rfq(rfq: RFQCreate, user: dict = Depends(get_current_user)):
     rfq_id = f"rfq_{uuid.uuid4().hex[:12]}"
+    rfq_number = await get_next_sequence("RFQ")
     now = datetime.now(timezone.utc).isoformat()
     
     rfq_doc = {
         "rfq_id": rfq_id,
+        "rfq_number": rfq_number,
         "buyer_id": user["user_id"],
         **rfq.model_dump(),
         "status": RFQStatus.DRAFT,
@@ -7850,11 +7873,15 @@ async def submit_vendor_quotation(request: Request, user: dict = Depends(get_cur
     total_cost = material_cost + machining_cost + additional_costs_total
     
     quote_id = f"quote_{uuid.uuid4().hex[:12]}"
+    quotation_number = await get_next_sequence("QT")
     now = datetime.now(timezone.utc)
     
     quote_doc = {
         "quote_id": quote_id,
+        "quotation_number": quotation_number,
         "rfq_id": rfq_id,
+        "rfq_number": rfq.get("rfq_number"),
+        "item_name": rfq.get("title"),
         "vendor_id": vendor["vendor_id"],
         "price": total_cost,  # Legacy field
         "total_price": total_cost,
@@ -8009,6 +8036,7 @@ async def submit_itemwise_quotation(request: Request, user: dict = Depends(get_c
         })
     
     quote_id = f"quote_{uuid.uuid4().hex[:12]}"
+    quotation_number = await get_next_sequence("QT")
     now = datetime.now(timezone.utc)
     
     # Get total RFQ items count to determine if this is a partial quote
@@ -8022,7 +8050,10 @@ async def submit_itemwise_quotation(request: Request, user: dict = Depends(get_c
     
     quote_doc = {
         "quote_id": quote_id,
+        "quotation_number": quotation_number,
         "rfq_id": rfq_id,
+        "rfq_number": rfq.get("rfq_number"),
+        "item_name": rfq.get("title"),
         "vendor_id": vendor["vendor_id"],
         "price": grand_total,  # Legacy field
         "total_price": grand_total,
@@ -8191,6 +8222,7 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
         raise HTTPException(status_code=404, detail="RFQ not found")
     
     quote_id = f"quote_{uuid.uuid4().hex[:12]}"
+    quotation_number = await get_next_sequence("QT")
     now = datetime.now(timezone.utc)
     
     # Calculate total cost from breakdown
@@ -8205,7 +8237,10 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
     
     quote_doc = {
         "quote_id": quote_id,
+        "quotation_number": quotation_number,
         "rfq_id": quote.rfq_id,
+        "rfq_number": rfq.get("rfq_number"),
+        "item_name": rfq.get("title"),
         "vendor_id": vendor["vendor_id"],
         "price": final_price,  # Legacy field
         "total_price": total_cost,  # New calculated total
@@ -8871,6 +8906,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     
     # Create order with finalized payment terms from quote
     order_id = f"order_{uuid.uuid4().hex[:12]}"
+    order_number = await get_next_sequence("ORD")
     po_number = f"PO-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
     now = datetime.now(timezone.utc).isoformat()
     
@@ -8879,8 +8915,12 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     
     order_doc = {
         "order_id": order_id,
+        "order_number": order_number,
         "rfq_id": quote["rfq_id"],
+        "rfq_number": rfq.get("rfq_number"),
         "quote_id": quote_id,
+        "quotation_number": quote.get("quotation_number"),
+        "item_name": rfq.get("title"),
         "buyer_id": user["user_id"],
         "vendor_id": quote["vendor_id"],
         "total_amount": quote["price"],
@@ -8989,6 +9029,7 @@ async def accept_quote(quote_id: str, user: dict = Depends(get_current_user)):
     return {
         "message": "Quote accepted",
         "order_id": order_id,
+        "order_number": order_number,
         "po_number": po_number,
         "payment_terms": payment_terms,
         "payment_terms_label": PAYMENT_TERMS_LABELS.get(payment_terms, payment_terms),
@@ -10239,6 +10280,52 @@ async def stripe_webhook(request: Request):
     except Exception as e:
         logger.error(f"Webhook error: {str(e)}")
         return {"status": "error", "message": str(e)}
+
+# ============== REFERENCE NUMBER MIGRATION ==============
+
+@api_router.post("/admin/migrate-reference-numbers")
+async def migrate_reference_numbers(user: dict = Depends(get_current_user)):
+    """Backfill reference numbers for all existing RFQs, Quotes, and Orders that don't have them."""
+    if not has_admin_access(user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    results = {"rfqs": 0, "quotes": 0, "orders": 0}
+    
+    # Migrate RFQs
+    rfqs = await db.rfqs.find({"rfq_number": {"$exists": False}}, {"_id": 0, "rfq_id": 1, "created_at": 1}).sort("created_at", 1).to_list(10000)
+    for rfq_doc in rfqs:
+        rfq_num = await get_next_sequence("RFQ")
+        await db.rfqs.update_one({"rfq_id": rfq_doc["rfq_id"]}, {"$set": {"rfq_number": rfq_num}})
+        results["rfqs"] += 1
+    
+    # Migrate Quotes - also inherit item_name and rfq_number from parent RFQ
+    quotes = await db.quotes.find({"quotation_number": {"$exists": False}}, {"_id": 0, "quote_id": 1, "rfq_id": 1, "created_at": 1}).sort("created_at", 1).to_list(10000)
+    for q in quotes:
+        qt_num = await get_next_sequence("QT")
+        rfq = await db.rfqs.find_one({"rfq_id": q["rfq_id"]}, {"_id": 0, "rfq_number": 1, "title": 1})
+        update = {"quotation_number": qt_num}
+        if rfq:
+            update["rfq_number"] = rfq.get("rfq_number")
+            update["item_name"] = rfq.get("title")
+        await db.quotes.update_one({"quote_id": q["quote_id"]}, {"$set": update})
+        results["quotes"] += 1
+    
+    # Migrate Orders - inherit rfq_number, quotation_number, item_name
+    orders = await db.orders.find({"order_number": {"$exists": False}}, {"_id": 0, "order_id": 1, "rfq_id": 1, "quote_id": 1, "created_at": 1}).sort("created_at", 1).to_list(10000)
+    for o in orders:
+        ord_num = await get_next_sequence("ORD")
+        rfq = await db.rfqs.find_one({"rfq_id": o["rfq_id"]}, {"_id": 0, "rfq_number": 1, "title": 1})
+        quote = await db.quotes.find_one({"quote_id": o.get("quote_id")}, {"_id": 0, "quotation_number": 1})
+        update = {"order_number": ord_num}
+        if rfq:
+            update["rfq_number"] = rfq.get("rfq_number")
+            update["item_name"] = rfq.get("title")
+        if quote:
+            update["quotation_number"] = quote.get("quotation_number")
+        await db.orders.update_one({"order_id": o["order_id"]}, {"$set": update})
+        results["orders"] += 1
+    
+    return {"message": "Migration complete", "migrated": results}
 
 # ============== ADMIN ROUTES ==============
 

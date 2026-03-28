@@ -14,6 +14,7 @@ import {
   FileText, ExternalLink, MessageSquare, CreditCard, RefreshCw,
   ChevronDown, ChevronRight, Package, Target, Eye
 } from "lucide-react";
+import RefNumber from "../components/RefNumber";
 
 const PAYMENT_TERMS_LABELS = {
   net_30: "Net 30 Days",
@@ -421,7 +422,10 @@ const BuyerQuotes = () => {
                                   <Building2 className="w-5 h-5 text-slate-500" />
                                 </div>
                                 <div className="flex-1">
-                                  <h4 className="font-medium text-slate-900">{quote.vendor_name || "Vendor"}</h4>
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-medium text-slate-900">{quote.vendor_name || "Vendor"}</h4>
+                                    <RefNumber value={quote.quotation_number} />
+                                  </div>
                                   <div className="flex items-center gap-3 text-sm text-slate-500">
                                     {quote.vendor_rating > 0 && (
                                       <span className="flex items-center gap-1">

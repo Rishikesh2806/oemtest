@@ -12,6 +12,7 @@ import {
   Settings, FileText, Package, DollarSign, Wrench,
   ArrowRight, AlertCircle, Loader2, CheckCircle2, XCircle, Mic
 } from "lucide-react";
+import RefNumber from "../components/RefNumber";
 
 const VendorDashboard = () => {
   const { user } = useAuth();
@@ -241,9 +242,12 @@ const VendorDashboard = () => {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-medium text-slate-900">{rfq.title}</p>
-                          <p className="text-sm text-slate-500">
-                            {rfq.material_type} • Qty: {rfq.quantity}
-                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <RefNumber value={rfq.rfq_number} />
+                            <span className="text-sm text-slate-500">
+                              {rfq.material_type} • Qty: {rfq.quantity}
+                            </span>
+                          </div>
                         </div>
                         <span className={`status-badge ${getStatusBadge(rfq.status)}`}>
                           {rfq.status.replace("_", " ")}
@@ -284,11 +288,14 @@ const VendorDashboard = () => {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="font-medium text-slate-900">
-                            Order #{order.order_id.slice(-8)}
+                            {order.item_name || "Manufacturing Order"}
                           </p>
-                          <p className="text-sm text-slate-500">
-                            ₹{order.total_amount?.toLocaleString('en-IN', {minimumFractionDigits: 2})}
-                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <RefNumber value={order.order_number} />
+                            <span className="text-sm text-slate-500">
+                              ₹{order.total_amount?.toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                            </span>
+                          </div>
                         </div>
                         <span className={`status-badge ${getStatusBadge(order.status)}`}>
                           {order.status.replace("_", " ")}

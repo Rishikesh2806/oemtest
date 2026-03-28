@@ -22,6 +22,7 @@ import QuoteDetailModal from "../components/QuoteDetailModal";
 import VendorNegotiationPanel from "../components/VendorNegotiationPanel";
 import VendorQuotationForm from "../components/VendorQuotationForm";
 import VisualMatchSection from "../components/VisualMatchSection";
+import RefNumber from "../components/RefNumber";
 
 const API_URL = window.location.origin;
 
@@ -304,7 +305,9 @@ const RFQDetail = () => {
             <div className="flex items-start justify-between">
               <div>
                 <CardTitle className="font-heading text-2xl">{rfq.title}</CardTitle>
-                <p className="text-slate-500 mt-1">RFQ #{rfq.rfq_id.slice(-8)}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <RefNumber value={rfq.rfq_number} />
+                </div>
               </div>
               {isVendor && rfq.status === "matching" && (
                 <Dialog open={quoteDialogOpen} onOpenChange={setQuoteDialogOpen}>

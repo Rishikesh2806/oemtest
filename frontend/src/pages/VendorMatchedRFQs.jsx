@@ -11,6 +11,7 @@ import {
   Clock, Send, Eye, MessageSquare, CheckCircle2, Target,
   CreditCard, Building2
 } from "lucide-react";
+import RefNumber from "../components/RefNumber";
 
 const PAYMENT_TERMS = [
   { value: "net_30", label: "Net 30 Days" },
@@ -81,8 +82,10 @@ const VendorMatchedRFQs = () => {
   };
 
   const filteredRFQs = rfqs.filter(rfq => {
-    const matchesSearch = rfq.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         rfq.material_type?.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = rfq.title?.toLowerCase().includes(term) ||
+                         rfq.rfq_number?.toLowerCase().includes(term) ||
+                         rfq.material_type?.toLowerCase().includes(term);
     const matchesStatus = filterStatus === "all" || rfq.status === filterStatus ||
                          (filterStatus === "needs_quote" && !existingQuotes[rfq.rfq_id]);
     return matchesSearch && matchesStatus;
@@ -188,6 +191,7 @@ const VendorMatchedRFQs = () => {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-3">
                               <h3 className="font-semibold text-slate-900 text-lg">{rfq.title}</h3>
+                              <RefNumber value={rfq.rfq_number} />
                               <span className={`status-badge ${getStatusBadge(rfq.status)}`}>
                                 {rfq.status?.replace("_", " ")}
                               </span>

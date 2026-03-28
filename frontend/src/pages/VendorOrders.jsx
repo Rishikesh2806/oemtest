@@ -11,6 +11,7 @@ import {
   Package, Search, Loader2, Calendar, Eye, Building2,
   Clock, CheckCircle2, Truck, XCircle, AlertTriangle, RefreshCw
 } from "lucide-react";
+import RefNumber from "../components/RefNumber";
 
 const STATUS_CONFIG = {
   pending: { label: "Pending", color: "bg-yellow-100 text-yellow-700", icon: Clock },
@@ -48,10 +49,14 @@ const VendorOrders = () => {
   };
 
   const filteredOrders = orders.filter(order => {
+    const term = searchTerm.toLowerCase();
     const matchesSearch = 
-      order.order_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.rfq_title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.buyer_name?.toLowerCase().includes(searchTerm.toLowerCase());
+      order.order_id?.toLowerCase().includes(term) ||
+      order.order_number?.toLowerCase().includes(term) ||
+      order.rfq_number?.toLowerCase().includes(term) ||
+      order.item_name?.toLowerCase().includes(term) ||
+      order.rfq_title?.toLowerCase().includes(term) ||
+      order.buyer_name?.toLowerCase().includes(term);
     const matchesStatus = filterStatus === "all" || order.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -171,12 +176,16 @@ const VendorOrders = () => {
                         <div>
                           <div className="flex items-center gap-3">
                             <h3 className="font-semibold text-slate-900">
-                              Order #{order.order_id?.slice(-8)}
+                              {order.item_name || "Manufacturing Order"}
                             </h3>
                             <Badge className={statusConfig.color}>
                               <StatusIcon className="w-3 h-3 mr-1" />
                               {statusConfig.label}
                             </Badge>
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            <RefNumber value={order.order_number} />
+                            {order.rfq_number && <RefNumber value={order.rfq_number} className="bg-blue-50 text-blue-600" />}
                           </div>
                           <p className="text-sm text-slate-500 mt-1">
                             {order.rfq_title || "Manufacturing Order"}

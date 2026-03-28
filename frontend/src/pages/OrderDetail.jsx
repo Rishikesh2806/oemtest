@@ -19,6 +19,7 @@ import RaiseDisputeForm from "../components/RaiseDisputeForm";
 import InspectionRequestModal from "../components/InspectionRequestModal";
 import InspectionStatusCard from "../components/InspectionStatusCard";
 import PaymentTimeline from "../components/PaymentTimeline";
+import RefNumber from "../components/RefNumber";
 
 const OrderDetail = () => {
   const { orderId } = useParams();
@@ -409,8 +410,14 @@ const OrderDetail = () => {
             <div className="flex items-start justify-between">
               <div>
                 <CardTitle className="font-heading text-2xl">
-                  {order.po_number ? `PO: ${order.po_number}` : `Order #${order.order_id.slice(-8)}`}
+                  {order.item_name || (order.po_number ? `PO: ${order.po_number}` : "Manufacturing Order")}
                 </CardTitle>
+                <div className="flex items-center gap-2 mt-2">
+                  {order.order_number && <RefNumber value={order.order_number} />}
+                  {order.rfq_number && <RefNumber value={order.rfq_number} className="bg-blue-50 text-blue-600" />}
+                  {order.quotation_number && <RefNumber value={order.quotation_number} className="bg-amber-50 text-amber-600" />}
+                  {order.po_number && <span className="font-mono text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded">{order.po_number}</span>}
+                </div>
                 <p className="text-slate-500 mt-1">
                   Created {new Date(order.created_at).toLocaleDateString()}
                 </p>

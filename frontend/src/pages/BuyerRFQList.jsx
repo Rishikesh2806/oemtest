@@ -9,6 +9,7 @@ import {
   FileText, Plus, Search, ArrowRight, Loader2, 
   Filter, Calendar, Package
 } from "lucide-react";
+import RefNumber from "../components/RefNumber";
 
 const BuyerRFQList = () => {
   const { user } = useAuth();
@@ -47,8 +48,10 @@ const BuyerRFQList = () => {
   };
 
   const filteredRFQs = rfqs.filter(rfq => {
-    const matchesSearch = rfq.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         rfq.material_type?.toLowerCase().includes(searchTerm.toLowerCase());
+    const term = searchTerm.toLowerCase();
+    const matchesSearch = rfq.title.toLowerCase().includes(term) ||
+                         rfq.rfq_number?.toLowerCase().includes(term) ||
+                         rfq.material_type?.toLowerCase().includes(term);
     const matchesStatus = filterStatus === "all" || rfq.status === filterStatus;
     return matchesSearch && matchesStatus;
   });
@@ -131,7 +134,10 @@ const BuyerRFQList = () => {
                           <FileText className="w-6 h-6 text-orange-600" />
                         </div>
                         <div>
-                          <h3 className="font-semibold text-slate-900 text-lg">{rfq.title}</h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-slate-900 text-lg">{rfq.title}</h3>
+                            <RefNumber value={rfq.rfq_number} />
+                          </div>
                           <div className="flex items-center gap-4 mt-2 text-sm text-slate-500">
                             <span className="flex items-center gap-1">
                               <Package className="w-4 h-4" /> {rfq.material_type}

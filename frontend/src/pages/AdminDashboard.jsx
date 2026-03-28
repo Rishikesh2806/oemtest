@@ -23,6 +23,7 @@ import {
   Link, X, CheckCircle, BarChart3, Zap, Shield, MessageSquare
 } from "lucide-react";
 import { Checkbox } from "../components/ui/checkbox";
+import RefNumber from "../components/RefNumber";
 
 // Tab configuration with required permissions
 const TAB_CONFIG = {
@@ -620,8 +621,10 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
   const [quotationCompareRFQ, setQuotationCompareRFQ] = useState(null);
   
   const filteredRFQs = rfqs.filter(r => {
-    const matchesSearch = r.title?.toLowerCase().includes(search.toLowerCase()) ||
-                          r.rfq_id?.toLowerCase().includes(search.toLowerCase());
+    const term = search.toLowerCase();
+    const matchesSearch = r.title?.toLowerCase().includes(term) ||
+                          r.rfq_number?.toLowerCase().includes(term) ||
+                          r.rfq_id?.toLowerCase().includes(term);
     const matchesStatus = statusFilter === "all" || r.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -824,7 +827,7 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
                   <td className="p-4">
                     <div>
                       <p className="font-medium text-slate-900">{rfq.title}</p>
-                      <p className="text-xs text-slate-500 font-mono">{rfq.rfq_id}</p>
+                      <RefNumber value={rfq.rfq_number} fallback={rfq.rfq_id} />
                     </div>
                   </td>
                   <td className="p-4">
@@ -1239,7 +1242,7 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
               <div className="flex items-center justify-between bg-orange-50 p-4 rounded-lg border border-orange-200">
                 <div>
                   <p className="text-xs text-slate-500">RFQ ID</p>
-                  <p className="font-mono text-sm font-medium">{viewRFQData.rfq_id}</p>
+                  <p className="font-mono text-sm font-medium">{viewRFQData.rfq_number || viewRFQData.rfq_id}</p>
                 </div>
                 <div className="text-center">
                   <p className="text-xs text-slate-500">Status</p>
@@ -1666,8 +1669,8 @@ const QuotesTab = ({ quotes, loading, onRefresh, onUpdateQuote, onDeleteQuote })
             <tbody className="divide-y divide-slate-100">
               {filteredQuotes.map((quote) => (
                 <tr key={quote.quote_id} className="hover:bg-slate-50" data-testid={`quote-row-${quote.quote_id}`}>
-                  <td className="p-4 text-xs font-mono text-slate-600">{quote.quote_id}</td>
-                  <td className="p-4 text-sm text-slate-900">{quote.rfq_info?.title || quote.rfq_id}</td>
+                  <td className="p-4"><RefNumber value={quote.quotation_number} fallback={quote.quote_id} /></td>
+                  <td className="p-4 text-sm text-slate-900">{quote.item_name || quote.rfq_info?.title || quote.rfq_id}</td>
                   <td className="p-4 text-sm text-slate-900">{quote.vendor_info?.company_name || "-"}</td>
                   <td className="p-4 font-medium text-slate-900">₹{quote.price?.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>
                   <td className="p-4 text-slate-600">{quote.lead_time_days} days</td>
@@ -1816,8 +1819,8 @@ const OrdersTab = ({ orders, loading, onRefresh, onUpdateOrder, onDeleteOrder })
             <tbody className="divide-y divide-slate-100">
               {filteredOrders.map((order) => (
                 <tr key={order.order_id} className="hover:bg-slate-50" data-testid={`order-row-${order.order_id}`}>
-                  <td className="p-4 text-xs font-mono text-slate-600">{order.order_id}</td>
-                  <td className="p-4 text-sm text-slate-900">{order.rfq_info?.title || "-"}</td>
+                  <td className="p-4"><RefNumber value={order.order_number} fallback={order.order_id} /></td>
+                  <td className="p-4 text-sm text-slate-900">{order.item_name || order.rfq_info?.title || "-"}</td>
                   <td className="p-4 text-sm text-slate-900">{order.buyer_info?.name || "-"}</td>
                   <td className="p-4 text-sm text-slate-900">{order.vendor_info?.company_name || "-"}</td>
                   <td className="p-4 font-medium text-slate-900">₹{order.total_amount?.toLocaleString('en-IN', {minimumFractionDigits: 2})}</td>

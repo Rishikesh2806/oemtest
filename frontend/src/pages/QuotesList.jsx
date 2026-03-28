@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { 
   DollarSign, Clock, FileText, Loader2, CheckCircle2, XCircle
 } from "lucide-react";
+import RefNumber from "../components/RefNumber";
 
 const QuotesList = () => {
   const [quotes, setQuotes] = useState([]);
@@ -78,8 +79,12 @@ const QuotesList = () => {
                           to={`/vendor/rfq/${quote.rfq_id}`}
                           className="font-medium text-slate-900 hover:text-orange-600"
                         >
-                          RFQ #{quote.rfq_id.slice(-8)}
+                          {quote.item_name || `RFQ #${quote.rfq_id.slice(-8)}`}
                         </Link>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <RefNumber value={quote.quotation_number} />
+                          {quote.rfq_number && <RefNumber value={quote.rfq_number} className="bg-blue-50 text-blue-600" />}
+                        </div>
                         <p className="text-sm text-slate-500">
                           Submitted {new Date(quote.created_at).toLocaleDateString()}
                         </p>
