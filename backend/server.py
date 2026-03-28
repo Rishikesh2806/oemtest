@@ -14643,6 +14643,165 @@ async def request_inspection(order_id: str, request: Request, user: dict = Depen
     }
 
 
+@api_router.post("/inspections/{inspection_id}/create-razorpay-order")
+async def create_inspection_razorpay_order(inspection_id: str, user: dict = Depends(get_current_user)):
+    """Create a Razorpay order for inspection fee payment."""
+    if not razorpay_client:
+        raise HTTPException(status_code=500, detail="Payment gateway not configured")
+
+    inspection = await db.inspections.find_one({"inspection_id": inspection_id}, {"_id": 0})
+    if not inspection:
+        raise HTTPException(status_code=404, detail="Inspection not found")
+
+    if inspection.get("buyer_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Only the buyer can pay for inspection")
+
+    if inspection.get("payment_status") == "paid":
+        raise HTTPException(status_code=400, detail="Payment already completed")
+
+    amount = inspection.get("inspection_fee", 0)
+    if amount <= 0:
+        raise HTTPException(status_code=400, detail="Invalid inspection fee")
+
+    amount_paise = int(round(amount * 100))
+    receipt = f"insp_{inspection_id}"[:40]
+
+    try:
+        razorpay_order = razorpay_client.order.create({
+            "amount": amount_paise,
+            "currency": "INR",
+            "receipt": receipt,
+            "payment_capture": 1,
+            "notes": {
+                "inspection_id": inspection_id,
+                "order_id": inspection.get("order_id", ""),
+                "inspection_type": inspection.get("inspection_type", "")
+            }
+        })
+    except Exception as e:
+        logger.error(f"Razorpay inspection order creation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Payment gateway error: {str(e)}")
+
+    await db.razorpay_orders.insert_one({
+        "razorpay_order_id": razorpay_order["id"],
+        "inspection_id": inspection_id,
+        "order_id": inspection.get("order_id"),
+        "amount": amount,
+        "amount_paise": amount_paise,
+        "currency": "INR",
+        "type": "inspection_fee",
+        "status": "created",
+        "user_id": user["user_id"],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+    buyer = await db.users.find_one({"user_id": user["user_id"]}, {"_id": 0, "name": 1, "email": 1, "phone": 1})
+
+    return {
+        "razorpay_order_id": razorpay_order["id"],
+        "amount": amount_paise,
+        "currency": "INR",
+        "key_id": RAZORPAY_KEY_ID,
+        "inspection_fee": amount,
+        "prefill": {
+            "name": buyer.get("name", "") if buyer else "",
+            "email": buyer.get("email", "") if buyer else "",
+            "contact": buyer.get("phone", "") if buyer else ""
+        }
+    }
+
+
+@api_router.post("/inspections/{inspection_id}/verify-payment")
+async def verify_inspection_payment(inspection_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """Verify Razorpay payment signature for inspection fee and update status."""
+    if not razorpay_client:
+        raise HTTPException(status_code=500, detail="Payment gateway not configured")
+
+    body = await request.json()
+    razorpay_order_id = body.get("razorpay_order_id")
+    razorpay_payment_id = body.get("razorpay_payment_id")
+    razorpay_signature = body.get("razorpay_signature")
+
+    if not all([razorpay_order_id, razorpay_payment_id, razorpay_signature]):
+        raise HTTPException(status_code=400, detail="Missing payment verification fields")
+
+    # Verify signature
+    try:
+        razorpay_client.utility.verify_payment_signature({
+            "razorpay_order_id": razorpay_order_id,
+            "razorpay_payment_id": razorpay_payment_id,
+            "razorpay_signature": razorpay_signature
+        })
+    except razorpay.errors.SignatureVerificationError:
+        logger.warning(f"Inspection payment signature failed: {inspection_id}")
+        await db.razorpay_orders.update_one(
+            {"razorpay_order_id": razorpay_order_id},
+            {"$set": {"status": "signature_failed", "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        raise HTTPException(status_code=400, detail="Payment signature verification failed")
+
+    inspection = await db.inspections.find_one({"inspection_id": inspection_id}, {"_id": 0})
+    if not inspection:
+        raise HTTPException(status_code=404, detail="Inspection not found")
+
+    if inspection.get("buyer_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Only the buyer can verify this payment")
+
+    now = datetime.now(timezone.utc)
+
+    # Update inspection status
+    await db.inspections.update_one(
+        {"inspection_id": inspection_id},
+        {
+            "$set": {
+                "status": InspectionStatus.AWAITING_ASSIGNMENT,
+                "payment_status": "paid",
+                "razorpay_payment_id": razorpay_payment_id,
+                "razorpay_order_id": razorpay_order_id,
+                "updated_at": now.isoformat()
+            },
+            "$push": {
+                "status_history": {
+                    "status": InspectionStatus.PAYMENT_COMPLETED,
+                    "timestamp": now.isoformat(),
+                    "note": f"Payment received: ₹{inspection.get('inspection_fee')} via Razorpay ({razorpay_payment_id})"
+                }
+            }
+        }
+    )
+
+    # Update razorpay_orders record
+    await db.razorpay_orders.update_one(
+        {"razorpay_order_id": razorpay_order_id},
+        {"$set": {
+            "status": "paid",
+            "razorpay_payment_id": razorpay_payment_id,
+            "razorpay_signature": razorpay_signature,
+            "updated_at": now.isoformat()
+        }}
+    )
+
+    # Notify admins to assign inspector
+    admins = await db.users.find({"role": UserRole.ADMIN}, {"_id": 0, "user_id": 1}).to_list(10)
+    for admin in admins:
+        await create_notification(
+            user_id=admin["user_id"],
+            notification_type=NotificationType.INSPECTION_PAYMENT_REQUIRED,
+            title="Inspection Payment Received - Assign Inspector",
+            message=f"Inspection {inspection_id} payment completed (₹{inspection.get('inspection_fee')}). Please assign an inspector.",
+            data={"inspection_id": inspection_id, "order_id": inspection.get("order_id")}
+        )
+
+    logger.info(f"Inspection payment verified: {inspection_id}, razorpay_payment: {razorpay_payment_id}")
+
+    return {
+        "success": True,
+        "razorpay_payment_id": razorpay_payment_id,
+        "status": InspectionStatus.AWAITING_ASSIGNMENT,
+        "message": "Payment successful. An inspector will be assigned shortly."
+    }
+
+
 @api_router.post("/inspections/{inspection_id}/pay")
 async def pay_inspection_fee(inspection_id: str, request: Request, user: dict = Depends(get_current_user)):
     """

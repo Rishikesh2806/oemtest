@@ -528,6 +528,13 @@ Comprehensive platform analytics for business tracking:
   - Root cause: `UserRole` class in `app/models/user.py` was missing `STAFF` attribute, causing `AttributeError` crash on `PUT /auth/role`
   - Fix: Added `STAFF = "staff"` and `BASE_ROLES` to `UserRole` in `app/models/user.py`
 
+### Razorpay Inspection Fee Payment (Completed - Mar 28, 2026)
+- **Backend**: `POST /api/inspections/{id}/create-razorpay-order` — creates Razorpay order for inspection fee (atomic, idempotent)
+- **Backend**: `POST /api/inspections/{id}/verify-payment` — verifies Razorpay signature, updates inspection to `awaiting_assignment`, records payment ID, notifies admins
+- **Frontend**: `InspectionStatusCard` shows amber "Inspection Fee Due" card with amount + "Pay via Razorpay" button when `status === payment_pending`
+- **Frontend**: After payment, shows green "Paid via Razorpay" badge with transaction ID
+- Replaces the previously MOCKED `/inspections/{id}/pay` endpoint with real Razorpay checkout
+
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check
 - Revenue analytics charts

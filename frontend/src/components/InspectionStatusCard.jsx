@@ -12,7 +12,7 @@ import {
   Shield, ClipboardCheck, ShieldCheck, User, Building2, 
   Clock, CheckCircle2, XCircle, AlertTriangle, FileText,
   Image as ImageIcon, Download, Loader2, RefreshCw, Eye,
-  MapPin, Calendar, CalendarClock
+  MapPin, Calendar, CalendarClock, CreditCard
 } from "lucide-react";
 
 const STATUS_CONFIG = {
@@ -137,6 +137,54 @@ const InspectionStatusCard = ({ orderId, isBuyer = false, isVendor = false, onRe
       onRefresh?.();
     } catch (error) {
       toast.error(error.response?.data?.detail || "Failed to request re-inspection");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handlePayInspectionFee = async () => {
+    setActionLoading(true);
+    try {
+      // Step 1: Create Razorpay order
+      const { data } = await api.post(`/inspections/${inspection.inspection_id}/create-razorpay-order`);
+
+      // Step 2: Open Razorpay checkout
+      const options = {
+        key: data.key_id,
+        amount: data.amount,
+        currency: data.currency,
+        name: "OEMLinker",
+        description: `Inspection Fee - ${inspection.inspection_type === "basic" ? "Basic" : "Certified"} Inspection`,
+        order_id: data.razorpay_order_id,
+        handler: async (response) => {
+          try {
+            await api.post(`/inspections/${inspection.inspection_id}/verify-payment`, {
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            });
+            toast.success("Inspection fee paid successfully!");
+            fetchInspection();
+            onRefresh?.();
+          } catch (err) {
+            toast.error(err.response?.data?.detail || "Payment verification failed");
+          }
+        },
+        prefill: data.prefill || {},
+        theme: { color: "#f97316" },
+        modal: { ondismiss: () => setActionLoading(false) }
+      };
+
+      if (!window.Razorpay) {
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.onload = () => { new window.Razorpay(options).open(); };
+        document.body.appendChild(script);
+      } else {
+        new window.Razorpay(options).open();
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to initiate payment");
     } finally {
       setActionLoading(false);
     }
@@ -310,6 +358,43 @@ const InspectionStatusCard = ({ orderId, isBuyer = false, isVendor = false, onRe
                   </a>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Buyer Payment Action */}
+          {isBuyer && inspection.status === "payment_pending" && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-3" data-testid="inspection-payment-section">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-amber-800">Inspection Fee Due</p>
+                  <p className="text-xs text-amber-600">Pay to proceed with inspector assignment</p>
+                </div>
+                <p className="text-lg font-bold text-amber-900">
+                  ₹{inspection.inspection_fee?.toLocaleString('en-IN')}
+                </p>
+              </div>
+              <Button
+                onClick={handlePayInspectionFee}
+                disabled={actionLoading}
+                className="w-full bg-orange-500 hover:bg-orange-600"
+                data-testid="pay-inspection-fee-btn"
+              >
+                {actionLoading ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <CreditCard className="w-4 h-4 mr-2" />
+                )}
+                Pay ₹{inspection.inspection_fee?.toLocaleString('en-IN')} via Razorpay
+              </Button>
+            </div>
+          )}
+
+          {/* Payment Completed Badge */}
+          {inspection.payment_status === "paid" && inspection.razorpay_payment_id && (
+            <div className="flex items-center gap-2 p-2 bg-green-50 rounded-lg text-xs text-green-700">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Paid via Razorpay</span>
+              <span className="font-mono text-green-600 ml-auto">{inspection.razorpay_payment_id}</span>
             </div>
           )}
 
