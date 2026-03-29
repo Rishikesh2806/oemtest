@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Request, Response
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Request, Response, Query
 from fastapi.responses import JSONResponse, StreamingResponse, FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -3245,18 +3245,23 @@ async def delete_experience(experience_id: str, user: dict = Depends(get_current
 @api_router.post("/vendor/portfolio")
 async def upload_portfolio_photo(
     file: UploadFile = File(...),
+    vendor_id: str = Query(None),
     user: dict = Depends(get_current_user)
 ):
-    """Upload a portfolio photo and analyze it with AI vision"""
+    """Upload a portfolio photo and analyze it with AI vision. Admins can specify vendor_id."""
     from app.services.s3_storage_service import upload_file as s3_upload
     from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
     
-    if user["role"] != "vendor":
-        raise HTTPException(status_code=403, detail="Only vendors can upload portfolio photos")
-    
-    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
-    if not vendor:
-        raise HTTPException(status_code=404, detail="Vendor profile not found")
+    if user["role"] == "admin" and vendor_id:
+        vendor = await db.vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor not found")
+    elif user["role"] == "vendor":
+        vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+        if not vendor:
+            raise HTTPException(status_code=404, detail="Vendor profile not found")
+    else:
+        raise HTTPException(status_code=403, detail="Only vendors or admins can upload portfolio photos")
     
     allowed_types = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
     if file.content_type not in allowed_types:
@@ -3371,14 +3376,17 @@ async def get_vendor_portfolio_public(vendor_id: str):
 
 @api_router.delete("/vendor/portfolio/{portfolio_id}")
 async def delete_portfolio_photo(portfolio_id: str, user: dict = Depends(get_current_user)):
-    """Delete a portfolio photo"""
-    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
-    if not vendor:
-        raise HTTPException(status_code=403, detail="Not authorized")
+    """Delete a portfolio photo. Admins can delete any portfolio item."""
+    if user["role"] == "admin":
+        result = await db.vendor_portfolio.delete_one({"portfolio_id": portfolio_id})
+    else:
+        vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+        if not vendor:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        result = await db.vendor_portfolio.delete_one({
+            "portfolio_id": portfolio_id, "vendor_id": vendor["vendor_id"]
+        })
     
-    result = await db.vendor_portfolio.delete_one({
-        "portfolio_id": portfolio_id, "vendor_id": vendor["vendor_id"]
-    })
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Portfolio item not found")
     
@@ -3387,11 +3395,7 @@ async def delete_portfolio_photo(portfolio_id: str, user: dict = Depends(get_cur
 
 @api_router.put("/vendor/portfolio/{portfolio_id}")
 async def update_portfolio_photo(portfolio_id: str, request: Request, user: dict = Depends(get_current_user)):
-    """Update auto-detected fields on a portfolio photo"""
-    vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
-    if not vendor:
-        raise HTTPException(status_code=403, detail="Not authorized")
-    
+    """Update auto-detected fields on a portfolio photo. Admins can update any item."""
     body = await request.json()
     allowed_fields = {"manufacturing_process", "material", "part_category", "surface_finish", "complexity"}
     updates = {k: v for k, v in body.items() if k in allowed_fields}
@@ -3401,10 +3405,20 @@ async def update_portfolio_photo(portfolio_id: str, request: Request, user: dict
     
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
     
-    result = await db.vendor_portfolio.update_one(
-        {"portfolio_id": portfolio_id, "vendor_id": vendor["vendor_id"]},
-        {"$set": updates}
-    )
+    if user["role"] == "admin":
+        result = await db.vendor_portfolio.update_one(
+            {"portfolio_id": portfolio_id},
+            {"$set": updates}
+        )
+    else:
+        vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
+        if not vendor:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        result = await db.vendor_portfolio.update_one(
+            {"portfolio_id": portfolio_id, "vendor_id": vendor["vendor_id"]},
+            {"$set": updates}
+        )
+    
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Portfolio item not found")
     

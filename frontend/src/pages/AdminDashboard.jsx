@@ -8,6 +8,7 @@ import QuotationComparison from "../components/QuotationComparison";
 import InspectionsTab from "../components/admin/InspectionsTab";
 import NDATemplatesTab from "../components/admin/NDATemplatesTab";
 import ChatAnalyticsTab from "../components/admin/ChatAnalyticsTab";
+import VendorPortfolio from "../components/VendorPortfolio";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -2685,6 +2686,9 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
             </Button>
           </CardContent>
         </Card>
+        
+        {/* Portfolio Management */}
+        <VendorPortfolio targetVendorId={selectedVendor} isAdmin={true} />
         
         {/* Machines Card */}
         <Card className="border-slate-200">

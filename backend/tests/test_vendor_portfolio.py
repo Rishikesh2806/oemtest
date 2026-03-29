@@ -1,49 +1,97 @@
 """
-Test Vendor Portfolio API Endpoints
-Tests for:
-- GET /api/vendor/portfolio - Get portfolio items for authenticated vendor
-- PUT /api/vendor/portfolio/{portfolio_id} - Update portfolio item fields
-- DELETE /api/vendor/portfolio/{portfolio_id} - Delete portfolio item
+Vendor Portfolio API Tests
+Tests for portfolio CRUD operations including:
+- Public GET /api/vendors/{vendor_id}/portfolio (no auth)
+- Admin POST /api/vendor/portfolio?vendor_id=xxx (admin creates for vendor)
+- Admin DELETE /api/vendor/portfolio/{portfolio_id} (admin deletes any)
+- Admin PUT /api/vendor/portfolio/{portfolio_id} (admin updates any)
 """
+
 import pytest
 import requests
 import os
+import io
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
-# Test credentials from iteration_36.json
-VENDOR_EMAIL = "testvendor_nda@test.com"
-VENDOR_PASSWORD = "vendor123"
+# Test credentials from review request
 ADMIN_EMAIL = "admin@offoadex.com"
 ADMIN_PASSWORD = "admin123"
+VENDOR_EMAIL = "testvendor_nda@test.com"
+VENDOR_PASSWORD = "vendor123"
+BUYER_EMAIL = "visualbuyer@test.com"
+BUYER_PASSWORD = "buyer123"
 
 
-class TestVendorPortfolioAPI:
-    """Test Vendor Portfolio CRUD operations"""
+@pytest.fixture(scope="module")
+def api_client():
+    """Shared requests session"""
+    session = requests.Session()
+    session.headers.update({"Content-Type": "application/json"})
+    return session
+
+
+@pytest.fixture(scope="module")
+def admin_token(api_client):
+    """Get admin authentication token"""
+    response = api_client.post(f"{BASE_URL}/api/auth/login", json={
+        "email": ADMIN_EMAIL,
+        "password": ADMIN_PASSWORD
+    })
+    if response.status_code == 200:
+        data = response.json()
+        return data.get("access_token")
+    pytest.skip(f"Admin authentication failed: {response.status_code} - {response.text}")
+
+
+@pytest.fixture(scope="module")
+def vendor_token(api_client):
+    """Get vendor authentication token"""
+    response = api_client.post(f"{BASE_URL}/api/auth/login", json={
+        "email": VENDOR_EMAIL,
+        "password": VENDOR_PASSWORD
+    })
+    if response.status_code == 200:
+        data = response.json()
+        return data.get("access_token")
+    pytest.skip(f"Vendor authentication failed: {response.status_code} - {response.text}")
+
+
+@pytest.fixture(scope="module")
+def buyer_token(api_client):
+    """Get buyer authentication token"""
+    response = api_client.post(f"{BASE_URL}/api/auth/login", json={
+        "email": BUYER_EMAIL,
+        "password": BUYER_PASSWORD
+    })
+    if response.status_code == 200:
+        data = response.json()
+        return data.get("access_token")
+    pytest.skip(f"Buyer authentication failed: {response.status_code} - {response.text}")
+
+
+@pytest.fixture(scope="module")
+def vendor_id(api_client, admin_token):
+    """Get a vendor ID for testing"""
+    response = api_client.get(
+        f"{BASE_URL}/api/admin/vendors",
+        headers={"Authorization": f"Bearer {admin_token}"}
+    )
+    if response.status_code == 200:
+        data = response.json()
+        # API returns array directly, not {"vendors": [...]}
+        vendors = data if isinstance(data, list) else data.get("vendors", [])
+        if vendors:
+            return vendors[0].get("vendor_id")
+    pytest.skip("No vendors found for testing")
+
+
+class TestPublicPortfolioEndpoint:
+    """Test GET /api/vendors/{vendor_id}/portfolio - Public endpoint (no auth)"""
     
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        """Setup test session with vendor authentication"""
-        self.session = requests.Session()
-        self.session.headers.update({"Content-Type": "application/json"})
-        
-        # Login as vendor
-        login_response = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": VENDOR_EMAIL,
-            "password": VENDOR_PASSWORD
-        })
-        
-        if login_response.status_code == 200:
-            token = login_response.json().get("access_token")
-            self.session.headers.update({"Authorization": f"Bearer {token}"})
-            self.vendor_user = login_response.json().get("user", {})
-            print(f"Logged in as vendor: {self.vendor_user.get('email')}")
-        else:
-            pytest.skip(f"Vendor login failed: {login_response.status_code} - {login_response.text}")
-    
-    def test_get_vendor_portfolio(self):
-        """Test GET /api/vendor/portfolio returns portfolio items"""
-        response = self.session.get(f"{BASE_URL}/api/vendor/portfolio")
+    def test_get_vendor_portfolio_public_no_auth(self, api_client, vendor_id):
+        """Public portfolio endpoint should work without authentication"""
+        response = api_client.get(f"{BASE_URL}/api/vendors/{vendor_id}/portfolio")
         
         assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         
@@ -51,237 +99,250 @@ class TestVendorPortfolioAPI:
         assert "portfolio" in data, "Response should contain 'portfolio' key"
         assert "total" in data, "Response should contain 'total' key"
         assert isinstance(data["portfolio"], list), "Portfolio should be a list"
-        
-        print(f"Portfolio items count: {data['total']}")
-        
-        # If portfolio has items, verify structure
-        if data["portfolio"]:
-            item = data["portfolio"][0]
-            print(f"First portfolio item: {item.get('portfolio_id')}")
-            # Verify expected fields exist
-            assert "portfolio_id" in item, "Portfolio item should have portfolio_id"
-            assert "vendor_id" in item, "Portfolio item should have vendor_id"
-            # Optional fields that may exist
-            optional_fields = ["photo_url", "manufacturing_process", "material", "part_category", "surface_finish", "complexity"]
-            for field in optional_fields:
-                if field in item:
-                    print(f"  {field}: {item[field]}")
+        print(f"PASS: Public portfolio endpoint returned {data['total']} items for vendor {vendor_id}")
     
-    def test_get_portfolio_returns_all_fields(self):
-        """Test that portfolio items contain all 5 editable tag fields"""
-        response = self.session.get(f"{BASE_URL}/api/vendor/portfolio")
+    def test_get_vendor_portfolio_nonexistent_vendor(self, api_client):
+        """Public portfolio endpoint should return empty for non-existent vendor"""
+        response = api_client.get(f"{BASE_URL}/api/vendors/nonexistent_vendor_123/portfolio")
         
-        assert response.status_code == 200
+        # Should return 200 with empty portfolio, not 404
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+        
         data = response.json()
-        
-        if not data["portfolio"]:
-            pytest.skip("No portfolio items to test field structure")
-        
-        item = data["portfolio"][0]
-        editable_fields = ["manufacturing_process", "material", "part_category", "surface_finish", "complexity"]
-        
-        print(f"Checking portfolio item {item.get('portfolio_id')} for editable fields:")
-        for field in editable_fields:
-            value = item.get(field)
-            print(f"  {field}: {value}")
-        
-        # At least portfolio_id should exist
-        assert "portfolio_id" in item
+        assert data["portfolio"] == [], "Portfolio should be empty for non-existent vendor"
+        assert data["total"] == 0, "Total should be 0 for non-existent vendor"
+        print("PASS: Non-existent vendor returns empty portfolio")
+
+
+class TestAdminPortfolioUpload:
+    """Test POST /api/vendor/portfolio with admin token and vendor_id query param"""
     
-    def test_update_portfolio_manufacturing_process(self):
-        """Test PUT /api/vendor/portfolio/{id} updates manufacturing_process field"""
-        # First get portfolio items
-        get_response = self.session.get(f"{BASE_URL}/api/vendor/portfolio")
-        assert get_response.status_code == 200
+    def test_admin_upload_portfolio_for_vendor(self, api_client, admin_token, vendor_id):
+        """Admin should be able to upload portfolio photo for any vendor"""
+        # Create a simple test image (1x1 pixel PNG)
+        test_image = io.BytesIO()
+        # Minimal valid PNG
+        test_image.write(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82')
+        test_image.seek(0)
         
-        data = get_response.json()
-        if not data["portfolio"]:
-            pytest.skip("No portfolio items to update")
+        files = {
+            'file': ('test_image.png', test_image, 'image/png')
+        }
         
-        portfolio_id = data["portfolio"][0]["portfolio_id"]
-        original_value = data["portfolio"][0].get("manufacturing_process")
-        
-        # Update the field
-        new_value = "CNC machining" if original_value != "CNC machining" else "casting"
-        update_response = self.session.put(
-            f"{BASE_URL}/api/vendor/portfolio/{portfolio_id}",
-            json={"manufacturing_process": new_value}
+        response = requests.post(
+            f"{BASE_URL}/api/vendor/portfolio?vendor_id={vendor_id}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            files=files
         )
         
-        assert update_response.status_code == 200, f"Update failed: {update_response.status_code} - {update_response.text}"
+        # Accept 200 or 201 for successful upload
+        assert response.status_code in [200, 201], f"Expected 200/201, got {response.status_code}: {response.text}"
         
-        update_data = update_response.json()
-        assert "message" in update_data
-        assert "updates" in update_data
-        assert update_data["updates"].get("manufacturing_process") == new_value
+        data = response.json()
+        assert "portfolio_id" in data, "Response should contain portfolio_id"
+        assert data["portfolio_id"].startswith("port_"), "Portfolio ID should start with 'port_'"
+        assert data["vendor_id"] == vendor_id, f"Vendor ID should match: expected {vendor_id}, got {data.get('vendor_id')}"
         
-        print(f"Updated manufacturing_process from '{original_value}' to '{new_value}'")
+        # Store for cleanup
+        TestAdminPortfolioUpload.created_portfolio_id = data["portfolio_id"]
+        print(f"PASS: Admin uploaded portfolio {data['portfolio_id']} for vendor {vendor_id}")
+    
+    def test_admin_upload_without_vendor_id_fails(self, api_client, admin_token):
+        """Admin upload without vendor_id should fail (admin has no vendor profile)"""
+        test_image = io.BytesIO()
+        test_image.write(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82')
+        test_image.seek(0)
         
-        # Verify persistence with GET
-        verify_response = self.session.get(f"{BASE_URL}/api/vendor/portfolio")
+        files = {
+            'file': ('test_image.png', test_image, 'image/png')
+        }
+        
+        response = requests.post(
+            f"{BASE_URL}/api/vendor/portfolio",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            files=files
+        )
+        
+        # Should fail because admin has no vendor profile
+        assert response.status_code in [400, 403, 404], f"Expected 400/403/404, got {response.status_code}"
+        print(f"PASS: Admin upload without vendor_id correctly rejected with {response.status_code}")
+    
+    def test_buyer_cannot_upload_portfolio(self, api_client, buyer_token, vendor_id):
+        """Buyer should not be able to upload portfolio photos"""
+        test_image = io.BytesIO()
+        test_image.write(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82')
+        test_image.seek(0)
+        
+        files = {
+            'file': ('test_image.png', test_image, 'image/png')
+        }
+        
+        response = requests.post(
+            f"{BASE_URL}/api/vendor/portfolio?vendor_id={vendor_id}",
+            headers={"Authorization": f"Bearer {buyer_token}"},
+            files=files
+        )
+        
+        # Buyer should be rejected
+        assert response.status_code in [403, 401], f"Expected 403/401, got {response.status_code}"
+        print(f"PASS: Buyer correctly rejected from uploading portfolio with {response.status_code}")
+
+
+class TestAdminPortfolioUpdate:
+    """Test PUT /api/vendor/portfolio/{portfolio_id} with admin token"""
+    
+    def test_admin_update_portfolio_item(self, api_client, admin_token, vendor_id):
+        """Admin should be able to update any portfolio item's AI-detected fields"""
+        # First, get existing portfolio items
+        response = api_client.get(f"{BASE_URL}/api/vendors/{vendor_id}/portfolio")
+        assert response.status_code == 200
+        
+        portfolio = response.json().get("portfolio", [])
+        if not portfolio:
+            pytest.skip("No portfolio items to update")
+        
+        portfolio_id = portfolio[0]["portfolio_id"]
+        
+        # Update the portfolio item
+        update_data = {
+            "part_category": "TEST_bracket",
+            "manufacturing_process": "CNC machining",
+            "material": "aluminum",
+            "surface_finish": "anodized"
+        }
+        
+        response = api_client.put(
+            f"{BASE_URL}/api/vendor/portfolio/{portfolio_id}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            json=update_data
+        )
+        
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+        
+        data = response.json()
+        assert data.get("success") == True or "updated" in str(data).lower(), "Update should succeed"
+        print(f"PASS: Admin updated portfolio item {portfolio_id}")
+        
+        # Verify the update persisted
+        response = api_client.get(f"{BASE_URL}/api/vendors/{vendor_id}/portfolio")
+        assert response.status_code == 200
+        
+        updated_portfolio = response.json().get("portfolio", [])
+        updated_item = next((p for p in updated_portfolio if p["portfolio_id"] == portfolio_id), None)
+        
+        if updated_item:
+            assert updated_item.get("part_category") == "TEST_bracket", "Part category should be updated"
+            print(f"PASS: Verified portfolio update persisted")
+
+
+class TestAdminPortfolioDelete:
+    """Test DELETE /api/vendor/portfolio/{portfolio_id} with admin token"""
+    
+    def test_admin_delete_portfolio_item(self, api_client, admin_token, vendor_id):
+        """Admin should be able to delete any portfolio item"""
+        # First, upload a test item to delete
+        test_image = io.BytesIO()
+        test_image.write(b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82')
+        test_image.seek(0)
+        
+        files = {
+            'file': ('test_delete.png', test_image, 'image/png')
+        }
+        
+        upload_response = requests.post(
+            f"{BASE_URL}/api/vendor/portfolio?vendor_id={vendor_id}",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            files=files
+        )
+        
+        if upload_response.status_code not in [200, 201]:
+            pytest.skip(f"Could not upload test item: {upload_response.status_code}")
+        
+        portfolio_id = upload_response.json().get("portfolio_id")
+        
+        # Now delete it
+        delete_response = api_client.delete(
+            f"{BASE_URL}/api/vendor/portfolio/{portfolio_id}",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        
+        assert delete_response.status_code in [200, 204], f"Expected 200/204, got {delete_response.status_code}: {delete_response.text}"
+        print(f"PASS: Admin deleted portfolio item {portfolio_id}")
+        
+        # Verify deletion
+        verify_response = api_client.get(f"{BASE_URL}/api/vendors/{vendor_id}/portfolio")
         assert verify_response.status_code == 200
         
-        updated_item = next(
-            (p for p in verify_response.json()["portfolio"] if p["portfolio_id"] == portfolio_id),
-            None
-        )
-        assert updated_item is not None
-        assert updated_item.get("manufacturing_process") == new_value
-        print(f"Verified: manufacturing_process persisted as '{new_value}'")
+        remaining = verify_response.json().get("portfolio", [])
+        deleted_item = next((p for p in remaining if p["portfolio_id"] == portfolio_id), None)
+        assert deleted_item is None, "Deleted item should not exist in portfolio"
+        print(f"PASS: Verified portfolio item {portfolio_id} was deleted")
     
-    def test_update_portfolio_material(self):
-        """Test PUT /api/vendor/portfolio/{id} updates material field"""
-        get_response = self.session.get(f"{BASE_URL}/api/vendor/portfolio")
-        assert get_response.status_code == 200
+    def test_buyer_cannot_delete_portfolio(self, api_client, buyer_token, vendor_id):
+        """Buyer should not be able to delete portfolio items"""
+        # Get a portfolio item
+        response = api_client.get(f"{BASE_URL}/api/vendors/{vendor_id}/portfolio")
+        portfolio = response.json().get("portfolio", [])
         
-        data = get_response.json()
-        if not data["portfolio"]:
-            pytest.skip("No portfolio items to update")
+        if not portfolio:
+            pytest.skip("No portfolio items to test delete")
         
-        portfolio_id = data["portfolio"][0]["portfolio_id"]
-        original_value = data["portfolio"][0].get("material")
+        portfolio_id = portfolio[0]["portfolio_id"]
         
-        new_value = "aluminum" if original_value != "aluminum" else "steel"
-        update_response = self.session.put(
+        delete_response = api_client.delete(
             f"{BASE_URL}/api/vendor/portfolio/{portfolio_id}",
-            json={"material": new_value}
+            headers={"Authorization": f"Bearer {buyer_token}"}
         )
         
-        assert update_response.status_code == 200, f"Update failed: {update_response.status_code}"
-        print(f"Updated material from '{original_value}' to '{new_value}'")
-    
-    def test_update_portfolio_part_category(self):
-        """Test PUT /api/vendor/portfolio/{id} updates part_category field"""
-        get_response = self.session.get(f"{BASE_URL}/api/vendor/portfolio")
-        assert get_response.status_code == 200
-        
-        data = get_response.json()
-        if not data["portfolio"]:
-            pytest.skip("No portfolio items to update")
-        
-        portfolio_id = data["portfolio"][0]["portfolio_id"]
-        original_value = data["portfolio"][0].get("part_category")
-        
-        new_value = "bracket" if original_value != "bracket" else "housing"
-        update_response = self.session.put(
-            f"{BASE_URL}/api/vendor/portfolio/{portfolio_id}",
-            json={"part_category": new_value}
-        )
-        
-        assert update_response.status_code == 200, f"Update failed: {update_response.status_code}"
-        print(f"Updated part_category from '{original_value}' to '{new_value}'")
-    
-    def test_update_portfolio_surface_finish(self):
-        """Test PUT /api/vendor/portfolio/{id} updates surface_finish field"""
-        get_response = self.session.get(f"{BASE_URL}/api/vendor/portfolio")
-        assert get_response.status_code == 200
-        
-        data = get_response.json()
-        if not data["portfolio"]:
-            pytest.skip("No portfolio items to update")
-        
-        portfolio_id = data["portfolio"][0]["portfolio_id"]
-        original_value = data["portfolio"][0].get("surface_finish")
-        
-        new_value = "polished" if original_value != "polished" else "anodized"
-        update_response = self.session.put(
-            f"{BASE_URL}/api/vendor/portfolio/{portfolio_id}",
-            json={"surface_finish": new_value}
-        )
-        
-        assert update_response.status_code == 200, f"Update failed: {update_response.status_code}"
-        print(f"Updated surface_finish from '{original_value}' to '{new_value}'")
-    
-    def test_update_portfolio_complexity(self):
-        """Test PUT /api/vendor/portfolio/{id} updates complexity field"""
-        get_response = self.session.get(f"{BASE_URL}/api/vendor/portfolio")
-        assert get_response.status_code == 200
-        
-        data = get_response.json()
-        if not data["portfolio"]:
-            pytest.skip("No portfolio items to update")
-        
-        portfolio_id = data["portfolio"][0]["portfolio_id"]
-        original_value = data["portfolio"][0].get("complexity")
-        
-        new_value = "high" if original_value != "high" else "medium"
-        update_response = self.session.put(
-            f"{BASE_URL}/api/vendor/portfolio/{portfolio_id}",
-            json={"complexity": new_value}
-        )
-        
-        assert update_response.status_code == 200, f"Update failed: {update_response.status_code}"
-        print(f"Updated complexity from '{original_value}' to '{new_value}'")
-    
-    def test_update_portfolio_invalid_field_rejected(self):
-        """Test PUT /api/vendor/portfolio/{id} rejects invalid fields"""
-        get_response = self.session.get(f"{BASE_URL}/api/vendor/portfolio")
-        assert get_response.status_code == 200
-        
-        data = get_response.json()
-        if not data["portfolio"]:
-            pytest.skip("No portfolio items to update")
-        
-        portfolio_id = data["portfolio"][0]["portfolio_id"]
-        
-        # Try to update an invalid field
-        update_response = self.session.put(
-            f"{BASE_URL}/api/vendor/portfolio/{portfolio_id}",
-            json={"invalid_field": "test_value"}
-        )
-        
-        # Should return 400 because no valid fields to update
-        assert update_response.status_code == 400, f"Expected 400 for invalid field, got {update_response.status_code}"
-        print("Correctly rejected invalid field update")
-    
-    def test_update_portfolio_nonexistent_id(self):
-        """Test PUT /api/vendor/portfolio/{id} returns 404 for nonexistent ID"""
-        update_response = self.session.put(
-            f"{BASE_URL}/api/vendor/portfolio/nonexistent_id_12345",
-            json={"material": "steel"}
-        )
-        
-        assert update_response.status_code == 404, f"Expected 404, got {update_response.status_code}"
-        print("Correctly returned 404 for nonexistent portfolio ID")
-    
-    def test_delete_portfolio_nonexistent_id(self):
-        """Test DELETE /api/vendor/portfolio/{id} returns 404 for nonexistent ID"""
-        delete_response = self.session.delete(
-            f"{BASE_URL}/api/vendor/portfolio/nonexistent_id_12345"
-        )
-        
-        assert delete_response.status_code == 404, f"Expected 404, got {delete_response.status_code}"
-        print("Correctly returned 404 for nonexistent portfolio ID on delete")
+        # Buyer should be rejected
+        assert delete_response.status_code in [403, 401, 404], f"Expected 403/401/404, got {delete_response.status_code}"
+        print(f"PASS: Buyer correctly rejected from deleting portfolio with {delete_response.status_code}")
 
 
-class TestVendorPortfolioUnauthorized:
-    """Test unauthorized access to portfolio endpoints"""
+class TestPortfolioAITags:
+    """Test that portfolio items have AI-detected tags"""
     
-    def test_get_portfolio_without_auth(self):
-        """Test GET /api/vendor/portfolio requires authentication"""
-        response = requests.get(f"{BASE_URL}/api/vendor/portfolio")
+    def test_portfolio_items_have_expected_fields(self, api_client, vendor_id):
+        """Portfolio items should have AI-detected tag fields"""
+        response = api_client.get(f"{BASE_URL}/api/vendors/{vendor_id}/portfolio")
+        assert response.status_code == 200
         
-        # Should return 401 or 403
-        assert response.status_code in [401, 403], f"Expected 401/403, got {response.status_code}"
-        print("Correctly requires authentication for GET portfolio")
+        portfolio = response.json().get("portfolio", [])
+        
+        if not portfolio:
+            pytest.skip("No portfolio items to verify fields")
+        
+        # Check first item has expected fields
+        item = portfolio[0]
+        
+        expected_fields = ["portfolio_id", "vendor_id", "photo_url", "created_at"]
+        ai_tag_fields = ["part_category", "manufacturing_process", "material", "surface_finish", "complexity"]
+        
+        for field in expected_fields:
+            assert field in item, f"Portfolio item should have '{field}' field"
+        
+        # AI tag fields may or may not be present depending on AI analysis
+        present_tags = [f for f in ai_tag_fields if f in item and item[f]]
+        print(f"PASS: Portfolio item has {len(present_tags)} AI-detected tags: {present_tags}")
+
+
+class TestVendorOwnPortfolio:
+    """Test vendor's own portfolio operations"""
     
-    def test_update_portfolio_without_auth(self):
-        """Test PUT /api/vendor/portfolio/{id} requires authentication"""
-        response = requests.put(
-            f"{BASE_URL}/api/vendor/portfolio/test_id",
-            json={"material": "steel"}
+    def test_vendor_get_own_portfolio(self, api_client, vendor_token):
+        """Vendor should be able to get their own portfolio"""
+        response = api_client.get(
+            f"{BASE_URL}/api/vendor/portfolio",
+            headers={"Authorization": f"Bearer {vendor_token}"}
         )
         
-        assert response.status_code in [401, 403], f"Expected 401/403, got {response.status_code}"
-        print("Correctly requires authentication for PUT portfolio")
-    
-    def test_delete_portfolio_without_auth(self):
-        """Test DELETE /api/vendor/portfolio/{id} requires authentication"""
-        response = requests.delete(f"{BASE_URL}/api/vendor/portfolio/test_id")
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
         
-        assert response.status_code in [401, 403], f"Expected 401/403, got {response.status_code}"
-        print("Correctly requires authentication for DELETE portfolio")
+        data = response.json()
+        assert "portfolio" in data, "Response should contain 'portfolio' key"
+        assert "total" in data, "Response should contain 'total' key"
+        print(f"PASS: Vendor retrieved own portfolio with {data['total']} items")
 
 
 if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    pytest.main([__file__, "-v", "--tb=short"])

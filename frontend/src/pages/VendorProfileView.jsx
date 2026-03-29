@@ -11,8 +11,9 @@ import {
   Wrench, Package, CheckCircle2, ArrowLeft, Loader2,
   MessageSquare, ExternalLink, Briefcase, TrendingUp, ThumbsUp,
   Quote, Image, X, ChevronLeft, ChevronRight, Maximize2,
-  Settings, Gauge, Ruler, Activity, Info
+  Settings, Gauge, Ruler, Activity, Info, Camera, Layers, Sparkles, Palette
 } from "lucide-react";
+import { Badge } from "../components/ui/badge";
 
 // Helper function to get machine availability badge
 const getAvailabilityBadge = (status) => {
@@ -97,6 +98,8 @@ const VendorProfileView = () => {
   const [vendor, setVendor] = useState(null);
   const [ratings, setRatings] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [portfolioItems, setPortfolioItems] = useState([]);
+  const [portfolioLoading, setPortfolioLoading] = useState(true);
   
   // Image gallery state
   const [selectedMachine, setSelectedMachine] = useState(null);
@@ -106,6 +109,7 @@ const VendorProfileView = () => {
   useEffect(() => {
     fetchVendor();
     fetchRatings();
+    fetchPortfolio();
   }, [vendorId]);
   
   // Image gallery handlers
@@ -165,6 +169,18 @@ const VendorProfileView = () => {
       setRatings(response.data);
     } catch (error) {
       console.error("Failed to load ratings:", error);
+    }
+  };
+
+  const fetchPortfolio = async () => {
+    setPortfolioLoading(true);
+    try {
+      const response = await api.get(`/vendors/${vendorId}/portfolio`);
+      setPortfolioItems(response.data.portfolio || []);
+    } catch (error) {
+      console.error("Failed to load portfolio:", error);
+    } finally {
+      setPortfolioLoading(false);
     }
   };
 
@@ -448,6 +464,63 @@ const VendorProfileView = () => {
                         {mat}
                       </span>
                     ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Portfolio Gallery */}
+            {!portfolioLoading && portfolioItems.length > 0 && (
+              <Card className="border-slate-200" data-testid="vendor-portfolio-gallery">
+                <CardHeader>
+                  <CardTitle className="font-heading text-lg flex items-center gap-2">
+                    <Camera className="w-5 h-5 text-orange-600" /> Work Portfolio ({portfolioItems.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {portfolioItems.map(item => {
+                      const complexityColor = {
+                        low: "bg-green-50 text-green-700 border-green-200",
+                        medium: "bg-amber-50 text-amber-700 border-amber-200",
+                        high: "bg-red-50 text-red-700 border-red-200"
+                      };
+                      return (
+                        <div key={item.portfolio_id} className="group bg-white border border-slate-200 rounded-xl overflow-hidden hover:shadow-lg hover:border-slate-300 transition-all duration-200" data-testid={`portfolio-item-${item.portfolio_id}`}>
+                          <div className="relative aspect-[4/3] bg-slate-100 overflow-hidden">
+                            <img
+                              src={item.photo_url}
+                              alt={item.part_category || "Portfolio item"}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                              loading="lazy"
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                            {item.complexity && (
+                              <div className={`absolute top-2 left-2 text-[10px] font-bold uppercase px-2 py-0.5 rounded-md border ${complexityColor[item.complexity] || "bg-slate-50 text-slate-600 border-slate-200"}`}>
+                                {item.complexity}
+                              </div>
+                            )}
+                          </div>
+                          <div className="p-3 space-y-2">
+                            <div className="flex flex-wrap gap-1.5">
+                              {item.part_category && <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border bg-violet-50 text-violet-700 border-violet-200"><Sparkles className="w-3 h-3 opacity-70" />{item.part_category}</span>}
+                              {item.manufacturing_process && <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border bg-blue-50 text-blue-700 border-blue-200"><Wrench className="w-3 h-3 opacity-70" />{item.manufacturing_process}</span>}
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {item.material && <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-200"><Layers className="w-3 h-3 opacity-70" />{item.material}</span>}
+                              {item.surface_finish && <span className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg border bg-amber-50 text-amber-700 border-amber-200"><Palette className="w-3 h-3 opacity-70" />{item.surface_finish}</span>}
+                            </div>
+                            {item.industry_fit?.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {item.industry_fit.map((ind, i) => (
+                                  <Badge key={i} variant="outline" className="text-[10px] px-1.5 py-0 h-5 font-normal text-slate-500 border-slate-200">{ind}</Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>

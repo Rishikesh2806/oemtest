@@ -171,7 +171,7 @@ const EditableTag = ({ field, value, portfolioId, onUpdate }) => {
   );
 };
 
-const PortfolioCard = ({ item, onDelete, onUpdate }) => {
+const PortfolioCard = ({ item, onDelete, onUpdate, editable = true }) => {
   const [deleting, setDeleting] = useState(false);
   const [imgError, setImgError] = useState(false);
 
@@ -212,14 +212,16 @@ const PortfolioCard = ({ item, onDelete, onUpdate }) => {
           />
         )}
         {/* Delete button */}
-        <button
-          onClick={handleDelete}
-          disabled={deleting}
-          className="absolute top-2 right-2 w-8 h-8 bg-white/90 hover:bg-red-500 hover:text-white text-slate-500 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-sm border border-slate-200"
-          data-testid={`delete-${item.portfolio_id}`}
-        >
-          {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-        </button>
+        {editable && (
+          <button
+            onClick={handleDelete}
+            disabled={deleting}
+            className="absolute top-2 right-2 w-8 h-8 bg-white/90 hover:bg-red-500 hover:text-white text-slate-500 rounded-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-sm border border-slate-200"
+            data-testid={`delete-${item.portfolio_id}`}
+          >
+            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+          </button>
+        )}
         {/* Complexity badge on image */}
         {item.complexity && (
           <div className={`absolute top-2 left-2 text-[10px] font-bold uppercase px-2 py-0.5 rounded-md border ${complexityColor[item.complexity] || "bg-slate-50 text-slate-600 border-slate-200"}`}>
@@ -232,14 +234,32 @@ const PortfolioCard = ({ item, onDelete, onUpdate }) => {
       <div className="p-3 space-y-2.5">
         {/* Primary tags row */}
         <div className="flex flex-wrap gap-1.5">
-          <EditableTag field="part_category" value={item.part_category} portfolioId={item.portfolio_id} onUpdate={onUpdate} />
-          <EditableTag field="manufacturing_process" value={item.manufacturing_process} portfolioId={item.portfolio_id} onUpdate={onUpdate} />
+          {editable ? (
+            <>
+              <EditableTag field="part_category" value={item.part_category} portfolioId={item.portfolio_id} onUpdate={onUpdate} />
+              <EditableTag field="manufacturing_process" value={item.manufacturing_process} portfolioId={item.portfolio_id} onUpdate={onUpdate} />
+            </>
+          ) : (
+            <>
+              {item.part_category && <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border bg-violet-50 text-violet-700 border-violet-200"><Sparkles className="w-3 h-3 opacity-70" />{item.part_category}</span>}
+              {item.manufacturing_process && <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border bg-blue-50 text-blue-700 border-blue-200"><Wrench className="w-3 h-3 opacity-70" />{item.manufacturing_process}</span>}
+            </>
+          )}
         </div>
         {/* Secondary tags row */}
         <div className="flex flex-wrap gap-1.5">
-          <EditableTag field="material" value={item.material} portfolioId={item.portfolio_id} onUpdate={onUpdate} />
-          <EditableTag field="surface_finish" value={item.surface_finish} portfolioId={item.portfolio_id} onUpdate={onUpdate} />
-          <EditableTag field="complexity" value={item.complexity} portfolioId={item.portfolio_id} onUpdate={onUpdate} />
+          {editable ? (
+            <>
+              <EditableTag field="material" value={item.material} portfolioId={item.portfolio_id} onUpdate={onUpdate} />
+              <EditableTag field="surface_finish" value={item.surface_finish} portfolioId={item.portfolio_id} onUpdate={onUpdate} />
+              <EditableTag field="complexity" value={item.complexity} portfolioId={item.portfolio_id} onUpdate={onUpdate} />
+            </>
+          ) : (
+            <>
+              {item.material && <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border bg-emerald-50 text-emerald-700 border-emerald-200"><Layers className="w-3 h-3 opacity-70" />{item.material}</span>}
+              {item.surface_finish && <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border bg-amber-50 text-amber-700 border-amber-200"><Palette className="w-3 h-3 opacity-70" />{item.surface_finish}</span>}
+            </>
+          )}
         </div>
 
         {/* Notable features */}
@@ -291,7 +311,13 @@ const IndexingCard = () => (
   </div>
 );
 
-const VendorPortfolio = () => {
+/**
+ * VendorPortfolio component
+ * @param {string} targetVendorId - If provided, manages this vendor's portfolio (for admin use)
+ * @param {boolean} isAdmin - If true, uses admin-level API permissions
+ * @param {boolean} readOnly - If true, no upload/delete/edit actions shown
+ */
+const VendorPortfolio = ({ targetVendorId, isAdmin = false, readOnly = false }) => {
   const [portfolio, setPortfolio] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(0);
@@ -299,14 +325,17 @@ const VendorPortfolio = () => {
 
   const fetchPortfolio = useCallback(async () => {
     try {
-      const res = await api.get("/vendor/portfolio");
+      const endpoint = targetVendorId
+        ? `/vendors/${targetVendorId}/portfolio`
+        : "/vendor/portfolio";
+      const res = await api.get(endpoint);
       setPortfolio(res.data.portfolio || []);
     } catch {
       // Silently handle
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [targetVendorId]);
 
   useEffect(() => { fetchPortfolio(); }, [fetchPortfolio]);
 
@@ -328,7 +357,10 @@ const VendorPortfolio = () => {
       try {
         const formData = new FormData();
         formData.append("file", file);
-        const res = await api.post("/vendor/portfolio", formData, { headers: { "Content-Type": "multipart/form-data" } });
+        const url = isAdmin && targetVendorId
+          ? `/vendor/portfolio?vendor_id=${targetVendorId}`
+          : "/vendor/portfolio";
+        const res = await api.post(url, formData, { headers: { "Content-Type": "multipart/form-data" } });
         setPortfolio(prev => [res.data, ...prev]);
         setUploading(prev => prev - 1);
       } catch {
@@ -352,6 +384,8 @@ const VendorPortfolio = () => {
     );
   }
 
+  const canEdit = !readOnly;
+
   return (
     <div data-testid="vendor-portfolio-section" className="space-y-4">
       <Card className="border-slate-200">
@@ -360,23 +394,27 @@ const VendorPortfolio = () => {
             <Camera className="w-5 h-5 text-orange-600" /> Portfolio
             <span className="text-sm font-normal text-slate-400">({portfolio.length}/{MAX_PHOTOS})</span>
           </CardTitle>
-          <Button
-            size="sm"
-            className="bg-orange-600 hover:bg-orange-700"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading > 0 || portfolio.length >= MAX_PHOTOS}
-            data-testid="upload-portfolio-btn"
-          >
-            <Upload className="w-4 h-4 mr-1" />
-            {uploading > 0 ? `Uploading ${uploading}...` : "Upload Photos"}
-          </Button>
-          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleUpload} className="hidden" />
+          {canEdit && (
+            <>
+              <Button
+                size="sm"
+                className="bg-orange-600 hover:bg-orange-700"
+                onClick={() => fileRef.current?.click()}
+                disabled={uploading > 0 || portfolio.length >= MAX_PHOTOS}
+                data-testid="upload-portfolio-btn"
+              >
+                <Upload className="w-4 h-4 mr-1" />
+                {uploading > 0 ? `Uploading ${uploading}...` : "Upload Photos"}
+              </Button>
+              <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={handleUpload} className="hidden" />
+            </>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
-          <PortfolioStrength portfolio={portfolio} />
+          {canEdit && <PortfolioStrength portfolio={portfolio} />}
 
           {/* Hint about editing */}
-          {portfolio.length > 0 && (
+          {canEdit && portfolio.length > 0 && (
             <p className="text-xs text-slate-400 flex items-center gap-1.5">
               <Pencil className="w-3 h-3" /> Click any tag to edit AI-detected properties
             </p>
@@ -384,19 +422,23 @@ const VendorPortfolio = () => {
 
           {portfolio.length === 0 && uploading === 0 ? (
             <div
-              className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center cursor-pointer hover:border-orange-300 hover:bg-orange-50/30 transition-all"
-              onClick={() => fileRef.current?.click()}
+              className={`border-2 border-dashed border-slate-200 rounded-xl p-8 text-center ${canEdit ? "cursor-pointer hover:border-orange-300 hover:bg-orange-50/30" : ""} transition-all`}
+              onClick={canEdit ? () => fileRef.current?.click() : undefined}
               data-testid="portfolio-dropzone"
             >
               <ImageIcon className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <p className="text-sm font-medium text-slate-600">Upload photos of your past work</p>
-              <p className="text-xs text-slate-400 mt-1">JPG, PNG, or WEBP up to 10MB each. AI will auto-analyze each photo.</p>
+              <p className="text-sm font-medium text-slate-600">
+                {canEdit ? "Upload photos of past work" : "No portfolio items yet"}
+              </p>
+              {canEdit && (
+                <p className="text-xs text-slate-400 mt-1">JPG, PNG, or WEBP up to 10MB each. AI will auto-analyze each photo.</p>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {Array.from({ length: uploading }).map((_, i) => <IndexingCard key={`indexing-${i}`} />)}
               {portfolio.map(item => (
-                <PortfolioCard key={item.portfolio_id} item={item} onDelete={handleDelete} onUpdate={handleUpdate} />
+                <PortfolioCard key={item.portfolio_id} item={item} onDelete={handleDelete} onUpdate={handleUpdate} editable={canEdit} />
               ))}
             </div>
           )}
