@@ -58,91 +58,10 @@ const CreateRFQ = () => {
   const [uploadController, setUploadController] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   
-  // AI Analysis results
   const [analysisResult, setAnalysisResult] = useState(null);
-  const [dimensionsMissing, setDimensionsMissing] = useState(false);
-  const [missingFields, setMissingFields] = useState({});
-  const [requiredDimensions, setRequiredDimensions] = useState([]);
   const [partGeometry, setPartGeometry] = useState("rectangular");
-  const [savingDimensions, setSavingDimensions] = useState(false);
-  
-  // Manual dimensions input - supports all geometry types
-  const [manualDimensions, setManualDimensions] = useState({
-    // Rectangular
-    length: "",
-    width: "",
-    height: "",
-    // Cylindrical/Circular
-    diameter: "",
-    outer_diameter: "",
-    inner_diameter: "",
-    thickness: "",
-    // Conical
-    large_diameter: "",
-    small_diameter: "",
-    taper_angle: "",
-    // Sheet metal
-    bend_radius: "",
-    bend_angle: "",
-    // Common
-    weight: ""
-  });
-  
-  // Geometry type options
-  const GEOMETRY_TYPES = [
-    { value: "rectangular", label: "Rectangular (Block, Bracket, Housing)" },
-    { value: "cylindrical", label: "Cylindrical (Shaft, Pin, Bushing)" },
-    { value: "circular_flat", label: "Circular Flat (Disc, Flange, Plate)" },
-    { value: "conical", label: "Conical (Tapered Part)" },
-    { value: "tube_pipe", label: "Tube/Pipe" },
-    { value: "sheet_metal", label: "Sheet Metal" },
-    { value: "complex", label: "Complex Geometry" }
-  ];
-  
-  // Get dimension fields based on geometry type
-  const getDimensionFields = (geometry) => {
-    const fields = {
-      rectangular: [
-        { key: "length", label: "Length (mm)", required: true },
-        { key: "width", label: "Width (mm)", required: true },
-        { key: "height", label: "Height (mm)", required: true }
-      ],
-      cylindrical: [
-        { key: "diameter", label: "Diameter (mm)", required: true },
-        { key: "length", label: "Length (mm)", required: true },
-        { key: "inner_diameter", label: "Inner Diameter (mm)", required: false }
-      ],
-      circular_flat: [
-        { key: "diameter", label: "Diameter (mm)", required: true },
-        { key: "thickness", label: "Thickness (mm)", required: true },
-        { key: "inner_diameter", label: "Bore/Inner Diameter (mm)", required: false }
-      ],
-      conical: [
-        { key: "large_diameter", label: "Large Diameter (mm)", required: true },
-        { key: "small_diameter", label: "Small Diameter (mm)", required: true },
-        { key: "length", label: "Length (mm)", required: true },
-        { key: "taper_angle", label: "Taper Angle (°)", required: false }
-      ],
-      tube_pipe: [
-        { key: "outer_diameter", label: "Outer Diameter (mm)", required: true },
-        { key: "inner_diameter", label: "Inner Diameter (mm)", required: true },
-        { key: "length", label: "Length (mm)", required: true }
-      ],
-      sheet_metal: [
-        { key: "length", label: "Length (mm)", required: true },
-        { key: "width", label: "Width (mm)", required: true },
-        { key: "thickness", label: "Thickness (mm)", required: true },
-        { key: "bend_angle", label: "Bend Angle (°)", required: false }
-      ],
-      complex: [
-        { key: "length", label: "Max Length (mm)", required: false },
-        { key: "width", label: "Max Width (mm)", required: false },
-        { key: "height", label: "Max Height (mm)", required: false },
-        { key: "diameter", label: "Max Diameter (mm)", required: false }
-      ]
-    };
-    return fields[geometry] || fields.rectangular;
-  };
+  const [hasImageFiles, setHasImageFiles] = useState(false);
+  const [noMatchesFound, setNoMatchesFound] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -223,16 +142,27 @@ const CreateRFQ = () => {
   const handleFileSelect = (e) => {
     const selectedFiles = Array.from(e.target.files);
     setFiles(prev => [...prev, ...selectedFiles]);
+    const imageExts = ['.jpg', '.jpeg', '.png', '.webp', '.heic'];
+    const hasImages = selectedFiles.some(f => imageExts.some(ext => f.name.toLowerCase().endsWith(ext)));
+    if (hasImages) setHasImageFiles(true);
   };
 
   const removeFile = (index) => {
-    setFiles(prev => prev.filter((_, i) => i !== index));
+    setFiles(prev => {
+      const updated = prev.filter((_, i) => i !== index);
+      const imageExts = ['.jpg', '.jpeg', '.png', '.webp', '.heic'];
+      setHasImageFiles(updated.some(f => imageExts.some(ext => f.name.toLowerCase().endsWith(ext))));
+      return updated;
+    });
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     const droppedFiles = Array.from(e.dataTransfer.files);
     setFiles(prev => [...prev, ...droppedFiles]);
+    const imageExts = ['.jpg', '.jpeg', '.png', '.webp', '.heic'];
+    const hasImages = droppedFiles.some(f => imageExts.some(ext => f.name.toLowerCase().endsWith(ext)));
+    if (hasImages) setHasImageFiles(true);
   };
 
   const createRFQ = async () => {
@@ -318,51 +248,21 @@ const CreateRFQ = () => {
       const response = await api.post(`/rfqs/${rfqId}/analyze`);
       const { 
         analysis, 
-        dimensions_missing, 
-        missing_fields, 
         part_geometry, 
-        required_dimensions,
         analyzed_count,
-        analyzed_files,
         skipped_cad_files,
         note
       } = response.data;
       
       setAnalysisResult(analysis);
-      setDimensionsMissing(dimensions_missing);
-      setMissingFields(missing_fields || {});
       setPartGeometry(part_geometry || analysis?.part_geometry || "rectangular");
-      setRequiredDimensions(required_dimensions || []);
-      
-      // Pre-fill manual dimensions with any extracted values
-      const dims = analysis?.overall_dimensions || {};
-      setManualDimensions(prev => ({
-        ...prev,
-        length: dims.length || "",
-        width: dims.width || "",
-        height: dims.height || "",
-        diameter: dims.diameter || "",
-        outer_diameter: dims.outer_diameter || "",
-        inner_diameter: dims.inner_diameter || "",
-        thickness: dims.thickness || "",
-        large_diameter: dims.large_diameter || "",
-        small_diameter: dims.small_diameter || "",
-        taper_angle: dims.taper_angle || "",
-        bend_radius: dims.bend_radius || "",
-        bend_angle: dims.bend_angle || "",
-        weight: analysis?.weight_kg || ""
-      }));
       
       // Show appropriate messages based on analysis results
       if (analyzed_count === 0) {
         toast.warning(note || "No drawings could be analyzed. Please add PDF or image files.");
       } else if (skipped_cad_files?.length > 0) {
         toast.info(`Analyzed ${analyzed_count} drawing(s). ${skipped_cad_files.length} CAD file(s) kept as attachments.`);
-      }
-      
-      if (dimensions_missing && analyzed_count > 0) {
-        toast.warning("Some dimensions couldn't be extracted. Please review and fill in missing values.");
-      } else if (analyzed_count > 0) {
+      } else {
         toast.success(`AI analysis complete - analyzed ${analyzed_count} drawing(s)!`);
       }
       setStep(4);
@@ -372,80 +272,31 @@ const CreateRFQ = () => {
       // Check if it's a file format error
       if (errorMessage.includes("CAD format") || errorMessage.includes("DWG") || errorMessage.includes("STEP")) {
         toast.error(errorMessage, { duration: 8000 });
-        // Don't proceed to step 4 for file format errors
         return;
       }
       
       toast.error("Analysis failed, but continuing with matching");
-      setDimensionsMissing(true);
-      setMissingFields({ length: true, width: true, height: true });
-      setPartGeometry("rectangular");
       setStep(4);
     } finally {
       setAnalyzing(false);
     }
   };
 
-  const saveManualDimensions = async () => {
-    // Get required fields for current geometry
-    const fields = getDimensionFields(partGeometry);
-    const requiredFields = fields.filter(f => f.required);
-    
-    // Validate required fields have values
-    const missingRequired = requiredFields.filter(f => !manualDimensions[f.key]);
-    if (missingRequired.length > 0) {
-      toast.error(`Please provide: ${missingRequired.map(f => f.label).join(", ")}`);
-      return;
-    }
-    
-    setSavingDimensions(true);
-    try {
-      // Build dimension payload based on geometry
-      const payload = {
-        part_geometry: partGeometry,
-        weight: parseFloat(manualDimensions.weight) || null
-      };
-      
-      // Add all dimension fields that have values
-      const allDimFields = ["length", "width", "height", "diameter", "outer_diameter", 
-                           "inner_diameter", "thickness", "large_diameter", "small_diameter",
-                           "taper_angle", "bend_radius", "bend_angle"];
-      
-      allDimFields.forEach(field => {
-        if (manualDimensions[field]) {
-          payload[field] = parseFloat(manualDimensions[field]);
-        }
-      });
-      
-      const response = await api.put(`/rfqs/${rfqId}/dimensions`, payload);
-      
-      toast.success("Dimensions saved successfully!");
-      setDimensionsMissing(false);
-      setMissingFields({});
-      
-      // Update analysis result with new dimensions
-      setAnalysisResult(prev => ({
-        ...prev,
-        part_geometry: response.data.part_geometry,
-        overall_dimensions: response.data.overall_dimensions,
-        max_dimension_mm: response.data.max_dimension_mm,
-        max_diameter_mm: response.data.max_diameter_mm
-      }));
-    } catch (error) {
-      toast.error("Failed to save dimensions");
-    } finally {
-      setSavingDimensions(false);
-    }
-  };
-
   const matchVendors = async () => {
     setMatching(true);
+    setNoMatchesFound(false);
     try {
-      await api.post(`/rfqs/${rfqId}/match`);
-      toast.success("Vendors matched successfully");
-      navigate(`/buyer/rfq/${rfqId}`);
+      const response = await api.post(`/rfqs/${rfqId}/match`);
+      const matchedCount = response.data?.total_matches ?? response.data?.matched_vendors?.length ?? 0;
+      if (matchedCount === 0) {
+        setNoMatchesFound(true);
+        toast.info("No vendors matched yet. Your RFQ is live — vendors can still find and quote on it.");
+      } else {
+        toast.success(`${matchedCount} vendor${matchedCount > 1 ? 's' : ''} matched!`);
+        navigate(`/buyer/rfq/${rfqId}`);
+      }
     } catch (error) {
-      toast.error("Matching failed");
+      toast.error("Matching failed. Please try again.");
     } finally {
       setMatching(false);
     }
@@ -1089,196 +940,55 @@ const CreateRFQ = () => {
           </Card>
         )}
 
-        {/* Step 4: Review Analysis & Vendor Matching */}
+        {/* Step 4: Vendor Matching */}
         {step === 4 && (
-          <Card className="border-slate-200">
+          <Card data-testid="step4-card">
             <CardHeader>
-              <CardTitle className="font-heading text-xl">
-                {dimensionsMissing ? "Review & Complete Specifications" : "Vendor Matching"}
+              <CardTitle className="flex items-center gap-2">
+                <Target className="w-5 h-5 text-orange-600" />
+                Vendor Matching
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              {/* Show AI Analysis Results */}
+              {/* Show AI Analysis Summary (read-only) */}
               {analysisResult && (
-                <div className="space-y-4">
-                  {/* Part Geometry & Dimensions Section */}
-                  <div className={`p-4 rounded-lg border-2 ${dimensionsMissing ? 'border-amber-400 bg-amber-50' : 'border-green-400 bg-green-50'}`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        {dimensionsMissing ? (
-                          <AlertTriangle className="w-5 h-5 text-amber-600" />
-                        ) : (
-                          <CheckCircle2 className="w-5 h-5 text-green-600" />
-                        )}
-                        <h3 className="font-semibold text-slate-900">
-                          {dimensionsMissing ? "Dimensions - Action Required" : "Extracted Dimensions"}
-                        </h3>
-                      </div>
-                      {/* Detected Geometry Badge */}
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
-                        {GEOMETRY_TYPES.find(g => g.value === partGeometry)?.label || partGeometry}
-                      </span>
-                    </div>
-                    
-                    {dimensionsMissing && (
-                      <p className="text-sm text-amber-700 mb-4">
-                        We couldn't extract all dimensions from your drawing. Please select the correct geometry type and provide the missing values.
-                      </p>
-                    )}
-                    
-                    {/* Geometry Type Selector (when dimensions missing) */}
-                    {dimensionsMissing && (
-                      <div className="mb-4">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                          Part Geometry Type
-                        </Label>
-                        <Select
-                          value={partGeometry}
-                          onValueChange={(value) => {
-                            setPartGeometry(value);
-                            // Update missing fields based on new geometry
-                            const fields = getDimensionFields(value);
-                            const newMissing = {};
-                            fields.filter(f => f.required).forEach(f => {
-                              newMissing[f.key] = !manualDimensions[f.key];
-                            });
-                            setMissingFields(newMissing);
-                          }}
-                        >
-                          <SelectTrigger className="mt-1 w-full md:w-1/2" data-testid="geometry-select">
-                            <SelectValue placeholder="Select geometry type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {GEOMETRY_TYPES.map((g) => (
-                              <SelectItem key={g.value} value={g.value}>{g.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-                    
-                    {/* Dynamic Dimension Fields based on Geometry */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {getDimensionFields(partGeometry).map((field) => (
-                        <div key={field.key}>
-                          <Label className={`text-xs font-bold uppercase tracking-wider ${missingFields[field.key] ? 'text-red-600' : 'text-slate-500'}`}>
-                            <Ruler className="w-3 h-3 inline mr-1" />
-                            {field.label} {field.required && missingFields[field.key] && <span className="text-red-500">*</span>}
-                          </Label>
-                          <Input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            value={manualDimensions[field.key] || ""}
-                            onChange={(e) => setManualDimensions(prev => ({ ...prev, [field.key]: e.target.value }))}
-                            className={`mt-1 ${missingFields[field.key] ? 'border-red-400 focus:border-red-500' : ''}`}
-                            placeholder={field.required && missingFields[field.key] ? "Required" : "Optional"}
-                            data-testid={`dimension-${field.key}`}
-                          />
-                        </div>
-                      ))}
-                      {/* Weight is always shown */}
-                      <div>
-                        <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                          <Scale className="w-3 h-3 inline mr-1" />
-                          Weight (kg)
-                        </Label>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          value={manualDimensions.weight}
-                          onChange={(e) => setManualDimensions(prev => ({ ...prev, weight: e.target.value }))}
-                          className="mt-1"
-                          placeholder="Optional"
-                          data-testid="dimension-weight"
-                        />
-                      </div>
-                    </div>
-                    
-                    {dimensionsMissing && (
-                      <div className="mt-4 flex justify-end">
-                        <Button
-                          onClick={saveManualDimensions}
-                          disabled={savingDimensions}
-                          className="bg-amber-600 hover:bg-amber-700"
-                          data-testid="save-dimensions-btn"
-                        >
-                          {savingDimensions ? (
-                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                          ) : (
-                            <CheckCircle2 className="w-4 h-4 mr-2" />
-                          )}
-                          Save Dimensions
-                        </Button>
-                      </div>
-                    )}
+                <div className="p-4 rounded-lg border border-green-200 bg-green-50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                    <h3 className="font-semibold text-slate-900">Analysis Summary</h3>
                   </div>
-                  
-                  {/* Other Extracted Specs */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Recommended Processes */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                    {analysisResult.overall_dimensions && (
+                      <div className="p-2 bg-white rounded border">
+                        <p className="text-xs text-slate-500 font-medium">Dimensions</p>
+                        <p className="text-slate-800 font-mono text-xs">
+                          {Object.entries(analysisResult.overall_dimensions)
+                            .filter(([, v]) => v)
+                            .map(([k, v]) => `${k}: ${v}mm`)
+                            .join(', ') || 'Extracted'}
+                        </p>
+                      </div>
+                    )}
+                    {analysisResult.complexity_score && (
+                      <div className="p-2 bg-white rounded border">
+                        <p className="text-xs text-slate-500 font-medium">Complexity</p>
+                        <p className="text-slate-800">{analysisResult.complexity_score}/10</p>
+                      </div>
+                    )}
                     {analysisResult.recommended_processes?.length > 0 && (
-                      <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
-                        <h4 className="text-sm font-semibold text-slate-700 mb-2">Recommended Processes</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {analysisResult.recommended_processes.map((process, idx) => (
-                            <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
-                              {process}
-                            </span>
+                      <div className="p-2 bg-white rounded border col-span-2">
+                        <p className="text-xs text-slate-500 font-medium">Processes</p>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {analysisResult.recommended_processes.map((p, i) => (
+                            <span key={i} className="px-1.5 py-0.5 bg-blue-50 text-blue-600 text-xs rounded">{p}</span>
                           ))}
                         </div>
-                      </div>
-                    )}
-                    
-                    {/* Complexity & Time Estimate */}
-                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
-                      <h4 className="text-sm font-semibold text-slate-700 mb-2">Complexity Analysis</h4>
-                      <div className="space-y-1 text-sm">
-                        <p className="text-slate-600">
-                          <span className="font-medium">Complexity Score:</span> {analysisResult.complexity_score || "N/A"}/10
-                        </p>
-                        <p className="text-slate-600">
-                          <span className="font-medium">Est. Machining Time:</span> {analysisResult.estimated_machining_time_hours || "N/A"} hours
-                        </p>
-                        {analysisResult.material_specs && (
-                          <p className="text-slate-600">
-                            <span className="font-medium">Material:</span> {analysisResult.material_specs}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Holes & Threads */}
-                    {(analysisResult.holes?.length > 0 || analysisResult.threads?.length > 0) && (
-                      <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
-                        <h4 className="text-sm font-semibold text-slate-700 mb-2">Features Detected</h4>
-                        <div className="space-y-1 text-sm text-slate-600">
-                          {analysisResult.holes?.length > 0 && (
-                            <p>{analysisResult.holes.length} hole(s) detected</p>
-                          )}
-                          {analysisResult.threads?.length > 0 && (
-                            <p>{analysisResult.threads.length} threaded feature(s)</p>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* Special Requirements */}
-                    {analysisResult.special_requirements?.length > 0 && (
-                      <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
-                        <h4 className="text-sm font-semibold text-slate-700 mb-2">Special Requirements</h4>
-                        <ul className="list-disc list-inside text-sm text-slate-600 space-y-1">
-                          {analysisResult.special_requirements.map((req, idx) => (
-                            <li key={idx}>{req}</li>
-                          ))}
-                        </ul>
                       </div>
                     )}
                   </div>
                 </div>
               )}
-              
+
               {/* Matching Status */}
               <div className="text-center py-4">
                 {matching ? (
@@ -1286,49 +996,75 @@ const CreateRFQ = () => {
                     <div className="w-12 h-12 mx-auto mb-3 relative">
                       <Target className="w-12 h-12 text-orange-600 animate-pulse" />
                     </div>
-                    <p className="text-lg font-medium text-slate-900">Finding Best Vendors...</p>
+                    <p className="text-lg font-medium text-slate-900">
+                      {hasImageFiles ? "Matching by Visual Similarity..." : "Finding Best Vendors..."}
+                    </p>
                     <p className="text-slate-500 mt-1 text-sm">
-                      Matching your requirements with capable manufacturers
+                      {hasImageFiles 
+                        ? "Analyzing your photos and matching with capable manufacturers" 
+                        : "Matching your requirements with capable manufacturers"}
                     </p>
                   </>
-                ) : !dimensionsMissing ? (
+                ) : noMatchesFound ? (
+                  <>
+                    <div className="w-16 h-16 mx-auto mb-4 bg-amber-50 rounded-full flex items-center justify-center">
+                      <Search className="w-8 h-8 text-amber-500" />
+                    </div>
+                    <p className="text-lg font-medium text-slate-900">No Exact Matches Right Now</p>
+                    <p className="text-slate-500 mt-2 text-sm max-w-md mx-auto">
+                      Don't worry — your RFQ is now live on the marketplace. Vendors can discover it and submit quotes directly. We'll notify you as soon as a vendor responds.
+                    </p>
+                    <div className="mt-4 flex items-center justify-center gap-3">
+                      <Button 
+                        variant="outline"
+                        onClick={() => navigate(`/buyer/rfq/${rfqId}`)}
+                        data-testid="view-rfq-btn"
+                      >
+                        View RFQ Details
+                      </Button>
+                      <Button 
+                        onClick={() => navigate('/buyer/rfqs')}
+                        className="bg-orange-600 hover:bg-orange-700"
+                        data-testid="go-to-rfqs-btn"
+                      >
+                        Go to My RFQs
+                      </Button>
+                    </div>
+                  </>
+                ) : (
                   <>
                     <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
                     <p className="text-lg font-medium text-slate-900">Ready to Match!</p>
                     <p className="text-slate-500 mt-1 text-sm">
-                      All specifications confirmed - proceed to find matching vendors
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-                    <p className="text-lg font-medium text-slate-900">Complete Dimensions Above</p>
-                    <p className="text-slate-500 mt-1 text-sm">
-                      Save the dimensions to enable accurate vendor matching
+                      {hasImageFiles 
+                        ? "We'll use visual matching to find the best manufacturers for your parts"
+                        : "All specifications confirmed — proceed to find matching vendors"}
                     </p>
                   </>
                 )}
               </div>
 
-              <div className="flex justify-between pt-4">
-                <Button variant="outline" onClick={() => setStep(3)}>
-                  <ArrowLeft className="mr-2 w-4 h-4" /> Back
-                </Button>
-                <Button 
-                  onClick={matchVendors} 
-                  disabled={matching || dimensionsMissing}
-                  className="bg-orange-600 hover:bg-orange-700 px-8"
-                  data-testid="match-btn"
-                >
-                  {matching ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" /> Matching...
-                    </>
-                  ) : (
-                    <>Find Matching Vendors <Target className="ml-2 w-4 h-4" /></>
-                  )}
-                </Button>
-              </div>
+              {!noMatchesFound && (
+                <div className="flex justify-between pt-4">
+                  <Button variant="outline" onClick={() => setStep(3)}>
+                    <ArrowLeft className="mr-2 w-4 h-4" /> Back
+                  </Button>
+                  <Button 
+                    onClick={matchVendors} 
+                    disabled={matching}
+                    className="bg-orange-600 hover:bg-orange-700 px-8"
+                    data-testid="match-btn"
+                  >
+                    {matching ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" /> Matching...
+                      </>
+                    ) : (
+                      <>Find Matching Vendors <Target className="ml-2 w-4 h-4" /></>
+                    )}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
