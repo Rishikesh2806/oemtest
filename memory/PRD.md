@@ -552,6 +552,19 @@ Comprehensive platform analytics for business tracking:
 - **Frontend**: `VendorProfileView.jsx` shows read-only "Work Portfolio" gallery with AI-detected tags (part_category, manufacturing_process, material, surface_finish, complexity, industry_fit)
 - **Testing**: 100% pass rate — backend 10/10, frontend all elements verified (iteration_46)
 
+### Portfolio Match Display & Match Mode Indicators (Completed - Mar 29, 2026)
+- **Backend**: `POST /api/vendors/portfolio-batch` — new endpoint to fetch portfolio photos for multiple vendors at once (for enriching match results)
+- **Backend**: Portfolio match (`POST /api/rfqs/{rfq_id}/portfolio-match`) now includes `portfolio_photos` (top 3) in each matched vendor result
+- **Backend**: Drawing-based match now stores `match_type: "drawing"` in RFQ update
+- **Frontend**: Unified matched vendors section in `RFQDetail.jsx` with:
+  - Match mode badge in section header ("Image-Based" purple / "Drawing-Based" blue)
+  - Portfolio photo thumbnails with part_category labels for each matched vendor
+  - Match score % prominently displayed with "Visual Match" or "Match Score" label
+  - Per-vendor match mode indicator (Image/Drawing badge) under each score
+  - Portfolio match reasons as green tags; recommended_for text in italic
+  - Full drawing-based details preserved (machines, processes, experience, capabilities)
+- **Testing**: 100% pass rate — backend 11/11, frontend all elements verified (iteration_47)
+
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check
 - Revenue analytics charts
