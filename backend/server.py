@@ -3374,6 +3374,27 @@ async def get_vendor_portfolio_public(vendor_id: str):
     return {"portfolio": photos, "total": len(photos)}
 
 
+@api_router.post("/vendors/portfolio-batch")
+async def get_batch_vendor_portfolios(request: Request):
+    """Get top portfolio photos for multiple vendors at once (for match enrichment)"""
+    body = await request.json()
+    vendor_ids = body.get("vendor_ids", [])
+    limit = min(body.get("limit", 3), 5)
+    
+    if not vendor_ids or len(vendor_ids) > 20:
+        raise HTTPException(status_code=400, detail="Provide 1-20 vendor_ids")
+    
+    result = {}
+    for vid in vendor_ids:
+        photos = await db.vendor_portfolio.find(
+            {"vendor_id": vid},
+            {"_id": 0, "photo_url": 1, "part_category": 1, "manufacturing_process": 1, "material": 1, "portfolio_id": 1}
+        ).sort("created_at", -1).to_list(limit)
+        result[vid] = photos
+    
+    return {"portfolios": result}
+
+
 @api_router.delete("/vendor/portfolio/{portfolio_id}")
 async def delete_portfolio_photo(portfolio_id: str, user: dict = Depends(get_current_user)):
     """Delete a portfolio photo. Admins can delete any portfolio item."""
@@ -3678,6 +3699,13 @@ Return ONLY a JSON array sorted by score descending:
         vendor = await db.vendors.find_one({"vendor_id": vid}, {"_id": 0, "company_name": 1, "city": 1, "vendor_id": 1, "user_id": 1})
         if not vendor:
             continue
+        
+        # Fetch top 3 portfolio photos for this vendor
+        portfolio_photos = await db.vendor_portfolio.find(
+            {"vendor_id": vid},
+            {"_id": 0, "photo_url": 1, "part_category": 1, "manufacturing_process": 1, "material": 1, "portfolio_id": 1}
+        ).sort("created_at", -1).to_list(3)
+        
         matched_vendors.append({
             "vendor_id": vid,
             "company_name": vendor.get("company_name", ""),
@@ -3686,6 +3714,7 @@ Return ONLY a JSON array sorted by score descending:
             "match_type": "portfolio",
             "match_reasons": v.get("match_reasons", []),
             "recommended_for": v.get("recommended_for", ""),
+            "portfolio_photos": portfolio_photos,
             "matched_at": datetime.now(timezone.utc).isoformat()
         })
         
@@ -7416,6 +7445,7 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         {"rfq_id": rfq_id},
         {"$set": {
             "matched_vendors": matched_vendors,
+            "match_type": "drawing",
             "status": RFQStatus.MATCHING,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }}

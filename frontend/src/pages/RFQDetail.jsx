@@ -15,7 +15,8 @@ import {
   FileText, Package, Star, MapPin, Loader2, 
   CheckCircle2, Send, DollarSign, Clock, ArrowLeft,
   Building2, Cpu, Wrench, AlertCircle, Target, MessageSquare, Eye,
-  BarChart3, CreditCard, ExternalLink, Truck, Globe, Zap, Shield, Lock
+  BarChart3, CreditCard, ExternalLink, Truck, Globe, Zap, Shield, Lock,
+  Camera, Image as ImageIcon, Layers
 } from "lucide-react";
 import QuoteComparison from "../components/quotes/QuoteComparison";
 import QuoteDetailModal from "../components/QuoteDetailModal";
@@ -101,6 +102,7 @@ const RFQDetail = () => {
   const [compareDialogOpen, setCompareDialogOpen] = useState(false);
   const [selectedQuoteId, setSelectedQuoteId] = useState(null);
   const [quoteDetailOpen, setQuoteDetailOpen] = useState(false);
+  const [vendorPortfolios, setVendorPortfolios] = useState({});
 
   useEffect(() => {
     fetchRFQData();
@@ -116,6 +118,25 @@ const RFQDetail = () => {
       setRfq(rfqRes.data);
       setQuotes(quotesRes.data);
       setDrawings(drawingsRes.data);
+      
+      // Fetch portfolio photos for matched vendors
+      const matchedVendors = rfqRes.data?.matched_vendors || [];
+      if (matchedVendors.length > 0) {
+        // For portfolio matches, photos are already embedded; for drawing matches, fetch them
+        const needsFetch = matchedVendors.some(v => !v.portfolio_photos);
+        if (needsFetch) {
+          try {
+            const vendorIds = matchedVendors.map(v => v.vendor_id).filter(Boolean);
+            const pRes = await api.post("/vendors/portfolio-batch", { vendor_ids: vendorIds, limit: 3 });
+            setVendorPortfolios(pRes.data.portfolios || {});
+          } catch { /* silent */ }
+        } else {
+          // Build portfolio map from embedded data
+          const pMap = {};
+          matchedVendors.forEach(v => { if (v.portfolio_photos?.length) pMap[v.vendor_id] = v.portfolio_photos; });
+          setVendorPortfolios(pMap);
+        }
+      }
       
       // Check NDA requirement
       if (rfqRes.data.require_nda && user?.role === "vendor") {
@@ -813,16 +834,30 @@ const RFQDetail = () => {
           </Card>
         )}
 
-        {/* Matched Vendors - Drawing Specs (Buyer View) */}
+        {/* Matched Vendors - Unified View (Buyer View) */}
         {isBuyer && rfq.matched_vendors?.length > 0 && (
-          <Card className="border-slate-200" data-testid="drawing-matched-vendors">
+          <Card className="border-slate-200" data-testid="matched-vendors-section">
             <CardHeader className="flex flex-row items-start justify-between">
               <div>
                 <CardTitle className="font-heading text-lg flex items-center gap-2">
-                  <Target className="w-5 h-5 text-orange-600" /> Drawing-Based Matches
+                  <Target className="w-5 h-5 text-orange-600" /> Matched Vendors
+                  <span data-testid="match-mode-badge" className={`ml-2 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border ${
+                    rfq.match_type === "portfolio"
+                      ? "bg-purple-50 text-purple-700 border-purple-200"
+                      : "bg-blue-50 text-blue-700 border-blue-200"
+                  }`}>
+                    {rfq.match_type === "portfolio" ? (
+                      <><Camera className="w-3 h-3" /> Image-Based</>
+                    ) : (
+                      <><Cpu className="w-3 h-3" /> Drawing-Based</>
+                    )}
+                  </span>
                 </CardTitle>
                 <p className="text-sm text-slate-500 mt-1">
-                  Vendors ranked by machine capability, material compatibility, and tolerance requirements
+                  {rfq.match_type === "portfolio"
+                    ? "Vendors ranked by portfolio similarity to your uploaded images"
+                    : "Vendors ranked by machine capability, material compatibility, and tolerance requirements"
+                  }
                 </p>
               </div>
               <Button
@@ -843,256 +878,323 @@ const RFQDetail = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {rfq.matched_vendors.map((vendor, i) => (
-                  <div 
-                    key={vendor.vendor_id}
-                    className={`p-5 rounded-lg border-2 transition-all ${
-                      i === 0 ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-200"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-4">
-                        <div className={`w-14 h-14 rounded-lg flex items-center justify-center ${
-                          i === 0 ? "bg-orange-600 text-white" : "bg-slate-200 text-slate-500"
-                        }`}>
-                          {i === 0 ? (
-                            <span className="font-bold text-lg">TOP</span>
-                          ) : (
-                            <Building2 className="w-6 h-6" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-semibold text-lg text-slate-900">{vendor.company_name}</p>
-                          <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
-                            <span className="flex items-center gap-1">
-                              <MapPin className="w-4 h-4" /> {vendor.location}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Star className="w-4 h-4 text-amber-500" /> {vendor.rating?.toFixed(1)}
-                            </span>
-                            <span>{vendor.total_jobs} jobs completed</span>
-                          </div>
-                          
-                          {/* Capability Badges */}
-                          <div className="flex flex-wrap gap-2 mt-3">
-                            {/* Available Now Badge - Priority for urgent RFQs */}
-                            {vendor.has_available_machine && (rfq.urgency === 'urgent' || rfq.urgency === 'high') && (
-                              <span className="flex items-center gap-1 text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded border border-emerald-300 font-medium">
-                                <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-                                Available Now
-                              </span>
-                            )}
-                            {vendor.location_match && (
-                              <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded ${
-                                vendor.location_match === 'city' 
-                                  ? 'bg-purple-100 text-purple-700' 
-                                  : 'bg-indigo-100 text-indigo-700'
-                              }`}>
-                                <MapPin className="w-3 h-3" /> 
-                                {vendor.location_match === 'city' ? 'Preferred City' : 'Preferred Country'}
-                              </span>
-                            )}
-                            {vendor.tolerance_capable && (
-                              <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                                <CheckCircle2 className="w-3 h-3" /> Tolerance Capable
-                              </span>
-                            )}
-                            {vendor.materials_match && (
-                              <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                                <CheckCircle2 className="w-3 h-3" /> Material Match
-                              </span>
-                            )}
-                            {vendor.dimension_capable && (
-                              <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                                <CheckCircle2 className="w-3 h-3" /> Size Compatible
-                              </span>
+                {rfq.matched_vendors.map((vendor, i) => {
+                  const score = vendor.match_score ?? vendor.suitability_score ?? 0;
+                  const isPortfolioMatch = vendor.match_type === "portfolio" || rfq.match_type === "portfolio";
+                  const photos = vendor.portfolio_photos || vendorPortfolios[vendor.vendor_id] || [];
+                  
+                  return (
+                    <div 
+                      key={vendor.vendor_id}
+                      data-testid={`matched-vendor-${vendor.vendor_id}`}
+                      className={`p-5 rounded-lg border-2 transition-all ${
+                        i === 0 ? "bg-orange-50 border-orange-200" : "bg-slate-50 border-slate-200"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-4 flex-1 min-w-0">
+                          <div className={`w-14 h-14 rounded-lg flex items-center justify-center shrink-0 ${
+                            i === 0 ? "bg-orange-600 text-white" : "bg-slate-200 text-slate-500"
+                          }`}>
+                            {i === 0 ? (
+                              <span className="font-bold text-lg">TOP</span>
+                            ) : (
+                              <Building2 className="w-6 h-6" />
                             )}
                           </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-lg text-slate-900">{vendor.company_name}</p>
+                            <div className="flex items-center gap-4 mt-1 text-sm text-slate-500 flex-wrap">
+                              <span className="flex items-center gap-1">
+                                <MapPin className="w-4 h-4" /> {vendor.location || vendor.city || "—"}
+                              </span>
+                              {vendor.rating > 0 && (
+                                <span className="flex items-center gap-1">
+                                  <Star className="w-4 h-4 text-amber-500" /> {vendor.rating?.toFixed(1)}
+                                </span>
+                              )}
+                              {vendor.total_jobs > 0 && <span>{vendor.total_jobs} jobs completed</span>}
+                            </div>
 
-                          {/* Process Matches */}
-                          {vendor.process_matches?.length > 0 && (
-                            <div className="mt-3">
-                              <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                                Matched Processes
-                              </p>
-                              <div className="flex flex-wrap gap-1">
-                                {vendor.process_matches.map((process, j) => (
-                                  <span key={j} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                                    {process}
+                            {/* Portfolio Photos Strip */}
+                            {photos.length > 0 && (
+                              <div className="mt-3" data-testid={`portfolio-strip-${vendor.vendor_id}`}>
+                                <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1.5 flex items-center gap-1">
+                                  <Camera className="w-3 h-3" /> Portfolio Samples
+                                </p>
+                                <div className="flex gap-2">
+                                  {photos.slice(0, 3).map((photo, pi) => (
+                                    <div key={pi} className="relative group/photo w-24 h-20 rounded-lg overflow-hidden border border-slate-200 bg-slate-100 shrink-0">
+                                      <img
+                                        src={photo.photo_url}
+                                        alt={photo.part_category || "Portfolio"}
+                                        className="w-full h-full object-cover group-hover/photo:scale-110 transition-transform duration-200"
+                                        loading="lazy"
+                                        onError={(e) => { e.target.style.display = 'none'; }}
+                                      />
+                                      {photo.part_category && (
+                                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent px-1.5 py-1">
+                                          <span className="text-[10px] text-white font-medium truncate block">{photo.part_category}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Portfolio Match Reasons */}
+                            {isPortfolioMatch && vendor.match_reasons?.length > 0 && (
+                              <div className="flex flex-wrap gap-1.5 mt-3">
+                                {vendor.match_reasons.map((reason, ri) => (
+                                  <span key={ri} className="inline-flex items-center gap-1 text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full">
+                                    <CheckCircle2 className="w-3 h-3" />{reason}
                                   </span>
                                 ))}
                               </div>
-                            </div>
-                          )}
+                            )}
+                            
+                            {/* Recommended For (portfolio match) */}
+                            {isPortfolioMatch && vendor.recommended_for && (
+                              <p className="text-xs text-slate-500 mt-2 italic">
+                                {vendor.recommended_for}
+                              </p>
+                            )}
 
-                          {/* Experience Info */}
-                          {/* Relevant Experience - Enhanced Display */}
-                          {(vendor.experience_score > 0 || vendor.best_experience_match) && (
-                            <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <p className="text-xs font-bold uppercase tracking-wider text-amber-700">
-                                  Relevant Experience
-                                </p>
-                                <span className="text-xs bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full font-medium">
-                                  +{vendor.experience_score} pts
-                                </span>
-                              </div>
-                              
-                              {/* Best matching experience */}
-                              {vendor.best_experience_match && (
-                                <div className="bg-white rounded p-2 mb-2 border border-amber-100">
-                                  <p className="text-sm font-medium text-slate-800">
-                                    {vendor.best_experience_match.title}
-                                  </p>
-                                  {vendor.best_experience_match.description && (
-                                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">
-                                      {vendor.best_experience_match.description}
-                                    </p>
+                            {/* Drawing-Based Details */}
+                            {!isPortfolioMatch && (
+                              <>
+                                {/* Capability Badges */}
+                                <div className="flex flex-wrap gap-2 mt-3">
+                                  {vendor.has_available_machine && (rfq.urgency === 'urgent' || rfq.urgency === 'high') && (
+                                    <span className="flex items-center gap-1 text-xs bg-emerald-100 text-emerald-800 px-2 py-1 rounded border border-emerald-300 font-medium">
+                                      <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                                      Available Now
+                                    </span>
                                   )}
-                                  <div className="flex flex-wrap gap-1 mt-2">
-                                    {vendor.best_experience_match.material && (
-                                      <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-                                        {vendor.best_experience_match.material}
+                                  {vendor.location_match && (
+                                    <span className={`flex items-center gap-1 text-xs px-2 py-1 rounded ${
+                                      vendor.location_match === 'city' 
+                                        ? 'bg-purple-100 text-purple-700' 
+                                        : 'bg-indigo-100 text-indigo-700'
+                                    }`}>
+                                      <MapPin className="w-3 h-3" /> 
+                                      {vendor.location_match === 'city' ? 'Preferred City' : 'Preferred Country'}
+                                    </span>
+                                  )}
+                                  {vendor.tolerance_capable && (
+                                    <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                                      <CheckCircle2 className="w-3 h-3" /> Tolerance Capable
+                                    </span>
+                                  )}
+                                  {vendor.materials_match && (
+                                    <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                                      <CheckCircle2 className="w-3 h-3" /> Material Match
+                                    </span>
+                                  )}
+                                  {vendor.dimension_capable && (
+                                    <span className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                                      <CheckCircle2 className="w-3 h-3" /> Size Compatible
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Process Matches */}
+                                {vendor.process_matches?.length > 0 && (
+                                  <div className="mt-3">
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                                      Matched Processes
+                                    </p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {vendor.process_matches.map((process, j) => (
+                                        <span key={j} className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                          {process}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Experience Info */}
+                                {(vendor.experience_score > 0 || vendor.best_experience_match) && (
+                                  <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <p className="text-xs font-bold uppercase tracking-wider text-amber-700">
+                                        Relevant Experience
+                                      </p>
+                                      <span className="text-xs bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full font-medium">
+                                        +{vendor.experience_score} pts
+                                      </span>
+                                    </div>
+                                    
+                                    {vendor.best_experience_match && (
+                                      <div className="bg-white rounded p-2 mb-2 border border-amber-100">
+                                        <p className="text-sm font-medium text-slate-800">
+                                          {vendor.best_experience_match.title}
+                                        </p>
+                                        {vendor.best_experience_match.description && (
+                                          <p className="text-xs text-slate-500 mt-1 line-clamp-2">
+                                            {vendor.best_experience_match.description}
+                                          </p>
+                                        )}
+                                        <div className="flex flex-wrap gap-1 mt-2">
+                                          {vendor.best_experience_match.material && (
+                                            <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                                              {vendor.best_experience_match.material}
+                                            </span>
+                                          )}
+                                          {vendor.best_experience_match.part_type && (
+                                            <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
+                                              {vendor.best_experience_match.part_type}
+                                            </span>
+                                          )}
+                                          {vendor.best_experience_match.processes?.slice(0, 2).map((proc, k) => (
+                                            <span key={k} className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                                              {proc}
+                                            </span>
+                                          ))}
+                                          {vendor.best_experience_match.year && (
+                                            <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                                              {vendor.best_experience_match.year}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                    
+                                    <div className="flex flex-wrap gap-1">
+                                      {vendor.similar_jobs_count > 0 && (
+                                        <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">
+                                          {vendor.similar_jobs_count} similar jobs
+                                        </span>
+                                      )}
+                                      {vendor.material_experience && (
+                                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                                          Material Expert
+                                        </span>
+                                      )}
+                                      {vendor.geometry_experience && (
+                                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                                          Geometry Match
+                                        </span>
+                                      )}
+                                      {vendor.part_type_experience && (
+                                        <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                                          Part Type Expert
+                                        </span>
+                                      )}
+                                      {vendor.experience_keywords?.slice(0, 3).map((keyword, j) => (
+                                        <span key={j} className="text-xs bg-amber-50 text-amber-600 px-2 py-1 rounded border border-amber-200">
+                                          {keyword}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Matching Machines */}
+                                <div className="mt-3">
+                                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                                    Matching Machines
+                                    {vendor.has_available_machine && (
+                                      <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs normal-case font-medium">
+                                        {vendor.available_machine_count}/{vendor.total_matching_machines} Available
                                       </span>
                                     )}
-                                    {vendor.best_experience_match.part_type && (
-                                      <span className="text-xs bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">
-                                        {vendor.best_experience_match.part_type}
+                                  </p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {vendor.machine_details?.map((machine, j) => (
+                                      <span 
+                                        key={j} 
+                                        className={`text-xs px-2 py-1 rounded font-mono flex items-center gap-1 ${
+                                          machine.is_available 
+                                            ? "bg-green-100 text-green-800 border border-green-200" 
+                                            : machine.availability_status === "engaged"
+                                              ? "bg-amber-100 text-amber-800 border border-amber-200"
+                                              : "bg-slate-200 text-slate-700"
+                                        }`}
+                                        title={machine.is_available ? "Available Now" : `Status: ${machine.availability_status}`}
+                                      >
+                                        <span className={`w-2 h-2 rounded-full ${
+                                          machine.is_available ? "bg-green-500" : 
+                                          machine.availability_status === "engaged" ? "bg-amber-500" : "bg-slate-400"
+                                        }`}></span>
+                                        {machine.name}
                                       </span>
-                                    )}
-                                    {vendor.best_experience_match.processes?.slice(0, 2).map((proc, k) => (
-                                      <span key={k} className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
-                                        {proc}
+                                    )) || vendor.matching_machines?.map((machine, j) => (
+                                      <span key={j} className="text-xs bg-slate-200 text-slate-700 px-2 py-1 rounded font-mono">
+                                        {machine}
                                       </span>
                                     ))}
-                                    {vendor.best_experience_match.year && (
-                                      <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
-                                        {vendor.best_experience_match.year}
-                                      </span>
-                                    )}
                                   </div>
                                 </div>
-                              )}
-                              
-                              {/* Experience badges */}
-                              <div className="flex flex-wrap gap-1">
-                                {vendor.similar_jobs_count > 0 && (
-                                  <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">
-                                    {vendor.similar_jobs_count} similar jobs
-                                  </span>
-                                )}
-                                {vendor.material_experience && (
-                                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                                    Material Expert
-                                  </span>
-                                )}
-                                {vendor.geometry_experience && (
-                                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                                    Geometry Match
-                                  </span>
-                                )}
-                                {vendor.part_type_experience && (
-                                  <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                                    Part Type Expert
-                                  </span>
-                                )}
-                                {vendor.experience_keywords?.slice(0, 3).map((keyword, j) => (
-                                  <span key={j} className="text-xs bg-amber-50 text-amber-600 px-2 py-1 rounded border border-amber-200">
-                                    {keyword}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
 
-                          {/* Matching Machines with Availability Status */}
-                          <div className="mt-3">
-                            <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
-                              Matching Machines
-                              {vendor.has_available_machine && (
-                                <span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs normal-case font-medium">
-                                  {vendor.available_machine_count}/{vendor.total_matching_machines} Available
-                                </span>
-                              )}
-                            </p>
-                            <div className="flex flex-wrap gap-1">
-                              {vendor.machine_details?.map((machine, j) => (
-                                <span 
-                                  key={j} 
-                                  className={`text-xs px-2 py-1 rounded font-mono flex items-center gap-1 ${
-                                    machine.is_available 
-                                      ? "bg-green-100 text-green-800 border border-green-200" 
-                                      : machine.availability_status === "engaged"
-                                        ? "bg-amber-100 text-amber-800 border border-amber-200"
-                                        : "bg-slate-200 text-slate-700"
-                                  }`}
-                                  title={machine.is_available ? "Available Now" : `Status: ${machine.availability_status}`}
-                                >
-                                  <span className={`w-2 h-2 rounded-full ${
-                                    machine.is_available ? "bg-green-500" : 
-                                    machine.availability_status === "engaged" ? "bg-amber-500" : "bg-slate-400"
-                                  }`}></span>
-                                  {machine.name}
-                                </span>
-                              )) || vendor.matching_machines?.map((machine, j) => (
-                                <span key={j} className="text-xs bg-slate-200 text-slate-700 px-2 py-1 rounded font-mono">
-                                  {machine}
-                                </span>
-                              ))}
-                            </div>
+                                {/* Certifications */}
+                                {vendor.certifications?.length > 0 && (
+                                  <div className="mt-3">
+                                    <div className="flex flex-wrap gap-1">
+                                      {vendor.certifications.map((cert, j) => (
+                                        <span key={j} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                                          {cert}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
-
-                          {/* Certifications */}
-                          {vendor.certifications?.length > 0 && (
-                            <div className="mt-3">
-                              <div className="flex flex-wrap gap-1">
-                                {vendor.certifications.map((cert, j) => (
-                                  <span key={j} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                                    {cert}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
+                        </div>
+                        
+                        {/* Match Score */}
+                        <div className="text-right ml-4 shrink-0">
+                          <div data-testid={`match-score-${vendor.vendor_id}`} className={`text-3xl font-bold ${
+                            score >= 80 ? "text-green-600" : 
+                            score >= 60 ? "text-orange-600" : "text-slate-600"
+                          }`}>
+                            {score}%
+                          </div>
+                          <div className="text-xs text-slate-500 uppercase font-medium">
+                            {isPortfolioMatch ? "Visual Match" : "Match Score"}
+                          </div>
+                          <div className="w-24 h-2 bg-slate-200 rounded-full mt-2 overflow-hidden">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                score >= 80 ? "bg-green-500" : 
+                                score >= 60 ? "bg-orange-500" : "bg-slate-400"
+                              }`}
+                              style={{ width: `${score}%` }}
+                            />
+                          </div>
+                          {/* Per-vendor match mode indicator */}
+                          <span className={`mt-2 inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                            isPortfolioMatch
+                              ? "bg-purple-50 text-purple-600 border border-purple-200"
+                              : "bg-blue-50 text-blue-600 border border-blue-200"
+                          }`}>
+                            {isPortfolioMatch ? <><Camera className="w-2.5 h-2.5" /> Image</> : <><Cpu className="w-2.5 h-2.5" /> Drawing</>}
+                          </span>
                         </div>
                       </div>
                       
-                      {/* Match Score */}
-                      <div className="text-right ml-4">
-                        <div className={`text-3xl font-bold ${
-                          vendor.suitability_score >= 80 ? "text-green-600" : 
-                          vendor.suitability_score >= 60 ? "text-orange-600" : "text-slate-600"
-                        }`}>
-                          {vendor.suitability_score}%
-                        </div>
-                        <div className="text-xs text-slate-500 uppercase font-medium">Match Score</div>
-                        <div className="w-24 h-2 bg-slate-200 rounded-full mt-2 overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full ${
-                              vendor.suitability_score >= 80 ? "bg-green-500" : 
-                              vendor.suitability_score >= 60 ? "bg-orange-500" : "bg-slate-400"
-                            }`}
-                            style={{ width: `${vendor.suitability_score}%` }}
-                          />
-                        </div>
+                      {/* Action Buttons */}
+                      <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200">
+                        <Link to={`/vendor-profile/${vendor.vendor_id}`}>
+                          <Button variant="outline" size="sm" data-testid={`view-profile-${vendor.vendor_id}`}>
+                            <Eye className="w-4 h-4 mr-1" /> View Profile
+                          </Button>
+                        </Link>
+                        {vendor.user_id && (
+                          <Link to={`/chat?with=${vendor.user_id}&rfq=${rfqId}`}>
+                            <Button variant="outline" size="sm" data-testid={`chat-vendor-${vendor.vendor_id}`}>
+                              <MessageSquare className="w-4 h-4 mr-1" /> Chat
+                            </Button>
+                          </Link>
+                        )}
                       </div>
                     </div>
-                    
-                    {/* Action Buttons */}
-                    <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200">
-                      <Link to={`/vendor-profile/${vendor.vendor_id}`}>
-                        <Button variant="outline" size="sm" data-testid={`view-profile-${vendor.vendor_id}`}>
-                          <Eye className="w-4 h-4 mr-1" /> View Profile
-                        </Button>
-                      </Link>
-                      <Link to={`/chat?with=${vendor.user_id}&rfq=${rfqId}`}>
-                        <Button variant="outline" size="sm" data-testid={`chat-vendor-${vendor.vendor_id}`}>
-                          <MessageSquare className="w-4 h-4 mr-1" /> Chat
-                        </Button>
-                      </Link>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
