@@ -286,13 +286,24 @@ const CreateRFQ = () => {
     setMatching(true);
     setNoMatchesFound(false);
     try {
-      const response = await api.post(`/rfqs/${rfqId}/match`);
+      // Use portfolio matching when photos are uploaded (no CAD dimensions)
+      const usePortfolioMatch = hasImageFiles && (
+        !analysisResult?.overall_dimensions ||
+        !analysisResult.overall_dimensions.length
+      );
+      
+      const endpoint = usePortfolioMatch 
+        ? `/rfqs/${rfqId}/portfolio-match`
+        : `/rfqs/${rfqId}/match`;
+      
+      const response = await api.post(endpoint);
       const matchedCount = response.data?.total_matches ?? response.data?.matched_vendors?.length ?? 0;
       if (matchedCount === 0) {
         setNoMatchesFound(true);
         toast.info("No vendors matched yet. Your RFQ is live — vendors can still find and quote on it.");
       } else {
-        toast.success(`${matchedCount} vendor${matchedCount > 1 ? 's' : ''} matched!`);
+        const matchType = response.data?.match_type === "portfolio" ? "by portfolio similarity" : "";
+        toast.success(`${matchedCount} vendor${matchedCount > 1 ? 's' : ''} matched ${matchType}!`);
         navigate(`/buyer/rfq/${rfqId}`);
       }
     } catch (error) {
@@ -997,11 +1008,11 @@ const CreateRFQ = () => {
                       <Target className="w-12 h-12 text-orange-600 animate-pulse" />
                     </div>
                     <p className="text-lg font-medium text-slate-900">
-                      {hasImageFiles ? "Matching by Visual Similarity..." : "Finding Best Vendors..."}
+                      {hasImageFiles ? "Matching with Vendor Portfolios..." : "Finding Best Vendors..."}
                     </p>
                     <p className="text-slate-500 mt-1 text-sm">
                       {hasImageFiles 
-                        ? "Analyzing your photos and matching with capable manufacturers" 
+                        ? "Comparing your part photos with vendor portfolio items to find the best fit" 
                         : "Matching your requirements with capable manufacturers"}
                     </p>
                   </>
@@ -1037,7 +1048,7 @@ const CreateRFQ = () => {
                     <p className="text-lg font-medium text-slate-900">Ready to Match!</p>
                     <p className="text-slate-500 mt-1 text-sm">
                       {hasImageFiles 
-                        ? "We'll use visual matching to find the best manufacturers for your parts"
+                        ? "We'll match your part photos against vendor portfolios to find the best manufacturers"
                         : "All specifications confirmed — proceed to find matching vendors"}
                     </p>
                   </>

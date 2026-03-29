@@ -529,6 +529,13 @@ Comprehensive platform analytics for business tracking:
   - Fix: Added `STAFF = "staff"` and `BASE_ROLES` to `UserRole` in `app/models/user.py`
 
 ### Razorpay Inspection Fee Payment (Completed - Mar 28, 2026)
+
+### Portfolio-Based Visual Matching (Completed - Mar 29, 2026)
+- **Backend**: New `POST /api/rfqs/{rfq_id}/portfolio-match` endpoint — collects RFQ drawing analyses + vendor portfolio items, uses Gemini AI to score vendors 0-100 based on portfolio similarity (material, process, complexity, industry), saves matches with `match_type: "portfolio"`, notifies matched vendors
+- **Frontend**: `CreateRFQ.jsx` Step 4 automatically uses portfolio matching when image files (jpg/png/webp) are uploaded without extractable dimensions. Shows "Matching with Vendor Portfolios..." during process.
+- **Frontend**: Removed "Review & Complete Specifications" form — simplified Step 4 to clean analysis summary + direct vendor matching
+- **Frontend**: Friendly "No Exact Matches Right Now" message with reassuring text + navigation buttons when no vendors match
+- Falls back to standard machine-capability matching when no portfolios exist or AI fails
 - **Backend**: `POST /api/inspections/{id}/create-razorpay-order` — creates Razorpay order for inspection fee (atomic, idempotent)
 - **Backend**: `POST /api/inspections/{id}/verify-payment` — verifies Razorpay signature, updates inspection to `awaiting_assignment`, records payment ID, notifies admins
 - **Frontend**: `InspectionStatusCard` shows amber "Inspection Fee Due" card with amount + "Pay via Razorpay" button when `status === payment_pending`

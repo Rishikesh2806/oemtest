@@ -3548,6 +3548,161 @@ Return ONLY a JSON array sorted by score descending:
 
 
 
+@api_router.post("/rfqs/{rfq_id}/portfolio-match")
+async def portfolio_match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
+    """Match an RFQ's image-based drawings against vendor portfolio items using AI.
+    Used when uploads are photos/images without precise dimensions."""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    if rfq.get("buyer_id") != user["user_id"] and not has_admin_access(user):
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Get RFQ drawings and their AI analysis
+    drawings = await db.drawings.find({"rfq_id": rfq_id}, {"_id": 0, "file_data": 0}).to_list(20)
+    
+    # Build buyer requirements from RFQ data + drawing analyses
+    buyer_profile = {
+        "title": rfq.get("title", ""),
+        "description": rfq.get("description", ""),
+        "material_type": rfq.get("material_type", ""),
+        "manufacturing_process": rfq.get("manufacturing_process", ""),
+        "quantity": rfq.get("quantity", 1),
+    }
+    
+    # Collect analysis info from drawings
+    drawing_analyses = []
+    for d in drawings:
+        if d.get("ai_analysis"):
+            analysis = d["ai_analysis"]
+            drawing_analyses.append({
+                "filename": d.get("filename", ""),
+                "material": analysis.get("material_specs", ""),
+                "processes": analysis.get("recommended_processes", []),
+                "complexity": analysis.get("complexity_score", ""),
+                "features": analysis.get("special_requirements", []),
+            })
+    
+    buyer_profile["drawing_analyses"] = drawing_analyses
+    
+    # Get all vendor portfolio items
+    all_portfolios = await db.vendor_portfolio.find({}, {"_id": 0}).to_list(500)
+    
+    if not all_portfolios:
+        # No portfolios — fall back to standard match
+        logger.info(f"No vendor portfolios for visual match, falling back to standard match for {rfq_id}")
+        return await match_vendors_to_rfq(rfq_id, user)
+    
+    # Group by vendor
+    vendor_profiles = {}
+    for p in all_portfolios:
+        vid = p["vendor_id"]
+        if vid not in vendor_profiles:
+            vendor_profiles[vid] = {"items": [], "vendor_id": vid}
+        vendor_profiles[vid]["items"].append({
+            "manufacturing_process": p.get("manufacturing_process", ""),
+            "material": p.get("material", ""),
+            "part_category": p.get("part_category", ""),
+            "surface_finish": p.get("surface_finish", ""),
+            "complexity": p.get("complexity", ""),
+            "industry_fit": p.get("industry_fit", []),
+            "notable_features": p.get("notable_features", []),
+        })
+    
+    # Enrich with vendor info
+    for vid, profile in vendor_profiles.items():
+        vendor = await db.vendors.find_one({"vendor_id": vid}, {"_id": 0, "company_name": 1, "city": 1, "materials_handled": 1, "industries": 1})
+        if vendor:
+            profile["company_name"] = vendor.get("company_name", "")
+            profile["city"] = vendor.get("city", "")
+            profile["materials"] = vendor.get("materials_handled", [])
+    
+    profiles_list = list(vendor_profiles.values())
+    
+    # AI-powered portfolio matching
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        logger.warning("EMERGENT_LLM_KEY not set, falling back to standard match")
+        return await match_vendors_to_rfq(rfq_id, user)
+    
+    match_chat = LlmChat(
+        api_key=api_key,
+        session_id=f"portfolio_match_{rfq_id}_{uuid.uuid4().hex[:8]}",
+        system_message="You are a manufacturing procurement expert. Always respond with valid JSON only."
+    )
+    
+    prompt = f"""A buyer needs manufacturing for this part:
+{json.dumps(buyer_profile, indent=2, default=str)}
+
+Here are vendor portfolios showing their past work and capabilities:
+{json.dumps(profiles_list, indent=2, default=str)}
+
+Score each vendor 0-100 based on how well their portfolio matches the buyer's needs.
+Consider: similar part types, material capability, process match, complexity handling, industry relevance.
+Only include vendors with score >= 30.
+Return ONLY a JSON array sorted by score descending:
+[{{"vendor_id": "", "score": 0, "match_reasons": ["reason1"], "recommended_for": "brief note"}}]"""
+
+    try:
+        match_response = await match_chat.send_message(UserMessage(text=prompt))
+        import re as _re
+        json_match = _re.search(r'\[[\s\S]*\]', match_response)
+        if json_match:
+            ranked = json.loads(json_match.group())
+        else:
+            ranked = []
+    except Exception as e:
+        logger.error(f"Portfolio matching AI failed: {e}")
+        return await match_vendors_to_rfq(rfq_id, user)
+    
+    # Save matched vendors to RFQ
+    matched_vendors = []
+    for v in ranked:
+        vid = v.get("vendor_id", "")
+        vendor = await db.vendors.find_one({"vendor_id": vid}, {"_id": 0, "company_name": 1, "city": 1, "vendor_id": 1, "user_id": 1})
+        if not vendor:
+            continue
+        matched_vendors.append({
+            "vendor_id": vid,
+            "company_name": vendor.get("company_name", ""),
+            "city": vendor.get("city", ""),
+            "match_score": v.get("score", 0),
+            "match_type": "portfolio",
+            "match_reasons": v.get("match_reasons", []),
+            "recommended_for": v.get("recommended_for", ""),
+            "matched_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        # Notify vendor
+        if vendor.get("user_id"):
+            await create_notification(
+                user_id=vendor["user_id"],
+                notification_type=NotificationType.RFQ_MATCHED,
+                title="New RFQ Match (Portfolio)",
+                message=f"Your portfolio matches RFQ: {rfq.get('title', '')}",
+                data={"rfq_id": rfq_id}
+            )
+    
+    await db.rfqs.update_one(
+        {"rfq_id": rfq_id},
+        {"$set": {
+            "matched_vendors": matched_vendors,
+            "match_type": "portfolio",
+            "status": RFQStatus.MATCHING if matched_vendors else rfq.get("status"),
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }}
+    )
+    
+    return {
+        "matched_vendors": matched_vendors,
+        "total_matches": len(matched_vendors),
+        "match_type": "portfolio",
+        "message": f"Matched {len(matched_vendors)} vendors based on portfolio similarity" if matched_vendors else "No portfolio matches found"
+    }
+
+
 @api_router.get("/vendors/{vendor_id}")
 async def get_vendor_by_id(vendor_id: str):
     vendor = await db.vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
