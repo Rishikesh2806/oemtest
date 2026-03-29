@@ -345,6 +345,25 @@ const LandingPage = () => {
         </div>
       </section>
 
+      {/* ── OUR VENDORS SERVED ── */}
+      <div className="border-y border-slate-800/60 py-6 bg-slate-900/30 overflow-hidden">
+        <p className="text-center text-[10px] uppercase tracking-[0.25em] text-slate-600 font-semibold mb-4">Our vendors served</p>
+        <div className="relative">
+          <div className="flex animate-scroll-left whitespace-nowrap">
+            {["Tata Steel", "Ultratech", "Hindalco", "MSF", "ITD", "SAIL", "Tata Steel", "Ultratech", "Hindalco", "MSF", "ITD", "SAIL"].map((name, i) => (
+              <span key={i} className="mx-10 text-slate-400 text-lg font-semibold tracking-wide inline-flex items-center gap-2.5">
+                <span className="w-2 h-2 rounded-full bg-orange-500/60" />
+                {name}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+      <style>{`
+        @keyframes scrollLeft { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        .animate-scroll-left { animation: scrollLeft 20s linear infinite; }
+      `}</style>
+
       {/* ── HOW IT WORKS ── */}
       <Section id="how-it-works" className="py-24 md:py-32">
         <div className="max-w-7xl mx-auto px-6">
