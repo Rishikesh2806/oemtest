@@ -81,7 +81,7 @@ const LandingPage = () => {
 
   const howItWorks = [
     { step: "01", title: "Upload Drawing or Photo", desc: "Upload CAD files (PDF, STEP, DWG) or product images. Our system handles both technical drawings and visual references.", icon: FileText },
-    { step: "02", title: "AI Analyzes & Extracts", desc: "Gemini AI extracts dimensions, tolerances, materials, and manufacturing requirements automatically from your uploads.", icon: Cpu },
+    { step: "02", title: "AI Analyzes & Extracts", desc: "Our AI engine extracts dimensions, tolerances, materials, and manufacturing requirements automatically from your uploads.", icon: Cpu },
     { step: "03", title: "Smart Vendor Match", desc: "Our algorithm matches your specs against vendor capabilities, portfolios, machine availability, and location preference.", icon: Target },
     { step: "04", title: "Compare & Negotiate", desc: "Receive competitive quotes, compare side-by-side with AI-powered negotiation insights, and select the best vendor.", icon: BarChart3 },
     { step: "05", title: "Secure Payment & Track", desc: "Pay via Razorpay with milestone-based or against-delivery terms. Track production in real-time.", icon: CreditCard },
@@ -91,7 +91,7 @@ const LandingPage = () => {
   const bentoFeatures = [
     {
       title: "AI Drawing Analysis",
-      desc: "Upload engineering drawings and let AI extract dimensions, tolerances, surface finishes, and manufacturing specs instantly. Supports PDF, STEP, DWG, DXF, and image formats.",
+      desc: "Upload engineering drawings and let AI extract dimensions, tolerances, surface finishes, and manufacturing specs instantly. Supports PDF, STEP, DWG, DXF, and image formats for machining, fabrication, and prototype parts.",
       icon: Cpu,
       span: "md:col-span-8 lg:col-span-7",
       img: "https://images.unsplash.com/photo-1769147339214-076740872485?crop=entropy&cs=srgb&fm=jpg&q=85&w=800",
@@ -106,7 +106,7 @@ const LandingPage = () => {
     },
     {
       title: "Smart Vendor Matching",
-      desc: "ML-powered algorithm scores vendors on machine capabilities, material expertise, past performance, location, and availability.",
+      desc: "ML-powered algorithm scores vendors on machine capabilities, material expertise, fabrication capacity, past performance, location, and availability.",
       icon: Target,
       span: "md:col-span-4 lg:col-span-4",
       accent: "emerald"
@@ -259,7 +259,7 @@ const LandingPage = () => {
               </h1>
 
               <p className="text-base md:text-lg text-slate-400 leading-relaxed mb-10 max-w-xl">
-                Upload your engineering drawings or product photos. Our AI analyzes specs, matches you with verified manufacturers, and manages the entire RFQ-to-delivery workflow.
+                Upload your engineering drawings or product photos. Our AI analyzes specs, matches you with verified manufacturers for precision machining, fabrication, and prototyping — managing the entire RFQ-to-delivery workflow.
               </p>
 
               <div className="flex flex-wrap gap-4 mb-10">
@@ -404,7 +404,7 @@ const LandingPage = () => {
           <motion.div variants={fadeUp} className="mb-16">
             <p className="text-orange-500 text-xs font-semibold uppercase tracking-[0.2em] mb-3">Capabilities</p>
             <h2 className="font-heading text-3xl md:text-4xl lg:text-5xl font-black text-white">
-              Everything You Need to<br className="hidden md:block" /> Source Precision Parts
+              Everything You Need to<br className="hidden md:block" /> Source Precision & Fabricated Parts
             </h2>
           </motion.div>
 
@@ -463,9 +463,9 @@ const LandingPage = () => {
                 {[
                   "Upload drawings or photos — AI handles the rest",
                   "Get matched with verified vendors in minutes",
+                  "Precision machining, fabrication & rapid prototyping",
                   "Compare quotes side-by-side with AI insights",
                   "Milestone-based payments via Razorpay",
-                  "Track orders & schedule quality inspections",
                   "NDA protection for all sensitive drawings"
                 ].map((t, i) => (
                   <li key={i} className="flex items-start gap-2.5 text-sm text-slate-400">
@@ -493,7 +493,7 @@ const LandingPage = () => {
               <ul className="space-y-3 mb-8">
                 {[
                   "Get matched to relevant RFQs automatically",
-                  "Showcase your portfolio with AI-analyzed work samples",
+                  "Showcase machining, fabrication & prototype capabilities",
                   "Receive WhatsApp alerts for new opportunities",
                   "Submit competitive quotes with flexible payment terms",
                   "Build your rating and reputation over time",
@@ -577,7 +577,7 @@ const LandingPage = () => {
               Ready to Transform Your Supply Chain?
             </h2>
             <p className="text-slate-400 text-base md:text-lg mb-10 max-w-2xl mx-auto">
-              Join thousands of buyers and manufacturers already using OEMLinker to streamline precision manufacturing.
+              Join thousands of buyers and manufacturers already using OEMLinker to streamline precision machining, fabrication, and prototyping.
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link to="/register">
