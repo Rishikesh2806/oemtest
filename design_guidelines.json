@@ -1,159 +1,166 @@
 {
-  "brand_identity": {
-    "name": "Offoadex",
-    "tagline": "Precision Manufacturing on Demand",
-    "mission": "Connect engineers with machine capabilities instantly.",
-    "emotional_tone": "Precision, Robustness, Efficiency, Trust",
-    "visual_archetype": "The Performance Pro (Industrial/Tactical)"
+  "theme_strategy": {
+    "archetype": "Swiss & High-Contrast (Tech meets Industrial)",
+    "description": "A high-contrast, technical dark-mode base with vibrant orange accents to convey precision, authority, and modern manufacturing capabilities."
   },
   "typography": {
-    "primary_font": "Inter",
-    "secondary_font": "Chivo",
-    "mono_font": "JetBrains Mono",
-    "usage": {
-      "headings": "Chivo, sans-serif",
-      "body": "Inter, sans-serif",
-      "data_tables": "Inter, sans-serif",
-      "code_specs": "JetBrains Mono, monospace"
+    "headings": {
+      "family": "Chivo, sans-serif",
+      "classes": "font-heading tracking-tight",
+      "rules": "Never use Inter for headings. Use extreme weights (Light or Black). Never center-align by default."
     },
-    "scale": {
-      "h1": "text-5xl md:text-7xl font-black tracking-tight leading-none uppercase",
-      "h2": "text-3xl md:text-5xl font-bold tracking-tight",
-      "h3": "text-xl md:text-2xl font-semibold tracking-normal",
-      "body": "text-base md:text-lg leading-relaxed text-slate-600 dark:text-slate-300",
-      "caption": "text-sm font-medium tracking-wide text-slate-500 uppercase"
+    "body": {
+      "family": "IBM Plex Sans, sans-serif",
+      "classes": "leading-relaxed text-slate-400"
+    },
+    "labels": {
+      "classes": "uppercase text-[10px] tracking-[0.2em] font-semibold"
     }
   },
   "colors": {
-    "theme_mode": "light",
-    "palette": {
-      "primary": {
-        "main": "#0F172A",
-        "description": "Deep Slate (Slate 900) - Authority & Stability",
-        "foreground": "#F8FAFC"
-      },
-      "secondary": {
-        "main": "#64748B",
-        "description": "Industrial Grey (Slate 500) - Technical Text"
-      },
-      "accent": {
-        "main": "#EA580C",
-        "description": "Safety Orange (Orange 600) - Action/Alerts",
-        "hover": "#C2410C"
-      },
-      "background": {
-        "default": "#F8FAFC",
-        "paper": "#FFFFFF",
-        "sidebar": "#0F172A"
-      },
-      "border": {
-        "default": "#E2E8F0",
-        "active": "#94A3B8"
+    "base": {
+      "background": "slate-950",
+      "surface": "slate-900",
+      "surface_elevated": "slate-800"
+    },
+    "brand": {
+      "primary": "#ea580c",
+      "primary_hover": "#c2410c",
+      "classes": {
+        "text": "text-orange-600",
+        "bg": "bg-orange-600",
+        "border": "border-orange-600"
       }
     },
-    "gradients": {
-      "hero": "bg-gradient-to-br from-slate-50 to-slate-200",
-      "metal_sheen": "bg-gradient-to-br from-slate-100 via-white to-slate-100",
-      "dark_sidebar": "bg-gradient-to-b from-slate-900 to-slate-950"
-    }
-  },
-  "layout_strategies": {
-    "marketing_page": {
-      "grid": "Bento Grid (Mode A)",
-      "spacing": "Generous (py-24, gap-8)",
-      "container": "max-w-7xl mx-auto px-6",
-      "features": [
-        "Asymmetrical layouts",
-        "Large typography overlapping images",
-        "Parallax scrolling effects"
-      ]
+    "accents": {
+      "success": "emerald-500",
+      "warning": "amber-500",
+      "info": "blue-500"
     },
-    "dashboard": {
-      "grid": "High Density Grid (Mode B)",
-      "structure": "Sidebar Navigation (Dark) + Main Content Area (Light)",
-      "spacing": "Tight (p-6, gap-4)",
-      "card_style": "Flat with 1px border, no shadow by default, subtle shadow on hover"
-    }
-  },
-  "components": {
-    "buttons": {
-      "primary": "bg-slate-900 text-white rounded-sm hover:bg-slate-800 transition-all active:scale-95 shadow-sm font-medium",
-      "accent": "bg-orange-600 text-white rounded-sm hover:bg-orange-700 transition-all font-bold tracking-wide uppercase text-sm",
-      "outline": "border border-slate-300 bg-transparent hover:bg-slate-50 text-slate-900 rounded-sm"
-    },
-    "cards": {
-      "base": "bg-white border border-slate-200 rounded-lg overflow-hidden",
-      "hover_effect": "hover:border-orange-500/50 hover:shadow-lg transition-all duration-300 group relative",
-      "tech_border": "relative before:absolute before:inset-0 before:border before:border-transparent before:hover:border-slate-900 before:transition-colors before:duration-300 pointer-events-none"
-    },
-    "inputs": {
-      "style": "rounded-sm border-slate-300 focus:ring-2 focus:ring-orange-500 focus:border-transparent bg-slate-50",
-      "label": "text-xs font-bold uppercase tracking-wider text-slate-500 mb-1"
-    }
+    "rules": "No full-screen generic gradients. Use texture or noise overlays. Dark slate is not pure black—it has a subtle blue/cool tint."
   },
   "visual_enhancers": {
-    "textures": "Subtle noise overlay on dark backgrounds to reduce banding",
-    "borders": "1px solid borders are preferred over shadows for a 'technical' look",
-    "icons": "Lucide React (Stroke width 1.5px for elegance, 2px for active states)",
-    "animations": {
-      "hover": "transition-all duration-200 ease-out",
-      "enter": "animate-in fade-in slide-in-from-bottom-4 duration-500"
-    }
-  },
-  "image_assets": {
-    "hero_bg": {
-      "url": "https://images.pexels.com/photos/9407363/pexels-photo-9407363.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-      "alt": "Modern industrial factory drone view showing scale and precision",
-      "placement": "Landing Page Hero Background (with overlay)"
-    },
-    "cnc_machine": {
-      "url": "https://images.pexels.com/photos/10406128/pexels-photo-10406128.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-      "alt": "Close-up of CNC milling machine cutting metal",
-      "placement": "Features Section / Vendor Profile"
-    },
-    "engineer_tablet": {
-      "url": "https://images.pexels.com/photos/32845690/pexels-photo-32845690.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-      "alt": "Engineers collaborating with tablet in factory",
-      "placement": "About Section / Buyer Dashboard Hero"
-    },
-    "cad_screen": {
-      "url": "https://images.pexels.com/photos/19895882/pexels-photo-19895882.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
-      "alt": "Engineer working on CAD software",
-      "placement": "AI Analysis Feature Section"
-    },
-    "logos": {
-      "placeholder": "Use text-based logos or Lucide icons (e.g., Triangle, Hexagon, Circle) for dummy vendor logos. DO NOT use external logo URLs unless provided."
-    }
-  },
-  "instructions_to_main_agent": {
-    "setup": [
-      "Run 'yarn add framer-motion' to enable advanced animations.",
-      "Ensure 'lucide-react' is installed (it should be).",
-      "Configure Tailwind theme to use the colors defined above."
+    "surfaces": [
+      {
+        "name": "Grid Borders (The Technical Look)",
+        "usage": "Data-heavy sections, Feature Grids",
+        "classes": "border-collapse border-slate-800",
+        "child_classes": "border-r border-b border-slate-800/40 p-8"
+      },
+      {
+        "name": "Tracing Beam Cards",
+        "usage": "High-conversion CTA cards, Premium features",
+        "description": "A subtle animated gradient border around the edge, implemented via Framer Motion or CSS mask-image."
+      },
+      {
+        "name": "Glassmorphism (Crystal Variant)",
+        "usage": "Sticky Nav, Floating Alerts",
+        "classes": "bg-slate-950/60 backdrop-blur-xl border-b border-white/5 shadow-sm"
+      }
     ],
-    "implementation_order": [
-      "1. Configure Tailwind Colors & Fonts",
-      "2. Build 'Button', 'Card', 'Input' base components",
-      "3. Create Layouts (MarketingLayout, DashboardLayout)",
-      "4. Implement Landing Page (Hero -> Features -> CTA)",
-      "5. Implement Auth Pages",
-      "6. Implement Dashboard Views"
-    ],
-    "critical_rules": [
-      "DO NOT use gradients for text.",
-      "DO NOT use rounded-full for buttons (use rounded-sm or rounded-md).",
-      "Ensure all interactive elements have 'data-testid'.",
-      "Use 'sonner' for all toast notifications.",
-      "For charts, use 'recharts' with the defined Slate/Orange palette."
+    "textures": [
+      "Subtle SVG noise overlay across the hero section.",
+      "Tech-grid background (repeating linear gradients or TSParticles)."
     ]
   },
-  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
-    "You tend to converge toward generic outputs. Avoid this. Make it look ENGINEERED.",
+  "layouts": {
+    "spacing_scale": "p-1, p-2, p-4, p-6, p-8, p-12, p-16, p-20, p-24, p-32",
+    "bento_grid": {
+      "name": "Mode A: Tetris Grid",
+      "usage": "Marketing features and capabilities",
+      "rules": "Base: grid-cols-1 md:grid-cols-8 lg:grid-cols-12. Gap: gap-8 to gap-12. Never fill 100% perfectly, leave negative space.",
+      "items": [
+        "Hero item: col-span-full md:col-span-8 row-span-2",
+        "Square: col-span-4 row-span-1",
+        "Tall: col-span-4 row-span-2"
+      ]
+    },
+    "alignment": "Left-align paragraphs, inputs, labels. Center-align only intentionally for visual hierarchy.",
+    "general": "Always mobile-first responsive. Generous spacing (py-24 or py-32 for sections)."
+  },
+  "motion": {
+    "rules": [
+      "Hover states for all interactive elements (scale up, border color shift).",
+      "Staggered entrance animations for bento grid items.",
+      "MUST respect prefers-reduced-motion via Framer Motion.",
+      "Smooth scroll using lenis (if possible, else CSS scroll-behavior)."
+    ],
+    "examples": {
+      "stagger_container": "{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } }",
+      "fade_up_item": "{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }"
+    }
+  },
+  "accessibility": {
+    "contrast": "Ensure text over images has dark overlays (bg-slate-950/80) or text-shadows.",
+    "focus": "focus:ring-2 focus:ring-orange-500 focus:outline-none focus:ring-offset-2 focus:ring-offset-slate-950",
+    "testing": "All interactive elements MUST include data-testid attributes (e.g., data-testid='hero-cta-button').",
+    "aria": "Add aria-hidden='true' to purely decorative icons."
+  },
+  "media": {
+    "image_constraints": "Max height 80vh on mobile. Lazy load all images below the fold.",
+    "icon_library": "lucide-react",
+    "image_urls": [
+      {
+        "url": "https://images.pexels.com/photos/33748032/pexels-photo-33748032.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "Hero / CNC Precision",
+        "description": "Detailed view of CNC grinding machine shaping ceramic material with precision tool."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1769147339214-076740872485?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "category": "Features / AI Drawing Analysis",
+        "description": "Two metal mechanical parts on engineering blueprints"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?crop=entropy&cs=srgb&fm=jpg&q=85",
+        "category": "Features / Real-time Tracking & Dashboards",
+        "description": "graphs of performance analytics on a laptop screen"
+      }
+    ]
+  },
+  "3d_libraries": {
+    "recommendation": "TSParticles or pure CSS/Framer Motion",
+    "usage": "Use a subtle animated CSS grid pattern or light particles in the hero background to avoid heavy performance hits. Keep it performant."
+  },
+  "components_to_build": {
+    "hero": "Dark mode hero with an abstract tech grid, overlapping the CNC precision image. Massive Chivo typography. Orange primary CTA.",
+    "trusted_by": "A marquee (using framer-motion or CSS animation) showing generic manufacturing company names paired with Lucide icons (e.g., Factory, Cpu, Zap).",
+    "how_it_works": "Vertical timeline or staggered grid with steps 01-06. Clear, structural lines.",
+    "bento_features": "Showcase AI Drawing Analysis, Smart Vendor Matching, etc., using the Bento Grid Protocol. Cards with subtle borders that light up on hover.",
+    "split_cta": "Dual CTAs for Buyers (Upload Drawing) and Vendors (Join Network) in a high-contrast container.",
+    "contact": "Integrate the existing contact form but restyle it with the new technical dark/slate theme."
+  },
+  "instructions_to_main_agent": [
+    "Transform LandingPage.jsx completely. Ditch the white background, go with Slate-950 dark mode base.",
+    "Apply the 'Swiss & High-Contrast' archetype. Use Chivo for headings and IBM Plex Sans for body. Do NOT use Inter.",
+    "Ensure the hero section is visually stunning with a layered CNC image, tech grid background, and high contrast typography.",
+    "Implement the Bento Grid Protocol for the capabilities section.",
+    "Preserve existing auth links, form submission logic, and ChatbotWidget.",
+    "Do NOT add universal transitions. Target specific properties.",
+    "Add data-testid attributes to EVERY button, link, and input.",
+    "Make the page feel like an elite, precision B2B manufacturing SaaS."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. In frontend design, this creates what users call the 'AI slop' aesthetic. Avoid this: make creative, distinctive frontends that surprise and delight.",
     "Dark colors look good when used independently without gradients. DO NOT use dark colors as gradients.",
+    "Don't make generic centered layouts, simplistic gradients, and uniform styling.",
     "Create depth through layered design elements with z-index hierarchy.",
-    "Use glass-morphism effects (backdrop-blur-md) for sticky headers and overlays.",
-    "You MUST NOT apply universal transition (transition: all). Use specific transitions.",
-    "You MUST NOT center align the app container. Left align by default.",
-    "NEVER use AI assistant Emoji characters like 🤖🧠 in the UI. Use sleek Lucide icons instead."
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition. Eg: transition: all. This results in breaking transforms. Always add transitions for specific interactive elements like button, input excluding transforms.",
+    "You MUST NOT center align the app container. This disrupts the human natural reading flow of text.",
+    "Always use modern button styles like pill-shaped, or sharp button with interaction animations & color relevant to the app style.",
+    "NEVER use AI assistant Emoji characters for icons.",
+    "Every interaction needs micro-animations - hover states, transitions, parallax effects, and entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "Subtle grain textures, noise overlays, custom cursors, selection states, and loading animations: separates good from extraordinary.",
+    "Prioritize using pre-existing components from src/components/ui when applicable.",
+    "Components MUST use named exports (export const ComponentName = ...), Pages MUST use default exports (export default function PageName() {...}).",
+    "Use sonner for toasts (already implemented)."
+  ],
+  "GENERAL UI UX DESIGN GUIDELINES": [
+    "Prioritize optical alignment over geometric alignment.",
+    "Use a clear visual hierarchy driven by typography size, weight, and contrast.",
+    "Forms should have clear validation states and always communicate constraints inline.",
+    "Keep cognitive load low by grouping related information into discrete containers (cards, sections).",
+    "Ensure contrast ratios meet APCA or at least WCAG AA standards."
   ]
 }
