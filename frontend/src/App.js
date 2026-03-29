@@ -266,7 +266,9 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   }
 
   // If user has no role and is not already on select-role page, redirect there
-  const effectiveRole = user.role || (user.custom_role ? "staff" : "");
+  const isInspector = user.custom_role?.toLowerCase().includes("inspector") || 
+                      user.secondary_roles?.some(r => r.toLowerCase().includes("inspector"));
+  const effectiveRole = isInspector ? "inspector" : (user.role || (user.custom_role ? "staff" : ""));
   if (!effectiveRole && allowedRoles && location.pathname !== "/select-role") {
     return <Navigate to="/select-role" replace />;
   }
@@ -279,6 +281,8 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
       return <Navigate to="/admin/dashboard" replace />;
     } else if (user.role === "buyer") {
       return <Navigate to="/buyer/dashboard" replace />;
+    } else if (effectiveRole === "inspector") {
+      return <Navigate to="/inspector/dashboard" replace />;
     } else if (user.role === "staff" || user.custom_role) {
       return <Navigate to="/staff/dashboard" replace />;
     }
@@ -515,6 +519,12 @@ const DashboardRedirect = () => {
     return <Navigate to="/vendor/dashboard" replace />;
   } else if (user.role === "admin") {
     return <Navigate to="/admin/dashboard" replace />;
+  } else if (user.role === "inspector" || 
+             user.custom_role?.toLowerCase().includes("inspector") || 
+             user.secondary_roles?.some(r => r.toLowerCase().includes("inspector"))) {
+    return <Navigate to="/inspector/dashboard" replace />;
+  } else if (user.role === "staff" || user.custom_role) {
+    return <Navigate to="/staff/dashboard" replace />;
   }
   
   return <Navigate to="/buyer/dashboard" replace />;
