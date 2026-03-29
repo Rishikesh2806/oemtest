@@ -43,15 +43,6 @@ const Section = ({ children, className = "", id }) => {
   );
 };
 
-/* ── Marquee for trusted-by ── */
-const Marquee = ({ children }) => (
-  <div className="overflow-hidden relative">
-    <div className="flex animate-marquee whitespace-nowrap">
-      {children}{children}
-    </div>
-  </div>
-);
-
 const LandingPage = () => {
   const { user } = useAuth();
   const [contactForm, setContactForm] = useState({ name: "", email: "", phone: "", company: "", message: "" });
@@ -82,10 +73,10 @@ const LandingPage = () => {
 
   /* ── Data ── */
   const stats = [
-    { value: "500+", label: "Verified Vendors", icon: Factory },
-    { value: "10K+", label: "RFQs Processed", icon: FileText },
-    { value: "98%", label: "Match Accuracy", icon: Target },
-    { value: "48h", label: "Avg Quote Time", icon: Clock }
+    { value: "AI", label: "Drawing Analysis", desc: "Auto-extract dimensions from CAD", icon: Cpu },
+    { value: "2-Way", label: "Vendor Matching", desc: "Drawing-based & image-based", icon: Target },
+    { value: "Secure", label: "Razorpay Payments", desc: "Milestone & inspection billing", icon: CreditCard },
+    { value: "NDA", label: "IP Protection", desc: "Enforced before drawing access", icon: Shield }
   ];
 
   const howItWorks = [
@@ -193,17 +184,6 @@ const LandingPage = () => {
     slate: { bg: "bg-slate-500/10", border: "border-slate-500/20", text: "text-slate-400", icon: "bg-slate-500" }
   };
 
-  const trustedNames = [
-    { name: "Tata Steel", icon: Factory },
-    { name: "Bajaj Auto", icon: Wrench },
-    { name: "L&T Engineering", icon: Building2 },
-    { name: "Godrej Aerospace", icon: Cpu },
-    { name: "Mahindra CIE", icon: Layers },
-    { name: "Bharat Forge", icon: Zap },
-    { name: "Thermax", icon: Package },
-    { name: "Kirloskar", icon: Globe }
-  ];
-
   return (
     <div className="min-h-screen bg-slate-950 text-slate-300 selection:bg-orange-600/30 selection:text-white">
       {/* ─── NOISE OVERLAY ─── */}
@@ -215,7 +195,7 @@ const LandingPage = () => {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-950/60 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="OEMLinker" style={{ width: '220px', height: '68px' }} className="object-contain" />
+            <img src="/logo.png" alt="OEMLinker" style={{ width: '240px', height: '74px' }} className="object-contain" />
           </Link>
           <div className="hidden md:flex items-center gap-8 text-sm">
             <a href="#how-it-works" className="text-slate-400 hover:text-white transition-colors duration-200">Process</a>
@@ -331,9 +311,9 @@ const LandingPage = () => {
                 <div className="absolute bottom-4 left-4 right-4 bg-slate-900/80 backdrop-blur-md border border-white/10 rounded-xl p-4">
                   <div className="grid grid-cols-3 divide-x divide-slate-700">
                     {[
-                      { v: "98%", l: "Match Rate" },
-                      { v: "500+", l: "Vendors" },
-                      { v: "<48h", l: "Quote Time" }
+                      { v: "AI", l: "Drawing Analysis" },
+                      { v: "Smart", l: "Vendor Match" },
+                      { v: "Secure", l: "Payments" }
                     ].map((s, i) => (
                       <div key={i} className="text-center px-2">
                         <p className="text-lg font-bold text-white">{s.v}</p>
@@ -356,26 +336,14 @@ const LandingPage = () => {
             {stats.map((s, i) => (
               <div key={i} className="bg-slate-900/50 border border-slate-800/60 rounded-xl p-5 group hover:border-orange-500/30 transition-colors duration-300">
                 <s.icon className="w-5 h-5 text-slate-600 group-hover:text-orange-500 transition-colors duration-300 mb-3" aria-hidden="true" />
-                <div className="font-heading text-3xl font-black text-white">{s.value}</div>
-                <div className="text-xs text-slate-500 uppercase tracking-[0.15em] mt-1">{s.label}</div>
+                <div className="font-heading text-2xl font-black text-white">{s.value}</div>
+                <div className="text-xs text-slate-400 uppercase tracking-[0.12em] mt-1 font-semibold">{s.label}</div>
+                <div className="text-[11px] text-slate-500 mt-1">{s.desc}</div>
               </div>
             ))}
           </motion.div>
         </div>
       </section>
-
-      {/* ── TRUSTED BY MARQUEE ── */}
-      <div className="border-y border-slate-800/60 py-6 bg-slate-900/30">
-        <p className="text-center text-[10px] uppercase tracking-[0.25em] text-slate-600 font-semibold mb-4">Trusted by leading manufacturers</p>
-        <Marquee>
-          {trustedNames.map((t, i) => (
-            <div key={i} className="flex items-center gap-2 mx-8 text-slate-500">
-              <t.icon className="w-4 h-4" aria-hidden="true" />
-              <span className="text-sm font-medium whitespace-nowrap">{t.name}</span>
-            </div>
-          ))}
-        </Marquee>
-      </div>
 
       {/* ── HOW IT WORKS ── */}
       <Section id="how-it-works" className="py-24 md:py-32">
@@ -816,17 +784,6 @@ const LandingPage = () => {
       </footer>
 
       <ChatbotWidget />
-
-      {/* Marquee animation CSS */}
-      <style>{`
-        @keyframes marquee {
-          0% { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .animate-marquee {
-          animation: marquee 30s linear infinite;
-        }
-      `}</style>
     </div>
   );
 };
