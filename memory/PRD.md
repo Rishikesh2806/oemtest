@@ -542,6 +542,16 @@ Comprehensive platform analytics for business tracking:
 - **Frontend**: After payment, shows green "Paid via Razorpay" badge with transaction ID
 - Replaces the previously MOCKED `/inspections/{id}/pay` endpoint with real Razorpay checkout
 
+### Vendor Portfolio Display & Admin Management (Completed - Mar 29, 2026)
+- **Backend**: Modified `POST /api/vendor/portfolio` to accept optional `vendor_id` query param — admins can upload portfolio photos on behalf of any vendor
+- **Backend**: Modified `DELETE /api/vendor/portfolio/{portfolio_id}` — admin bypass to delete any portfolio item
+- **Backend**: Modified `PUT /api/vendor/portfolio/{portfolio_id}` — admin bypass to update any portfolio item's AI-detected tags
+- **Backend**: `GET /api/vendors/{vendor_id}/portfolio` remains public (no auth) for buyer viewing
+- **Frontend**: `VendorPortfolio.jsx` updated with `targetVendorId`, `isAdmin`, `readOnly` props — supports vendor self-service, admin management, and read-only gallery modes
+- **Frontend**: `AdminDashboard.jsx` Vendors tab > vendor detail view now includes VendorPortfolio component with full upload/edit/delete capabilities
+- **Frontend**: `VendorProfileView.jsx` shows read-only "Work Portfolio" gallery with AI-detected tags (part_category, manufacturing_process, material, surface_finish, complexity, industry_fit)
+- **Testing**: 100% pass rate — backend 10/10, frontend all elements verified (iteration_46)
+
 ### P1 - High Priority (Next)
 - AI Voice Agent for machine availability check
 - Revenue analytics charts
