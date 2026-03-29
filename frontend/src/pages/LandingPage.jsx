@@ -215,7 +215,7 @@ const LandingPage = () => {
       <nav className="fixed top-0 left-0 right-0 z-50 bg-slate-950/60 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="OEMLinker" style={{ width: '240px', height: '74px' }} className="object-contain brightness-[1.6] drop-shadow-[0_0_8px_rgba(255,255,255,0.15)]" />
+            <img src="/logo.png" alt="OEMLinker" style={{ width: '420px', height: '130px' }} className="object-contain brightness-[1.6] drop-shadow-[0_0_8px_rgba(255,255,255,0.15)]" />
           </Link>
           <div className="hidden md:flex items-center gap-8 text-sm">
             <a href="#how-it-works" className="text-slate-400 hover:text-white transition-colors duration-200">Process</a>
