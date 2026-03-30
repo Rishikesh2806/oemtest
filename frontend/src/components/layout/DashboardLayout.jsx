@@ -196,7 +196,7 @@ const DashboardLayout = ({ children }) => {
           </button>
           
           <Link to="/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="OEMLinker" className="w-[320px] h-[80px]" />
+            <img src="/logo.png" alt="OEMLinker" style={{ width: '180px', height: '56px' }} className="object-contain" />
           </Link>
 
           <NotificationBell />
@@ -211,7 +211,7 @@ const DashboardLayout = ({ children }) => {
           {/* Logo */}
           <div className="p-6 border-b border-slate-800">
             <Link to="/" className="flex items-center gap-2">
-              <img src="/logo.png" alt="OEMLinker" className="w-[320px] h-[80px]" />
+              <img src="/logo.png" alt="OEMLinker" style={{ width: '180px', height: '56px' }} className="object-contain brightness-[1.6]" />
             </Link>
           </div>
 
