@@ -905,6 +905,11 @@ const VendorQuotationForm = ({ rfq, onSubmitSuccess, existingQuote = null }) => 
             />
           </div>
 
+          {/* Commission Disclaimer */}
+          <p className="text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-md px-3 py-2" data-testid="commission-disclaimer">
+            Note: A 2.5% platform commission will be deducted from the final order payment value.
+          </p>
+
           {/* Submit Button */}
           <Button 
             type="submit" 
