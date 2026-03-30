@@ -209,9 +209,11 @@ const DashboardLayout = ({ children }) => {
       }`}>
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="p-6 border-b border-slate-800">
-            <Link to="/" className="flex items-center gap-2">
-              <img src="/logo.png" alt="OEMLinker" style={{ width: '180px', height: '56px' }} className="object-contain brightness-[1.6]" />
+          <div className="p-4 border-b border-slate-800">
+            <Link to="/" className="flex items-center justify-center">
+              <div className="bg-white/95 rounded-lg px-4 py-2">
+                <img src="/logo.png" alt="OEMLinker" style={{ width: '170px', height: '50px' }} className="object-contain" />
+              </div>
             </Link>
           </div>
 
