@@ -166,9 +166,10 @@ const QuoteDetailModal = ({ quoteId, open, onOpenChange, onQuoteUpdated, rfqId }
               <div className="text-center">
                 <div className="flex items-center justify-center gap-1 text-2xl font-bold text-slate-900">
                   <DollarSign className="w-5 h-5" />
-                  {quote.price?.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  {((quote.total_cost || quote.price || 0) * 1.025).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
-                <p className="text-sm text-slate-500">Price ({quote.currency})</p>
+                <p className="text-sm text-slate-500">Total Payable ({quote.currency})</p>
+                <p className="text-[10px] text-slate-400">incl. 2.5% platform fee</p>
               </div>
               <div className="text-center">
                 <div className="flex items-center justify-center gap-1 text-2xl font-bold text-slate-900">
@@ -271,11 +272,25 @@ const QuoteDetailModal = ({ quoteId, open, onOpenChange, onQuoteUpdated, rfqId }
                         );
                       })}
                     </div>
-                    <div className="mt-3 pt-3 border-t border-blue-200 flex justify-between items-center">
-                      <span className="font-medium text-blue-800">Grand Total</span>
-                      <span className="text-xl font-bold text-blue-800">
-                        ₹{(quote.total_cost || quote.price || 0).toLocaleString('en-IN')}
-                      </span>
+                    <div className="mt-3 pt-3 border-t border-blue-200 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-blue-700">Vendor Quote Total</span>
+                        <span className="text-base font-semibold text-blue-800">
+                          ₹{(quote.total_cost || quote.price || 0).toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-orange-600">Platform Fee (2.5%)</span>
+                        <span className="text-sm font-medium text-orange-600">
+                          + ₹{((quote.total_cost || quote.price || 0) * 0.025).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center pt-2 border-t border-blue-200">
+                        <span className="font-bold text-blue-900">Total Payable</span>
+                        <span className="text-xl font-bold text-blue-900">
+                          ₹{((quote.total_cost || quote.price || 0) * 1.025).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -318,11 +333,25 @@ const QuoteDetailModal = ({ quoteId, open, onOpenChange, onQuoteUpdated, rfqId }
                           ))}
                         </>
                       )}
-                      <div className="border-t border-green-200 pt-2 mt-2 flex justify-between">
-                        <span className="font-medium text-green-800">Total</span>
-                        <span className="text-lg font-bold text-green-800">
-                          ₹{(quote.total_cost || quote.price || 0).toLocaleString('en-IN')}
-                        </span>
+                      <div className="border-t border-green-200 pt-2 mt-2 space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm text-green-700">Vendor Quote Total</span>
+                          <span className="text-base font-semibold text-green-800">
+                            ₹{(quote.total_cost || quote.price || 0).toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm text-orange-600">Platform Fee (2.5%)</span>
+                          <span className="text-sm font-medium text-orange-600">
+                            + ₹{((quote.total_cost || quote.price || 0) * 0.025).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                        <div className="flex justify-between pt-2 border-t border-green-200">
+                          <span className="font-bold text-green-900">Total Payable</span>
+                          <span className="text-lg font-bold text-green-900">
+                            ₹{((quote.total_cost || quote.price || 0) * 1.025).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     {quote.cost_breakdown_remarks && (
