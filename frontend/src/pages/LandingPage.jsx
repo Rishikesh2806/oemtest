@@ -167,12 +167,12 @@ const LandingPage = () => {
 
               <div className="flex flex-wrap gap-4 mb-10">
                 <Link to="/register">
-                  <Button data-testid="hero-cta-btn" size="lg" className="bg-orange-600 hover:bg-orange-700 text-white font-bold uppercase tracking-wide h-13 px-8 rounded-lg group">
+                  <Button data-testid="hero-cta-btn" size="lg" className="bg-orange-600 hover:bg-orange-700 text-white font-bold uppercase tracking-wide h-14 px-10 text-base rounded-lg group">
                     Start Free <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform duration-200" />
                   </Button>
                 </Link>
                 <Link to="/register?role=vendor">
-                  <Button data-testid="vendor-cta-btn" size="lg" variant="outline" className="border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400 font-medium h-13 px-8 rounded-lg">
+                  <Button data-testid="vendor-cta-btn" size="lg" variant="outline" className="border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400 font-semibold h-14 px-10 text-base rounded-lg">
                     Join as Vendor
                   </Button>
                 </Link>
@@ -372,7 +372,7 @@ const LandingPage = () => {
                 ))}
               </ul>
               <Link to="/register">
-                <Button data-testid="buyer-cta-btn" className="bg-orange-600 hover:bg-orange-700 text-white font-semibold h-11 px-6 rounded-lg w-full md:w-auto group/btn">
+                <Button data-testid="buyer-cta-btn" className="bg-orange-600 hover:bg-orange-700 text-white font-semibold h-12 px-8 text-base rounded-lg w-full md:w-auto group/btn">
                   Start Sourcing <ArrowRight className="w-4 h-4 ml-2 group-hover/btn:translate-x-1 transition-transform" />
                 </Button>
               </Link>
@@ -391,7 +391,7 @@ const LandingPage = () => {
                 ))}
               </ul>
               <Link to="/register?role=vendor">
-                <Button data-testid="vendor-join-btn" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold h-11 px-6 rounded-lg w-full md:w-auto group/btn">
+                <Button data-testid="vendor-join-btn" className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold h-12 px-8 text-base rounded-lg w-full md:w-auto group/btn">
                   Join Network <ArrowRight className="w-4 h-4 ml-2 group-hover/btn:translate-x-1 transition-transform" />
                 </Button>
               </Link>
@@ -409,9 +409,9 @@ const LandingPage = () => {
           </motion.div>
           <div className="grid md:grid-cols-3 gap-6">
             {[
-              { quote: "OEMLinker's AI drawing analysis saved us 3 days per RFQ. The vendor matching is eerily accurate.", name: "Procurement Head", company: "Automotive OEM, Pune", stars: 5 },
-              { quote: "We went from 2 RFQs a month to 15+ after joining OEMLinker. The portfolio matching brings us the right jobs.", name: "CNC Shop Owner", company: "Precision Engineering, Chennai", stars: 5 },
-              { quote: "The milestone payment system and inspection workflow gave us complete confidence in vendor quality.", name: "Engineering Manager", company: "Defence Contractor, Bangalore", stars: 5 }
+              { quote: "OEMLinker's AI drawing analysis saved us 3 days per RFQ. The vendor matching is eerily accurate.", name: "Procurement Head", company: "Automotive OEM", stars: 5 },
+              { quote: "We went from 2 RFQs a month to 15+ after joining OEMLinker. The portfolio matching brings us the right jobs.", name: "CNC Shop Owner", company: "Precision Engineering", stars: 5 },
+              { quote: "The milestone payment system and inspection workflow gave us complete confidence in vendor quality.", name: "Engineering Manager", company: "Defence Contractor", stars: 5 }
             ].map((t, i) => (
               <motion.div key={i} variants={fadeUp} className="bg-white border border-slate-200 rounded-2xl p-8 hover:shadow-md hover:border-slate-300 transition-all duration-300">
                 <div className="flex gap-0.5 mb-4">
@@ -442,12 +442,12 @@ const LandingPage = () => {
             </p>
             <div className="flex flex-wrap justify-center gap-4">
               <Link to="/register">
-                <Button data-testid="final-cta-btn" size="lg" className="bg-orange-600 hover:bg-orange-700 text-white font-bold uppercase tracking-wide h-13 px-10 rounded-lg group">
+                <Button data-testid="final-cta-btn" size="lg" className="bg-orange-600 hover:bg-orange-700 text-white font-bold uppercase tracking-wide h-14 px-12 text-base rounded-lg group">
                   Get Started Free <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform duration-200" />
                 </Button>
               </Link>
               <Link to="/register?role=vendor">
-                <Button data-testid="final-vendor-btn" size="lg" variant="outline" className="border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400 font-medium h-13 px-8 rounded-lg">
+                <Button data-testid="final-vendor-btn" size="lg" variant="outline" className="border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400 font-semibold h-14 px-10 text-base rounded-lg">
                   Register as Vendor
                 </Button>
               </Link>
@@ -483,10 +483,6 @@ const LandingPage = () => {
                   <div className="space-y-2">
                     <Label htmlFor="contact-phone" className="text-slate-500 text-xs uppercase tracking-wider">Phone</Label>
                     <Input id="contact-phone" placeholder="+91 98765 43210" value={contactForm.phone} onChange={(e) => setContactForm(prev => ({ ...prev, phone: e.target.value }))} data-testid="contact-phone-input" className="border-slate-200 focus:border-orange-500 focus:ring-orange-500/20" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="contact-company" className="text-slate-500 text-xs uppercase tracking-wider">Company</Label>
-                    <Input id="contact-company" placeholder="Your Company Ltd." value={contactForm.company} onChange={(e) => setContactForm(prev => ({ ...prev, company: e.target.value }))} data-testid="contact-company-input" className="border-slate-200 focus:border-orange-500 focus:ring-orange-500/20" />
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -569,8 +565,6 @@ const LandingPage = () => {
             <p className="text-xs text-slate-400">&copy; 2026 Simpson & Munro (I) Pvt Ltd. All rights reserved.</p>
             <div className="flex items-center gap-4 text-xs">
               <a href="mailto:support@oemlinker.com" className="text-slate-400 hover:text-orange-600 transition-colors duration-200">support@oemlinker.com</a>
-              <span className="text-slate-200">|</span>
-              <a href="https://wa.me/919831509919" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-green-600 transition-colors duration-200">+91-9831509919</a>
             </div>
           </div>
         </div>
