@@ -337,7 +337,7 @@ const RFQDetail = () => {
                       <Send className="w-4 h-4 mr-2" /> Submit Quote
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()} onPointerDownOutside={(e) => e.preventDefault()}>
                     <DialogHeader>
                       <DialogTitle>Submit Your Quotation</DialogTitle>
                     </DialogHeader>
