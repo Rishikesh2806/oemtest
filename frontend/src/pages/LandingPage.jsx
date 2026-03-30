@@ -518,16 +518,6 @@ const LandingPage = () => {
                   </div>
                 </div>
               </div>
-              <div className="bg-white border border-slate-200 rounded-xl p-6 hover:border-green-200 transition-colors duration-200">
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center shrink-0"><Phone className="w-5 h-5 text-green-600" /></div>
-                  <div>
-                    <h4 className="font-semibold text-slate-900 text-sm mb-1">WhatsApp</h4>
-                    <a href="https://wa.me/919831509919" target="_blank" rel="noopener noreferrer" className="text-green-600 hover:text-green-500 font-medium text-sm">+91-9831509919</a>
-                    <p className="text-slate-400 text-xs mt-1">Mon - Fri, 9:00 AM - 6:00 PM IST</p>
-                  </div>
-                </div>
-              </div>
               <div className="rounded-xl overflow-hidden border border-slate-200 h-44">
                 <iframe src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3684.1234567890123!2d88.34766!3d22.5726!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3a0277a9fa4a3f0f%3A0x8c2b1c5c5c5c5c5c!2s4%20Lyons%20Range%2C%20Kolkata%2C%20West%20Bengal%20700001!5e0!3m2!1sen!2sin!4v1234567890123" width="100%" height="100%" style={{ border: 0 }} allowFullScreen="" loading="lazy" referrerPolicy="no-referrer-when-downgrade" title="OEMLinker Office Location" />
               </div>
