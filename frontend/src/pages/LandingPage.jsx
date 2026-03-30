@@ -236,6 +236,58 @@ const LandingPage = () => {
         .animate-scroll-left { animation: scrollLeft 20s linear infinite; }
       `}</style>
 
+      {/* ── WHAT WE SOURCE ── */}
+      <Section className="py-20 md:py-28 bg-white">
+        <div className="max-w-7xl mx-auto px-6">
+          <motion.div variants={fadeUp} className="mb-14">
+            <p className="text-orange-600 text-xs font-semibold uppercase tracking-[0.2em] mb-3">What We Source</p>
+            <h2 className="font-heading text-3xl md:text-4xl font-black text-slate-900">Categories, Parts & Machines</h2>
+            <p className="text-slate-500 mt-3 max-w-2xl text-sm">From CNC-turned shafts to heavy fabrication assemblies — our network covers the full spectrum of precision manufacturing.</p>
+          </motion.div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            {/* Categories */}
+            <motion.div variants={fadeUp} className="space-y-4">
+              <div className="flex items-center gap-2.5 mb-5">
+                <div className="w-9 h-9 rounded-lg bg-orange-600 flex items-center justify-center"><Layers className="w-4.5 h-4.5 text-white" /></div>
+                <h3 className="font-heading font-bold text-slate-900 text-lg">Categories</h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {["CNC Machining", "Sheet Metal Fabrication", "Casting & Forging", "Welding & Assembly", "3D Printing / Additive", "Injection Moulding", "Surface Treatment", "Rapid Prototyping", "Laser Cutting", "Wire EDM", "Grinding & Finishing", "Heavy Fabrication"].map((c, i) => (
+                  <span key={i} className="text-xs font-medium px-3 py-1.5 rounded-full border border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100 transition-colors">{c}</span>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Parts */}
+            <motion.div variants={fadeUp} className="space-y-4">
+              <div className="flex items-center gap-2.5 mb-5">
+                <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center"><Package className="w-4.5 h-4.5 text-white" /></div>
+                <h3 className="font-heading font-bold text-slate-900 text-lg">Parts We Handle</h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {["Shafts & Spindles", "Housings & Enclosures", "Gears & Sprockets", "Brackets & Mounts", "Flanges & Couplings", "Plates & Panels", "Bushings & Bearings", "Valves & Fittings", "Jigs & Fixtures", "Structural Frames", "Heat Exchangers", "Custom Prototypes"].map((p, i) => (
+                  <span key={i} className="text-xs font-medium px-3 py-1.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">{p}</span>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Machines */}
+            <motion.div variants={fadeUp} className="space-y-4">
+              <div className="flex items-center gap-2.5 mb-5">
+                <div className="w-9 h-9 rounded-lg bg-emerald-600 flex items-center justify-center"><Wrench className="w-4.5 h-4.5 text-white" /></div>
+                <h3 className="font-heading font-bold text-slate-900 text-lg">Machines</h3>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {["CNC Turning Center", "VMC / HMC", "5-Axis CNC", "CNC Laser Cutter", "Press Brake", "MIG / TIG Welding", "Boring Machine", "Surface Grinder", "Cylindrical Grinder", "Wire Cut EDM", "Plasma Cutter", "Injection Moulding Machine"].map((m, i) => (
+                  <span key={i} className="text-xs font-medium px-3 py-1.5 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors">{m}</span>
+                ))}
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </Section>
+
       {/* ── HOW IT WORKS ── */}
       <Section id="how-it-works" className="py-24 md:py-32 bg-white">
         <div className="max-w-7xl mx-auto px-6">
