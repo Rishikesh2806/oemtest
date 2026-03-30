@@ -200,7 +200,7 @@ const ChatbotWidget = () => {
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.92 }}
             onClick={() => setIsOpen(true)}
-            className="fixed bottom-5 right-5 z-50 w-12 h-12 md:w-14 md:h-14 rounded-full shadow-lg flex items-center justify-center bg-gradient-to-br from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 transition-all"
+            className="fixed bottom-5 left-5 z-50 w-12 h-12 md:w-14 md:h-14 rounded-full shadow-lg flex items-center justify-center bg-gradient-to-br from-orange-400 to-orange-500 hover:from-orange-500 hover:to-orange-600 transition-all"
             data-testid="chatbot-toggle-btn"
           >
             <Bot className="w-6 h-6 md:w-7 md:h-7 text-white" />
@@ -222,7 +222,7 @@ const ChatbotWidget = () => {
             }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className="fixed bottom-5 right-5 z-50 w-[min(380px,calc(100vw-40px))] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col"
+            className="fixed bottom-5 left-5 z-50 w-[min(380px,calc(100vw-40px))] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col"
             data-testid="chatbot-window"
           >
             {/* Header */}
