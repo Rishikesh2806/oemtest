@@ -8,7 +8,7 @@ import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Save, Building2, Globe, Phone, MapPin, Award, X, Mail, BadgeCheck, FileText } from "lucide-react";
+import { Loader2, Save, Building2, Globe, Phone, MapPin, Award, X, Mail, BadgeCheck, FileText, Search } from "lucide-react";
 import { usePhoneCheck, PhoneStatusIndicator } from "../components/PhoneCheck";
 
 const INDUSTRIES = [
@@ -74,7 +74,7 @@ const VendorProfile = () => {
     materials_handled: []
   });
 
-  // GST Information (read-only, auto-filled from WhatsApp registration)
+  // GST Information
   const [gstInfo, setGstInfo] = useState({
     gstin: "",
     gst_verified: false,
@@ -85,6 +85,8 @@ const VendorProfile = () => {
     constitution: "",
     gst_registration_date: ""
   });
+  const [gstinInput, setGstinInput] = useState("");
+  const [gstVerifying, setGstVerifying] = useState(false);
 
   useEffect(() => {
     fetchProfile();
@@ -112,7 +114,7 @@ const VendorProfile = () => {
       });
       
       // Set GST info if available
-      setGstInfo({
+      const gst = {
         gstin: response.data.gstin || "",
         gst_verified: response.data.gst_verified || false,
         gst_status: response.data.gst_status || "",
@@ -121,7 +123,9 @@ const VendorProfile = () => {
         taxpayer_type: response.data.taxpayer_type || "",
         constitution: response.data.constitution || "",
         gst_registration_date: response.data.gst_registration_date || ""
-      });
+      };
+      setGstInfo(gst);
+      setGstinInput(gst.gstin);
     } catch (error) {
       if (error.response?.status === 404) {
         setIsNew(true);
@@ -219,6 +223,51 @@ const VendorProfile = () => {
     });
   };
 
+  const verifyGstin = async () => {
+    const gstin = gstinInput.toUpperCase().trim();
+    if (!gstin || gstin.length !== 15) {
+      toast.error("Please enter a valid 15-character GSTIN");
+      return;
+    }
+    setGstVerifying(true);
+    try {
+      const res = await api.get(`/gstin/verify/${gstin}`);
+      const data = res.data;
+      if (data.duplicate) {
+        toast.error(data.error || "This GSTIN is already registered with another account.");
+        return;
+      }
+      if (data.valid) {
+        const verified = {
+          gstin: data.gstin,
+          gst_verified: true,
+          gst_status: data.status || "",
+          legal_name: data.legal_name || "",
+          trade_name: data.trade_name || "",
+          taxpayer_type: data.taxpayer_type || "",
+          constitution: data.constitution || "",
+          gst_registration_date: data.registration_date || ""
+        };
+        setGstInfo(verified);
+        // Auto-fill address fields from GST data if empty
+        setFormData(prev => ({
+          ...prev,
+          ...(data.city && !prev.city ? { city: data.city } : {}),
+          ...(data.state && !prev.state ? { state: data.state } : {}),
+          ...(data.pincode && !prev.pincode ? { pincode: data.pincode } : {}),
+          ...(data.address && !prev.address ? { address: data.address } : {})
+        }));
+        toast.success("GSTIN verified successfully!");
+      } else {
+        toast.error(data.error || "GSTIN verification failed");
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "GSTIN verification failed");
+    } finally {
+      setGstVerifying(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -229,11 +278,24 @@ const VendorProfile = () => {
 
     setSaving(true);
     try {
+      // Include GST data in the save payload
+      const payload = { ...formData };
+      if (gstInfo.gstin) {
+        payload.gstin = gstInfo.gstin;
+        payload.gst_verified = gstInfo.gst_verified;
+        payload.gst_status = gstInfo.gst_status;
+        payload.legal_name = gstInfo.legal_name;
+        payload.trade_name = gstInfo.trade_name;
+        payload.taxpayer_type = gstInfo.taxpayer_type;
+        payload.constitution = gstInfo.constitution;
+        payload.gst_registration_date = gstInfo.gst_registration_date;
+      }
+      
       if (isNew) {
-        await api.post("/vendors/profile", formData);
+        await api.post("/vendors/profile", payload);
         toast.success("Profile created successfully");
       } else {
-        await api.put("/vendors/profile", formData);
+        await api.put("/vendors/profile", payload);
         toast.success("Profile updated successfully");
       }
       
@@ -430,33 +492,82 @@ const VendorProfile = () => {
             </CardContent>
           </Card>
 
-          {/* GST Information Card - Read-only, auto-filled from WhatsApp registration */}
-          {gstInfo.gstin && (
-            <Card className="border-slate-200 mb-6 bg-gradient-to-r from-green-50 to-emerald-50" data-testid="gst-info-card">
-              <CardHeader>
-                <CardTitle className="font-heading text-lg flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-green-600" /> GST Information
+          {/* GST Information Card */}
+          <Card className={`border-slate-200 mb-6 ${gstInfo.gst_verified ? 'bg-gradient-to-r from-green-50 to-emerald-50' : ''}`} data-testid="gst-info-card">
+            <CardHeader>
+              <CardTitle className="font-heading text-lg flex items-center gap-2">
+                <FileText className={`w-5 h-5 ${gstInfo.gst_verified ? 'text-green-600' : 'text-orange-600'}`} /> GST Information
+                {gstInfo.gst_verified && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-1 rounded-full">
+                    <BadgeCheck className="w-3 h-3" /> Verified
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* GSTIN Input + Verify */}
+              <div>
+                <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  GSTIN Number
+                </Label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    data-testid="gstin-input"
+                    value={gstinInput}
+                    onChange={(e) => setGstinInput(e.target.value.toUpperCase())}
+                    placeholder="e.g. 22AAAAA0000A1Z5"
+                    maxLength={15}
+                    className="font-mono uppercase"
+                    disabled={gstInfo.gst_verified}
+                  />
+                  <Button
+                    type="button"
+                    data-testid="gstin-verify-btn"
+                    onClick={verifyGstin}
+                    disabled={gstVerifying || gstInfo.gst_verified || gstinInput.length !== 15}
+                    variant={gstInfo.gst_verified ? "outline" : "default"}
+                    className={gstInfo.gst_verified ? "text-green-600 border-green-200" : "bg-orange-600 hover:bg-orange-700"}
+                  >
+                    {gstVerifying ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : gstInfo.gst_verified ? (
+                      <><BadgeCheck className="w-4 h-4 mr-1" /> Verified</>
+                    ) : (
+                      <><Search className="w-4 h-4 mr-1" /> Verify</>
+                    )}
+                  </Button>
                   {gstInfo.gst_verified && (
-                    <span className="ml-2 inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-1 rounded-full">
-                      <BadgeCheck className="w-3 h-3" /> Verified
-                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-slate-400 hover:text-red-500"
+                      onClick={() => {
+                        setGstInfo({ gstin: "", gst_verified: false, gst_status: "", legal_name: "", trade_name: "", taxpayer_type: "", constitution: "", gst_registration_date: "" });
+                        setGstinInput("");
+                      }}
+                      data-testid="gstin-clear-btn"
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
                   )}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 gap-4">
+                </div>
+                {gstinInput && gstinInput.length !== 15 && (
+                  <p className="text-xs text-amber-600 mt-1">{gstinInput.length}/15 characters</p>
+                )}
+              </div>
+
+              {/* Verified GST Details */}
+              {gstInfo.gst_verified && (
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-green-200">
                   <div>
-                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      GSTIN
-                    </Label>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">GSTIN</Label>
                     <p className="mt-1 text-slate-800 font-mono text-sm bg-white px-3 py-2 rounded border" data-testid="gstin-display">
                       {gstInfo.gstin}
                     </p>
                   </div>
                   <div>
-                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      GST Status
-                    </Label>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">GST Status</Label>
                     <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">
                       <span className={`inline-flex items-center gap-1 ${gstInfo.gst_status === 'Active' ? 'text-green-600' : 'text-amber-600'}`}>
                         {gstInfo.gst_status || 'N/A'}
@@ -465,61 +576,38 @@ const VendorProfile = () => {
                   </div>
                   {gstInfo.legal_name && (
                     <div>
-                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                        Legal Name
-                      </Label>
-                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">
-                        {gstInfo.legal_name}
-                      </p>
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Legal Name</Label>
+                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">{gstInfo.legal_name}</p>
                     </div>
                   )}
                   {gstInfo.trade_name && (
                     <div>
-                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                        Trade Name
-                      </Label>
-                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">
-                        {gstInfo.trade_name}
-                      </p>
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Trade Name</Label>
+                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">{gstInfo.trade_name}</p>
                     </div>
                   )}
                   {gstInfo.taxpayer_type && (
                     <div>
-                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                        Taxpayer Type
-                      </Label>
-                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">
-                        {gstInfo.taxpayer_type}
-                      </p>
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Taxpayer Type</Label>
+                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">{gstInfo.taxpayer_type}</p>
                     </div>
                   )}
                   {gstInfo.constitution && (
                     <div>
-                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                        Constitution
-                      </Label>
-                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">
-                        {gstInfo.constitution}
-                      </p>
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">Constitution</Label>
+                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">{gstInfo.constitution}</p>
                     </div>
                   )}
                   {gstInfo.gst_registration_date && (
                     <div className="col-span-2">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                        GST Registration Date
-                      </Label>
-                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">
-                        {gstInfo.gst_registration_date}
-                      </p>
+                      <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">GST Registration Date</Label>
+                      <p className="mt-1 text-slate-800 text-sm bg-white px-3 py-2 rounded border">{gstInfo.gst_registration_date}</p>
                     </div>
                   )}
                 </div>
-                <p className="mt-4 text-xs text-slate-500 italic">
-                  * GST information is auto-filled from government records and cannot be edited. Contact support if there's an error.
-                </p>
-              </CardContent>
-            </Card>
-          )}
+              )}
+            </CardContent>
+          </Card>
 
           <Card className="border-slate-200 mb-6">
             <CardHeader>

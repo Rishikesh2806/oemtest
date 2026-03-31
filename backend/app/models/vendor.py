@@ -63,3 +63,12 @@ class VendorProfileCreate(BaseModel):
     industries: List[str] = []
     materials_handled: List[str] = []
     past_experiences: List[PastExperience] = []
+    # GST fields
+    gstin: Optional[str] = None
+    gst_verified: Optional[bool] = None
+    gst_status: Optional[str] = None
+    legal_name: Optional[str] = None
+    trade_name: Optional[str] = None
+    taxpayer_type: Optional[str] = None
+    constitution: Optional[str] = None
+    gst_registration_date: Optional[str] = None

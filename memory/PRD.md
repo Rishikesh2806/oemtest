@@ -358,6 +358,15 @@ See ARCHITECTURE.md for detailed refactoring plan.
 ## What's Been Implemented
 
 
+
+### GSTIN Field in Vendor Profile (NEW - Mar 31, 2026)
+- **Editable GSTIN input** added to vendor profile with real-time Verify button
+- **Verification flow**: Enter 15-char GSTIN → Click Verify → Calls `/api/gstin/verify/{gstin}` → Shows verified details (GSTIN, Status, Legal Name, Trade Name, etc.)
+- **Auto-fill**: Address fields auto-populated from GST data if empty
+- **Duplicate protection**: Checks if GSTIN is already registered with another account
+- **Data persistence**: GST fields saved with profile via PUT endpoint
+- **Files changed**: `app/models/vendor.py` (added GST fields to VendorProfileCreate), `server.py` (VendorProfileCreate model), `VendorProfile.jsx` (editable GSTIN card with verify)
+
 ### Tolerance from Drawing/Description (NEW - Mar 31, 2026)
 - **Removed hardcoded 0.1mm default**: RFQ tolerance is now `null` by default instead of 0.1mm
 - **AI-Extracted Tolerance**: After drawing analysis, tightest tolerance from `critical_tolerances` is automatically set on the RFQ
