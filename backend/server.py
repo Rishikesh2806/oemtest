@@ -946,7 +946,7 @@ class RFQ(BaseModel):
     description: Optional[str] = None
     material_type: str
     quantity: int
-    tolerance: float  # mm
+    tolerance: Optional[float] = None  # mm - extracted from drawing or set by buyer
     surface_finish: Optional[str] = None
     supply_type: str = SupplyType.VENDOR_MATERIAL
     deadline: Optional[str] = None
