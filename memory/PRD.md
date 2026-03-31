@@ -1600,3 +1600,42 @@ IP Protection feature allowing buyers to enforce Non-Disclosure Agreements (NDAs
 
 ### Test Report
 `/app/test_reports/iteration_35.json` - Backend 100% (13/13), Frontend 85%
+
+
+---
+
+## Strict Machine Capability Validation System (Implemented Mar 31, 2026)
+
+### Overview
+Physics-based vendor matching that validates actual machine specifications against job requirements before scoring. Vendors are categorized into 4 groups:
+1. **Fully Capable** — specs confirmed, machine fits
+2. **Capable but Unverified** — right machine type, missing specs
+3. **Wrong Machine Type** — incompatible machine for the operation
+4. **Machine Too Small** — right type, dimensions insufficient
+
+### Backend
+- **New Module**: `/app/backend/app/services/machine_validation.py`
+  - `PROCESS_MACHINE_COMPATIBILITY` — 18-process strict compatibility matrix
+  - `validate_machine_for_job()` — checks process compatibility, physical size (10% clearance), tolerance (IT grade mapping), weight
+  - `has_complete_specs()` — checks if critical dimension fields are filled for a machine type
+  - `categorize_vendor_match()` — aggregates validation across all vendor machines
+- **Updated Endpoints**:
+  - `POST /api/machines` — auto-computes `has_complete_specs`
+  - `PUT /api/machines/{id}` — recomputes `has_complete_specs` on update
+  - Match results now include `validation_category`, `validation_coverage`, `validated_machines`, `unverified_machines`, `failed_machines`
+- **New RFQ fields**: `unverified_vendors`, `too_small_vendors`, `wrong_type_vendors`
+
+### Frontend
+- **New Component**: `/app/frontend/src/components/ExcludedVendorsSection.jsx`
+  - 3 collapsible sections: Unverified, Too Small, Wrong Type
+  - Each shows vendor name, location, rating, fail reasons, machine specs
+- **Updated**: `RFQDetail.jsx`
+  - Validation category badges on matched vendor cards
+  - Process Coverage % badge
+  - ExcludedVendorsSection below main matched vendors
+
+### Test Report
+`/app/test_reports/iteration_49.json` — Backend 100% (16/16), Frontend 100%
+
+### Future Spec (Saved for later)
+Full multi-operation decomposition & split-vendor matching spec saved at `/app/memory/FEATURE_MULTI_OP_MATCHING.md`
