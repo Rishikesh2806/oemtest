@@ -121,6 +121,15 @@ async def register(user_data: UserCreate, request: Request):
         if existing_phone:
             raise HTTPException(status_code=400, detail="This phone number is already registered with another account.")
     
+    # Check GSTIN uniqueness
+    raw_gstin = (user_data.gstin or "").upper().strip()
+    if raw_gstin:
+        existing_gstin = await db.users.find_one({"gstin": raw_gstin}, {"_id": 0, "user_id": 1})
+        if not existing_gstin:
+            existing_gstin = await db.vendors.find_one({"gstin": raw_gstin}, {"_id": 0, "user_id": 1})
+        if existing_gstin:
+            raise HTTPException(status_code=400, detail="This GSTIN is already registered with another account.")
+    
     user_id = f"user_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
     

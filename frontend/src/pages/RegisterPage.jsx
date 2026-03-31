@@ -148,7 +148,7 @@ const RegisterPage = () => {
       const response = await api.get(`/gstin/verify/${gstin}`);
       const data = response.data;
 
-      if (data.valid) {
+      if (data.valid && !data.duplicate) {
         setGstinVerified(true);
         setCompanyName(data.legal_name || data.trade_name || "");
         setTradeName(data.trade_name || "");
@@ -164,6 +164,9 @@ const RegisterPage = () => {
         }
         
         toast.success("GSTIN verified successfully!");
+      } else if (data.duplicate) {
+        setGstinVerified(false);
+        toast.error(data.error || "This GSTIN is already registered with another account.");
       } else {
         setGstinVerified(false);
         toast.error(data.error || "GSTIN verification failed");

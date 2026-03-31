@@ -1961,6 +1961,15 @@ async def register(user_data: UserCreate, request: Request):
         if existing_phone:
             raise HTTPException(status_code=400, detail="This phone number is already registered with another account.")
     
+    # Check GSTIN uniqueness
+    raw_gstin = (user_data.gstin or "").upper().strip()
+    if raw_gstin:
+        existing_gstin = await db.users.find_one({"gstin": raw_gstin}, {"_id": 0, "user_id": 1})
+        if not existing_gstin:
+            existing_gstin = await db.vendors.find_one({"gstin": raw_gstin}, {"_id": 0, "user_id": 1})
+        if existing_gstin:
+            raise HTTPException(status_code=400, detail="This GSTIN is already registered with another account.")
+    
     user_id = f"user_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
     
@@ -3964,7 +3973,7 @@ async def get_vendor_full_profile(vendor_id: str, user: dict = Depends(get_curre
 GSTIN_API_KEY = os.environ.get("GSTIN_API_KEY", "6720148bc8d7ed819c0e757afae0be70")
 
 @api_router.get("/gstin/verify/{gstin}")
-async def verify_gstin(gstin: str):
+async def verify_gstin(gstin: str, current_user_id: str = None):
     """Verify GSTIN and fetch company details from GST database"""
     import httpx
     
@@ -3978,6 +3987,28 @@ async def verify_gstin(gstin: str):
     import re
     if not re.match(gstin_pattern, gstin):
         raise HTTPException(status_code=400, detail="Invalid GSTIN format")
+    
+    # Check for duplicate GSTIN across users and vendors
+    query = {"gstin": gstin}
+    if current_user_id:
+        query["user_id"] = {"$ne": current_user_id}
+    existing_user = await db.users.find_one({"gstin": gstin}, {"_id": 0, "user_id": 1})
+    existing_vendor = await db.vendors.find_one({"gstin": gstin}, {"_id": 0, "vendor_id": 1, "user_id": 1})
+    
+    if existing_user and (not current_user_id or existing_user.get("user_id") != current_user_id):
+        return {
+            "valid": True,
+            "duplicate": True,
+            "gstin": gstin,
+            "error": "This GSTIN is already registered with another OEMLinker account."
+        }
+    if existing_vendor and (not current_user_id or existing_vendor.get("user_id") != current_user_id):
+        return {
+            "valid": True,
+            "duplicate": True,
+            "gstin": gstin,
+            "error": "This GSTIN is already registered with another OEMLinker account."
+        }
     
     # State codes mapping
     state_codes = {
@@ -21374,6 +21405,22 @@ async def startup_event():
         logger.info("Phone uniqueness indexes created/verified")
     except Exception as e:
         logger.warning(f"Phone index creation skipped (may already exist): {e}")
+    
+    # Create GSTIN uniqueness indexes
+    try:
+        await db.users.create_index(
+            "gstin", unique=True,
+            partialFilterExpression={"gstin": {"$type": "string", "$gt": ""}},
+            name="idx_users_gstin"
+        )
+        await db.vendors.create_index(
+            "gstin", unique=True,
+            partialFilterExpression={"gstin": {"$type": "string", "$gt": ""}},
+            name="idx_vendors_gstin"
+        )
+        logger.info("GSTIN uniqueness indexes created/verified")
+    except Exception as e:
+        logger.warning(f"GSTIN index creation skipped (may already exist): {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
