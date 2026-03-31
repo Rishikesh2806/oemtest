@@ -853,6 +853,9 @@ class Machine(BaseModel):
     engaged_until: Optional[str] = None  # ISO date when machine becomes available
     engaged_order_id: Optional[str] = None  # Order ID the machine is engaged with
     availability_note: Optional[str] = None  # Optional note about availability
+    # Spec completeness
+    has_complete_specs: bool = False
+    specs_verified_by_admin: bool = False
     created_at: str
 
 class MachineCreate(BaseModel):
@@ -4281,8 +4284,13 @@ async def add_machine(machine: MachineCreate, user: dict = Depends(get_current_u
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     
+    # Auto-compute has_complete_specs
+    from app.services.machine_validation import has_complete_specs as _check_specs
+    machine_doc["has_complete_specs"] = _check_specs(machine_doc)
+    
     await db.machines.insert_one(machine_doc)
-    return Machine(**machine_doc)
+    machine_doc.pop("_id", None)
+    return machine_doc
 
 @api_router.get("/machines")
 async def list_my_machines(user: dict = Depends(get_current_user)):
@@ -4330,6 +4338,13 @@ async def update_machine(machine_id: str, machine: MachineCreate, user: dict = D
     result = await db.machines.update_one(
         {"machine_id": machine_id, "vendor_id": vendor["vendor_id"]},
         {"$set": update_data}
+    )
+    
+    # Auto-compute has_complete_specs
+    from app.services.machine_validation import has_complete_specs as _check_specs
+    await db.machines.update_one(
+        {"machine_id": machine_id},
+        {"$set": {"has_complete_specs": _check_specs(update_data)}}
     )
     
     updated = await db.machines.find_one({"machine_id": machine_id}, {"_id": 0})
@@ -7441,10 +7456,89 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     matched_vendors.sort(key=lambda x: x["suitability_score"], reverse=True)
     matched_vendors = matched_vendors[:10]  # Top 10
     
+    # ============== STRICT MACHINE VALIDATION (Phase 2) ==============
+    # Run physics-based validation on matched vendors and also capture
+    # rejected vendors that have right type but missing specs (unverified)
+    from app.services.machine_validation import categorize_vendor_match, has_complete_specs as _has_complete_specs
+    
+    job_req = {
+        "length": part_length,
+        "width": part_width,
+        "height": part_height,
+        "diameter": part_diameter,
+        "inner_diameter": part_inner_diameter,
+        "thickness": part_thickness,
+        "tolerance": required_tolerance,
+        "weight_kg": part_weight,
+        "part_geometry": part_geometry,
+    }
+    detected_proc_list = list(set(recommended_processes + detected_processes))
+    
+    # Enrich matched vendors with strict validation
+    for mv in matched_vendors:
+        v_machines = await db.machines.find(
+            {"vendor_id": mv["vendor_id"], "is_active": True}, {"_id": 0}
+        ).to_list(50)
+        validation = categorize_vendor_match(
+            {"vendor_id": mv["vendor_id"]}, v_machines, job_req, detected_proc_list
+        )
+        mv["validation_category"] = validation["category"]
+        mv["validation_coverage"] = validation["coverage_pct"]
+        mv["validated_machines"] = validation["best_machines"][:3]
+        mv["unverified_machines"] = validation["unverified_machines"][:3]
+        mv["failed_machines"] = validation["failed_machines"][:3]
+        mv["has_complete_specs"] = validation["has_complete_specs"]
+    
+    # Also check approved vendors that were REJECTED by the old scoring —
+    # find ones that have the right machine type but were excluded (unverified category)
+    unverified_vendors = []
+    too_small_vendors = []
+    wrong_type_vendors = []
+    matched_vendor_ids = {v["vendor_id"] for v in matched_vendors}
+    
+    for vendor in vendors:
+        if vendor["vendor_id"] in matched_vendor_ids:
+            continue
+        v_machines = await db.machines.find(
+            {"vendor_id": vendor["vendor_id"], "is_active": True}, {"_id": 0}
+        ).to_list(50)
+        if not v_machines:
+            continue
+        validation = categorize_vendor_match(vendor, v_machines, job_req, detected_proc_list)
+        vendor_entry = {
+            "vendor_id": vendor["vendor_id"],
+            "company_name": vendor.get("company_name", "Unknown"),
+            "city": vendor.get("city", ""),
+            "state": vendor.get("state", ""),
+            "location": f"{vendor.get('city', '')}, {vendor.get('country', '')}",
+            "rating": vendor.get("rating", 0),
+            "total_jobs": vendor.get("total_jobs", 0),
+            "validation_category": validation["category"],
+            "validation_coverage": validation["coverage_pct"],
+            "validated_machines": validation["best_machines"][:2],
+            "unverified_machines": validation["unverified_machines"][:2],
+            "failed_machines": validation["failed_machines"][:3],
+            "has_complete_specs": validation["has_complete_specs"],
+        }
+        if validation["category"] == "unverified":
+            unverified_vendors.append(vendor_entry)
+        elif validation["category"] == "too_small":
+            too_small_vendors.append(vendor_entry)
+        elif validation["category"] == "wrong_type":
+            wrong_type_vendors.append(vendor_entry)
+    
+    # Limit secondary lists
+    unverified_vendors = unverified_vendors[:10]
+    too_small_vendors = too_small_vendors[:10]
+    wrong_type_vendors = wrong_type_vendors[:10]
+    
     await db.rfqs.update_one(
         {"rfq_id": rfq_id},
         {"$set": {
             "matched_vendors": matched_vendors,
+            "unverified_vendors": unverified_vendors,
+            "too_small_vendors": too_small_vendors,
+            "wrong_type_vendors": wrong_type_vendors,
             "match_type": "drawing",
             "status": RFQStatus.MATCHING,
             "updated_at": datetime.now(timezone.utc).isoformat()
@@ -7590,7 +7684,11 @@ _Team OEMLinker_"""
         # Urgency info
         "rfq_urgency": rfq_urgency,
         "urgency_applied": is_urgent_rfq,
-        "availability_prioritized": is_urgent_rfq
+        "availability_prioritized": is_urgent_rfq,
+        # Strict validation categories
+        "unverified_vendors": unverified_vendors,
+        "too_small_vendors": too_small_vendors,
+        "wrong_type_vendors": wrong_type_vendors,
     }
 
 @api_router.post("/rfqs/{rfq_id}/submit")

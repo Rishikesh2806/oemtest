@@ -24,6 +24,7 @@ import VendorNegotiationPanel from "../components/VendorNegotiationPanel";
 import VendorQuotationForm from "../components/VendorQuotationForm";
 import VisualMatchSection from "../components/VisualMatchSection";
 import RefNumber from "../components/RefNumber";
+import { ExcludedVendorsSection } from "../components/ExcludedVendorsSection";
 
 const API_URL = window.location.origin;
 
@@ -1101,6 +1102,11 @@ const RFQDetail = () => {
                                         {vendor.available_machine_count}/{vendor.total_matching_machines} Available
                                       </span>
                                     )}
+                                    {vendor.validation_coverage > 0 && (
+                                      <span className="ml-2 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs normal-case font-medium">
+                                        {vendor.validation_coverage}% Process Coverage
+                                      </span>
+                                    )}
                                   </p>
                                   <div className="flex flex-wrap gap-1">
                                     {vendor.machine_details?.map((machine, j) => (
@@ -1166,6 +1172,18 @@ const RFQDetail = () => {
                               style={{ width: `${score}%` }}
                             />
                           </div>
+                          {/* Validation Category Badge */}
+                          {vendor.validation_category && (
+                            <span data-testid={`val-cat-${vendor.vendor_id}`} className={`mt-2 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                              vendor.validation_category === "fully_capable" ? "bg-green-100 text-green-800 border-green-200"
+                              : vendor.validation_category === "unverified" ? "bg-amber-100 text-amber-800 border-amber-200"
+                              : "bg-slate-200 text-slate-600 border-slate-300"
+                            }`}>
+                              {vendor.validation_category === "fully_capable" ? "Verified Capable" 
+                              : vendor.validation_category === "unverified" ? "Specs Unverified"
+                              : vendor.validation_category}
+                            </span>
+                          )}
                           {/* Per-vendor match mode indicator */}
                           <span className={`mt-2 inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${
                             isPortfolioMatch
@@ -1198,6 +1216,15 @@ const RFQDetail = () => {
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Excluded Vendors - Validation Categories (Buyer View) */}
+        {isBuyer && (rfq.unverified_vendors?.length > 0 || rfq.too_small_vendors?.length > 0 || rfq.wrong_type_vendors?.length > 0) && (
+          <ExcludedVendorsSection
+            unverifiedVendors={rfq.unverified_vendors}
+            tooSmallVendors={rfq.too_small_vendors}
+            wrongTypeVendors={rfq.wrong_type_vendors}
+          />
         )}
 
         {/* Vendor Negotiation Panel - Shows pending negotiation requests for vendors */}
