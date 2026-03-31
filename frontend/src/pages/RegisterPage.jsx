@@ -11,6 +11,7 @@ import {
   Search, Loader2, CheckCircle2, MapPin, Phone, Globe, FileText,
   Shield, Eye, EyeOff, AlertCircle
 } from "lucide-react";
+import { usePhoneCheck, PhoneStatusIndicator } from "../components/PhoneCheck";
 
 // Password strength validation
 const validatePassword = (password) => {
@@ -104,6 +105,7 @@ const RegisterPage = () => {
   const [pincode, setPincode] = useState("");
   const [phone, setPhone] = useState("");
   const [gstinStatus, setGstinStatus] = useState("");
+  const { phoneStatus, phoneMessage, checkPhone } = usePhoneCheck();
   
   // City suggestions based on country
   const [availableCities, setAvailableCities] = useState([]);
@@ -180,6 +182,12 @@ const RegisterPage = () => {
     // Validate password strength before submission
     if (!passwordValidation.isValid) {
       toast.error("Please ensure your password meets all requirements");
+      return;
+    }
+    
+    // Block if phone is taken
+    if (phoneStatus === "taken") {
+      toast.error("This phone number is already registered with another account.");
       return;
     }
     
@@ -463,10 +471,12 @@ const RegisterPage = () => {
                         <Label className="text-xs text-slate-500">Phone</Label>
                         <Input
                           value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
+                          onChange={(e) => { setPhone(e.target.value); checkPhone(e.target.value); }}
                           placeholder="+91 "
-                          className="h-10 text-sm"
+                          className={`h-10 text-sm ${phoneStatus === "taken" ? "border-red-400" : phoneStatus === "available" ? "border-green-400" : ""}`}
+                          data-testid="register-phone-input"
                         />
+                        <PhoneStatusIndicator status={phoneStatus} message={phoneMessage} />
                       </div>
                     </div>
                   </div>

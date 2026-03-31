@@ -78,6 +78,8 @@ async def get_current_user(request: Request) -> dict:
 
 
 # ============== REGISTER ==============
+from app.utils.phone_utils import normalize_phone, is_valid_phone
+
 @router.post("/register", response_model=TokenResponse)
 async def register(user_data: UserCreate, request: Request):
     """Register a new user"""
@@ -104,6 +106,20 @@ async def register(user_data: UserCreate, request: Request):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
+    # Normalize and check phone uniqueness
+    raw_phone = user_data.phone or ""
+    phone_normalized = normalize_phone(raw_phone) if raw_phone else ""
+    if phone_normalized:
+        existing_phone = await db.users.find_one(
+            {"phone_normalized": phone_normalized}, {"_id": 0, "user_id": 1}
+        )
+        if not existing_phone:
+            existing_phone = await db.vendors.find_one(
+                {"phone_normalized": phone_normalized}, {"_id": 0, "user_id": 1}
+            )
+        if existing_phone:
+            raise HTTPException(status_code=400, detail="This phone number is already registered with another account.")
+    
     user_id = f"user_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
     
@@ -121,6 +137,8 @@ async def register(user_data: UserCreate, request: Request):
         "password_hash": hash_password(user_data.password),
         "picture": None,
         "company_name": None,
+        "phone": raw_phone,
+        "phone_normalized": phone_normalized,
         "email_verified": False,
         "verification_token_hash": verification_token_hash,
         "verification_expires": verification_expires,
@@ -165,7 +183,8 @@ async def register(user_data: UserCreate, request: Request):
             "city": user_data.city or "",
             "state": user_data.state or "",
             "pincode": user_data.pincode or "",
-            "phone": user_data.phone or "",
+            "phone": raw_phone,
+            "phone_normalized": phone_normalized,
             "description": "",
             "website": "",
             "certifications": [],

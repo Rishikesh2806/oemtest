@@ -1863,6 +1863,62 @@ async def send_verification_email(email: str, name: str, verification_token: str
 #   - /user/profile (GET, PUT)
 # =============================================================================
 
+from app.utils.phone_utils import normalize_phone, is_valid_phone
+
+class PhoneCheckRequest(BaseModel):
+    phone: str
+    current_user_id: Optional[str] = None
+
+@api_router.post("/auth/check-phone")
+async def check_phone_availability(data: PhoneCheckRequest):
+    """Check if a phone number is already registered. Returns availability status."""
+    if not data.phone or not data.phone.strip():
+        return {"available": True, "message": "No phone provided"}
+    
+    normalized = normalize_phone(data.phone)
+    if not normalized:
+        return {"available": True, "message": "No phone provided"}
+    
+    if not is_valid_phone(normalized):
+        return {"available": False, "code": "INVALID_PHONE", "message": "Invalid phone number format."}
+    
+    # Check against users collection (phone field)
+    existing_user = await db.users.find_one(
+        {"phone_normalized": normalized},
+        {"_id": 0, "user_id": 1, "email_verified": 1, "phone": 1}
+    )
+    
+    # Also check vendors collection (phone field — normalized)
+    if not existing_user:
+        existing_vendor = await db.vendors.find_one(
+            {"phone_normalized": normalized},
+            {"_id": 0, "user_id": 1, "phone": 1}
+        )
+        if existing_vendor:
+            # Is it the same user?
+            if data.current_user_id and existing_vendor.get("user_id") == data.current_user_id:
+                return {"available": True, "message": "Your current number"}
+            return {
+                "available": False,
+                "code": "PHONE_TAKEN",
+                "message": "This phone number is already registered with another account.",
+                "suggestion": "Did you mean to log in instead?"
+            }
+    
+    if existing_user:
+        # Is it the same user updating their own number?
+        if data.current_user_id and existing_user.get("user_id") == data.current_user_id:
+            return {"available": True, "message": "Your current number"}
+        
+        return {
+            "available": False,
+            "code": "PHONE_TAKEN",
+            "message": "This phone number is already registered with another account.",
+            "suggestion": "Did you mean to log in instead?"
+        }
+    
+    return {"available": True}
+
 @api_router.post("/auth/register", response_model=TokenResponse)
 async def register(user_data: UserCreate, request: Request):
     # Get client IP for rate limiting
@@ -1891,6 +1947,20 @@ async def register(user_data: UserCreate, request: Request):
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
     
+    # Normalize and check phone uniqueness
+    raw_phone = user_data.phone or ""
+    phone_normalized = normalize_phone(raw_phone) if raw_phone else ""
+    if phone_normalized:
+        existing_phone = await db.users.find_one(
+            {"phone_normalized": phone_normalized}, {"_id": 0, "user_id": 1}
+        )
+        if not existing_phone:
+            existing_phone = await db.vendors.find_one(
+                {"phone_normalized": phone_normalized}, {"_id": 0, "user_id": 1}
+            )
+        if existing_phone:
+            raise HTTPException(status_code=400, detail="This phone number is already registered with another account.")
+    
     user_id = f"user_{uuid.uuid4().hex[:12]}"
     now = datetime.now(timezone.utc).isoformat()
     
@@ -1907,6 +1977,8 @@ async def register(user_data: UserCreate, request: Request):
         "password_hash": hash_password(user_data.password),
         "picture": None,
         "company_name": None,
+        "phone": raw_phone,
+        "phone_normalized": phone_normalized,
         "email_verified": False,
         "verification_token_hash": verification_token_hash,
         "verification_expires": verification_expires,
@@ -1952,7 +2024,8 @@ async def register(user_data: UserCreate, request: Request):
             "city": user_data.city or "",
             "state": user_data.state or "",
             "pincode": user_data.pincode or "",
-            "phone": user_data.phone or "",
+            "phone": raw_phone,
+            "phone_normalized": phone_normalized,
             "description": "",
             "website": "",
             "certifications": [],
@@ -3124,6 +3197,23 @@ async def update_vendor_profile(profile: VendorProfileCreate, user: dict = Depen
     # Remove past_experiences from update to prevent overwriting
     # Past experiences are managed separately via /vendors/experiences endpoints
     update_data.pop("past_experiences", None)
+    
+    # Normalize phone if present and check uniqueness
+    if update_data.get("phone"):
+        from app.utils.phone_utils import normalize_phone as _normalize_phone
+        update_data["phone_normalized"] = _normalize_phone(update_data["phone"])
+        if update_data["phone_normalized"]:
+            existing = await db.vendors.find_one(
+                {"phone_normalized": update_data["phone_normalized"], "user_id": {"$ne": user["user_id"]}},
+                {"_id": 0, "user_id": 1}
+            )
+            if not existing:
+                existing = await db.users.find_one(
+                    {"phone_normalized": update_data["phone_normalized"], "user_id": {"$ne": user["user_id"]}},
+                    {"_id": 0, "user_id": 1}
+                )
+            if existing:
+                raise HTTPException(status_code=400, detail="This phone number is already registered with another account.")
     
     result = await db.vendors.update_one(
         {"user_id": user["user_id"]},
@@ -21183,6 +21273,32 @@ async def startup_event():
         logger.info("AWS S3 storage service initialized")
     except Exception as e:
         logger.warning(f"AWS S3 storage initialization failed (will use local fallback): {e}")
+    
+    # Create phone uniqueness indexes (partial — only indexed when field exists and has a value)
+    try:
+        # Drop old indexes if they exist (in case of format change)
+        try:
+            await db.users.drop_index("idx_users_phone_normalized")
+        except Exception:
+            pass
+        try:
+            await db.vendors.drop_index("idx_vendors_phone_normalized")
+        except Exception:
+            pass
+        
+        await db.users.create_index(
+            "phone_normalized", unique=True,
+            partialFilterExpression={"phone_normalized": {"$type": "string", "$gt": ""}},
+            name="idx_users_phone_normalized"
+        )
+        await db.vendors.create_index(
+            "phone_normalized", unique=True,
+            partialFilterExpression={"phone_normalized": {"$type": "string", "$gt": ""}},
+            name="idx_vendors_phone_normalized"
+        )
+        logger.info("Phone uniqueness indexes created/verified")
+    except Exception as e:
+        logger.warning(f"Phone index creation skipped (may already exist): {e}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

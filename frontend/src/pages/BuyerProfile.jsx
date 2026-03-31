@@ -13,10 +13,12 @@ import {
   FileText, Shield, Save, Loader2, CheckCircle2,
   Lock, Bell, Eye, EyeOff
 } from "lucide-react";
+import { usePhoneCheck, PhoneStatusIndicator } from "../components/PhoneCheck";
 
 const BuyerProfile = () => {
   const { user, updateUser } = useAuth();
   const [loading, setLoading] = useState(true);
+  const { phoneStatus, phoneMessage, checkPhone } = usePhoneCheck(user?.user_id);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState({
     name: "",
@@ -231,10 +233,12 @@ const BuyerProfile = () => {
                       <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <Input
                         value={profile.phone}
-                        onChange={(e) => setProfile(prev => ({ ...prev, phone: e.target.value }))}
+                        onChange={(e) => { setProfile(prev => ({ ...prev, phone: e.target.value })); checkPhone(e.target.value); }}
                         placeholder="+91 98765 43210"
-                        className="pl-10"
+                        className={`pl-10 ${phoneStatus === "taken" ? "border-red-400" : phoneStatus === "available" ? "border-green-400" : ""}`}
+                        data-testid="buyer-phone-input"
                       />
+                      <PhoneStatusIndicator status={phoneStatus} message={phoneMessage} />
                     </div>
                   </div>
                   <div>

@@ -9,6 +9,7 @@ import { Textarea } from "../components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { toast } from "sonner";
 import { Loader2, Save, Building2, Globe, Phone, MapPin, Award, X, Mail, BadgeCheck, FileText } from "lucide-react";
+import { usePhoneCheck, PhoneStatusIndicator } from "../components/PhoneCheck";
 
 const INDUSTRIES = [
   "Aerospace", "Automotive", "Medical", "Electronics", 
@@ -41,6 +42,7 @@ const VendorProfile = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isNew, setIsNew] = useState(false);
+  const { phoneStatus, phoneMessage, checkPhone } = usePhoneCheck(user?.user_id);
   
   // Past experiences state
   const [experiences, setExperiences] = useState([]);
@@ -377,11 +379,12 @@ const VendorProfile = () => {
                   </Label>
                   <Input
                     value={formData.phone}
-                    onChange={(e) => handleInputChange("phone", e.target.value)}
+                    onChange={(e) => { handleInputChange("phone", e.target.value); checkPhone(e.target.value); }}
                     placeholder="+91 98765 43210"
-                    className="mt-1"
+                    className={`mt-1 ${phoneStatus === "taken" ? "border-red-400" : phoneStatus === "available" ? "border-green-400" : ""}`}
                     data-testid="phone-input"
                   />
+                  <PhoneStatusIndicator status={phoneStatus} message={phoneMessage} />
                 </div>
                 <div>
                   <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
