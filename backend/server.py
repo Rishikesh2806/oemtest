@@ -7069,26 +7069,40 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 
                 # Check diameter capability
                 check_diameter = part_diameter or part_large_diameter or 0
-                if check_diameter > 0 and machine_max_dia > 0:
-                    if machine_max_dia >= check_diameter * 1.1:  # 10% margin
-                        dimension_fit = True
-                        dimension_capable = True
-                        machine_score += 15
+                if check_diameter > 0:
+                    if machine_max_dia > 0:
+                        if machine_max_dia >= check_diameter * 1.1:  # 10% margin
+                            dimension_fit = True
+                            dimension_capable = True
+                            machine_score += 15
+                        else:
+                            machine_rejection = f"Part diameter {check_diameter}mm exceeds machine swing {machine_max_dia}mm"
+                            if machine_rejection not in rejection_reasons:
+                                rejection_reasons.append(machine_rejection)
+                            continue
                     else:
-                        machine_rejection = f"Part diameter {check_diameter}mm exceeds machine swing {machine_max_dia}mm"
+                        # STRICT: Missing diameter spec — cannot verify capacity
+                        machine_rejection = f"Machine diameter/swing spec missing — cannot verify for {check_diameter}mm part"
                         if machine_rejection not in rejection_reasons:
                             rejection_reasons.append(machine_rejection)
                         continue
                 
                 # Check length capability for cylindrical parts
                 check_length = part_length or 0
-                if check_length > 0 and machine_max_len > 0:
-                    if machine_max_len >= check_length * 1.1:
-                        dimension_fit = True
-                        dimension_capable = True
-                        machine_score += 10
+                if check_length > 0:
+                    if machine_max_len > 0:
+                        if machine_max_len >= check_length * 1.1:
+                            dimension_fit = True
+                            dimension_capable = True
+                            machine_score += 10
+                        else:
+                            machine_rejection = f"Part length {check_length}mm exceeds machine capacity {machine_max_len}mm"
+                            if machine_rejection not in rejection_reasons:
+                                rejection_reasons.append(machine_rejection)
+                            continue
                     else:
-                        machine_rejection = f"Part length {check_length}mm exceeds machine capacity {machine_max_len}mm"
+                        # STRICT: Missing length spec — cannot verify capacity
+                        machine_rejection = f"Machine length spec missing — cannot verify for {check_length}mm part"
                         if machine_rejection not in rejection_reasons:
                             rejection_reasons.append(machine_rejection)
                         continue
@@ -7107,6 +7121,15 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
                 max_y = machine.get("max_y") or machine.get("table_size_y") or machine.get("y_travel") or 0
                 max_z = machine.get("max_z") or machine.get("z_travel") or 0
                 table_load = machine.get("table_load_capacity") or machine.get("max_weight") or 0
+                
+                # STRICT: If job needs specific dimensions but machine has no axis specs at all, reject
+                has_any_axis = max_x > 0 or max_y > 0 or max_z > 0
+                needs_dimensions = part_length > 0 or part_width > 0 or part_height > 0
+                if needs_dimensions and not has_any_axis:
+                    machine_rejection = f"Machine travel specs missing — cannot verify for {part_length}x{part_width}x{part_height}mm part"
+                    if machine_rejection not in rejection_reasons:
+                        rejection_reasons.append(machine_rejection)
+                    continue
                 
                 # Check all three axes
                 dimension_issues = []
@@ -7136,11 +7159,17 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             elif is_boring_machine or "boring" in machine_category:
                 # For boring machines: check bore diameter capability
                 bore_dia = machine.get("bore_diameter") or machine.get("max_diameter") or 0
-                if part_diameter and bore_dia > 0:
-                    if bore_dia >= part_diameter * 1.1:
-                        dimension_fit = True
-                        dimension_capable = True
-                        machine_score += 15
+                if part_diameter:
+                    if bore_dia > 0:
+                        if bore_dia >= part_diameter * 1.1:
+                            dimension_fit = True
+                            dimension_capable = True
+                            machine_score += 15
+                    else:
+                        machine_rejection = f"Boring capacity spec missing — cannot verify for {part_diameter}mm part"
+                        if machine_rejection not in rejection_reasons:
+                            rejection_reasons.append(machine_rejection)
+                        continue
                         
             elif is_gear_machine or "gear" in machine_category:
                 # For gear machines: check max gear diameter and module
