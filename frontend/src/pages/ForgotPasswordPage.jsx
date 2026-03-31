@@ -5,24 +5,29 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { toast } from "sonner";
-import { Mail, ArrowLeft, CheckCircle2, Loader2, Shield } from "lucide-react";
+import { Mail, ArrowLeft, CheckCircle2, Loader2, Shield, Phone, MessageCircle } from "lucide-react";
 
 const ForgotPasswordPage = () => {
+  const [mode, setMode] = useState("email"); // "email" | "phone"
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [resetMethod, setResetMethod] = useState("email");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      await api.post("/auth/forgot-password", { email });
+      const payload = mode === "email" ? { email } : { phone };
+      const res = await api.post("/auth/forgot-password", payload);
+      setResetMethod(res.data?.method || mode);
       setSubmitted(true);
       toast.success("Password reset instructions sent!");
-    } catch (error) {
-      // Still show success to prevent email enumeration
+    } catch {
       setSubmitted(true);
+      setResetMethod(mode);
       toast.success("If an account exists, you will receive reset instructions.");
     } finally {
       setLoading(false);
@@ -42,38 +47,96 @@ const ForgotPasswordPage = () => {
               <Shield className="w-6 h-6 text-orange-600" />
               <h1 className="font-heading text-3xl font-bold text-slate-900">Reset Password</h1>
             </div>
-            <p className="text-slate-500 mb-8">
-              Enter your email address and we'll send you instructions to reset your password.
+            <p className="text-slate-500 mb-6">
+              We'll send you a password reset link via {mode === "email" ? "email" : "WhatsApp"}.
             </p>
 
+            {/* Mode Toggle */}
+            <div className="flex gap-2 mb-6" data-testid="reset-mode-toggle">
+              <button
+                type="button"
+                onClick={() => setMode("email")}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium border transition-all ${
+                  mode === "email"
+                    ? "bg-orange-50 border-orange-300 text-orange-700"
+                    : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                }`}
+                data-testid="reset-via-email-btn"
+              >
+                <Mail className="w-4 h-4" /> Via Email
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("phone")}
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium border transition-all ${
+                  mode === "phone"
+                    ? "bg-green-50 border-green-300 text-green-700"
+                    : "bg-white border-slate-200 text-slate-500 hover:bg-slate-50"
+                }`}
+                data-testid="reset-via-phone-btn"
+              >
+                <MessageCircle className="w-4 h-4" /> Via WhatsApp
+              </button>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Email Address
-                </Label>
-                <div className="relative mt-1">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@company.com"
-                    className="pl-10 h-12 bg-white border-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                    data-testid="forgot-email-input"
-                    required
-                  />
+              {mode === "email" ? (
+                <div>
+                  <Label htmlFor="email" className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Email Address
+                  </Label>
+                  <div className="relative mt-1">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@company.com"
+                      className="pl-10 h-12 bg-white border-slate-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                      data-testid="forgot-email-input"
+                      required
+                    />
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div>
+                  <Label htmlFor="phone" className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Registered Phone Number
+                  </Label>
+                  <div className="relative mt-1">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <Input
+                      id="phone"
+                      type="tel"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="+91 98765 43210"
+                      className="pl-10 h-12 bg-white border-slate-200 focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      data-testid="forgot-phone-input"
+                      required
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Enter the phone number you used during WhatsApp registration
+                  </p>
+                </div>
+              )}
 
               <Button
                 type="submit"
                 disabled={loading}
-                className="w-full h-12 bg-orange-600 hover:bg-orange-700 font-medium"
+                className={`w-full h-12 font-medium ${
+                  mode === "phone"
+                    ? "bg-green-600 hover:bg-green-700"
+                    : "bg-orange-600 hover:bg-orange-700"
+                }`}
                 data-testid="forgot-submit-btn"
               >
                 {loading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
+                ) : mode === "phone" ? (
+                  "Send Reset Link via WhatsApp"
                 ) : (
                   "Send Reset Instructions"
                 )}
@@ -82,22 +145,35 @@ const ForgotPasswordPage = () => {
           </>
         ) : (
           <div className="text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle2 className="w-8 h-8 text-green-600" />
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 ${
+              resetMethod === "whatsapp" ? "bg-green-100" : "bg-green-100"
+            }`}>
+              {resetMethod === "whatsapp" ? (
+                <MessageCircle className="w-8 h-8 text-green-600" />
+              ) : (
+                <CheckCircle2 className="w-8 h-8 text-green-600" />
+              )}
             </div>
-            <h1 className="font-heading text-2xl font-bold text-slate-900 mb-2">Check Your Email</h1>
+            <h1 className="font-heading text-2xl font-bold text-slate-900 mb-2">
+              {resetMethod === "whatsapp" ? "Check Your WhatsApp" : "Check Your Email"}
+            </h1>
             <p className="text-slate-500 mb-6">
-              If an account exists for <strong>{email}</strong>, you will receive password reset instructions shortly.
+              {resetMethod === "whatsapp" ? (
+                <>If an account exists for <strong>{phone}</strong>, you will receive a password reset link on WhatsApp.</>
+              ) : (
+                <>If an account exists for <strong>{email}</strong>, you will receive password reset instructions shortly.</>
+              )}
             </p>
             <p className="text-sm text-slate-400 mb-8">
               The link will expire in 1 hour for security reasons.
             </p>
             <Button
-              onClick={() => setSubmitted(false)}
+              onClick={() => { setSubmitted(false); setResetMethod("email"); }}
               variant="outline"
               className="mr-3"
+              data-testid="try-again-btn"
             >
-              Try another email
+              Try again
             </Button>
           </div>
         )}

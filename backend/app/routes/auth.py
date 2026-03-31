@@ -79,6 +79,7 @@ async def get_current_user(request: Request) -> dict:
 
 # ============== REGISTER ==============
 from app.utils.phone_utils import normalize_phone, is_valid_phone
+from app.services.whatsapp_service import whatsapp_service
 
 @router.post("/register", response_model=TokenResponse)
 async def register(user_data: UserCreate, request: Request):
@@ -654,7 +655,8 @@ class PasswordChangeRequestLocal(BaseModel):
 
 
 class PasswordResetRequestLocal(BaseModel):
-    email: EmailStr
+    email: Optional[str] = None
+    phone: Optional[str] = None
 
 
 class PasswordResetConfirmLocal(BaseModel):
@@ -727,46 +729,101 @@ async def change_password(
 
 @router.post("/forgot-password")
 async def forgot_password(reset_request: PasswordResetRequestLocal, request: Request):
-    """Request password reset email"""
-    client_ip = request.client.host if request.client else "unknown"
-    email = sanitize_input(reset_request.email.lower().strip())
+    """Request password reset via email or WhatsApp (for phone-only users)"""
+    from app.utils.phone_utils import normalize_phone
     
-    user = await db.users.find_one({"email": email}, {"_id": 0})
+    client_ip = request.client.host if request.client else "unknown"
+    
+    user = None
+    reset_via = None
+    
+    if reset_request.email and reset_request.email.strip():
+        email = sanitize_input(reset_request.email.lower().strip())
+        user = await db.users.find_one({"email": email}, {"_id": 0})
+        reset_via = "email"
+    elif reset_request.phone and reset_request.phone.strip():
+        normalized = normalize_phone(reset_request.phone)
+        if normalized:
+            user = await db.users.find_one({"phone_normalized": normalized}, {"_id": 0})
+            if not user:
+                phone_digits = normalized.replace("+", "")[-10:]
+                user = await db.users.find_one({"phone": {"$regex": phone_digits}}, {"_id": 0})
+        reset_via = "whatsapp"
+    else:
+        raise HTTPException(status_code=400, detail="Please provide either email or phone number")
     
     if user:
         reset_token = generate_secure_token(32)
         token_hash = hash_token(reset_token)
         expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
         
-        await db.password_resets.delete_many({"email": email})
+        identifier = user.get("email") or user.get("phone_normalized") or user.get("phone", "")
+        
+        await db.password_resets.delete_many({"identifier": identifier})
         await db.password_resets.insert_one({
-            "email": email,
+            "identifier": identifier,
+            "email": user.get("email", ""),
+            "phone": user.get("phone_normalized") or user.get("phone", ""),
             "token_hash": token_hash,
             "expires_at": expires_at.isoformat(),
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "used": False
+            "used": False,
+            "reset_via": reset_via
         })
         
         reset_link = f"https://oemlinker.com/reset-password?token={reset_token}"
         
-        email_html = f'''
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #1e40af;">Password Reset Request</h2>
-            <p>Hello {user.get("name", "User")},</p>
-            <p>We received a request to reset your password. Click the button below to reset (expires in 1 hour).</p>
-            <div style="text-align: center; margin: 30px 0;">
-                <a href="{reset_link}" style="background-color: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset Password</a>
+        if reset_via == "email" and user.get("email"):
+            email_html = f'''
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #1e40af;">Password Reset Request</h2>
+                <p>Hello {user.get("name", "User")},</p>
+                <p>We received a request to reset your password. Click the button below to reset (expires in 1 hour).</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="{reset_link}" style="background-color: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset Password</a>
+                </div>
+                <p style="color: #666; font-size: 14px;">If you didn't request this, please ignore this email.</p>
             </div>
-            <p style="color: #666; font-size: 14px;">If you didn't request this, please ignore this email.</p>
-        </div>
-        '''
+            '''
+            asyncio.create_task(send_email_async(user["email"], "Reset Your OEMLinker Password", email_html))
+            logger.info(f"Password reset email sent to: {user['email']} from IP: {client_ip}")
         
-        asyncio.create_task(send_email_async(email, "Reset Your OEMLinker Password", email_html))
-        logger.info(f"Password reset requested for: {email} from IP: {client_ip}")
+        elif reset_via == "whatsapp":
+            phone_number = user.get("phone_normalized") or user.get("phone", "")
+            if phone_number:
+                try:
+                    wa_phone = phone_number.replace("+", "").replace(" ", "").replace("-", "")
+                    if not wa_phone.startswith("91") and len(wa_phone) == 10:
+                        wa_phone = "91" + wa_phone
+                    
+                    await whatsapp_service.send_gupshup_template(
+                        to_number=wa_phone,
+                        template_id="forgot_password",
+                        params=[user.get("name", "User"), reset_link],
+                        context="password_reset",
+                        user_id=user.get("user_id")
+                    )
+                    logger.info(f"Password reset WhatsApp sent to: {wa_phone} from IP: {client_ip}")
+                except Exception as e:
+                    logger.error(f"WhatsApp reset failed for {phone_number}: {e}")
+                    if user.get("email"):
+                        email_html = f'''
+                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                            <h2 style="color: #1e40af;">Password Reset Request</h2>
+                            <p>Hello {user.get("name", "User")},</p>
+                            <p>Click below to reset your password (expires in 1 hour):</p>
+                            <div style="text-align: center; margin: 30px 0;">
+                                <a href="{reset_link}" style="background-color: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset Password</a>
+                            </div>
+                        </div>
+                        '''
+                        asyncio.create_task(send_email_async(user["email"], "Reset Your OEMLinker Password", email_html))
     else:
-        logger.warning(f"Password reset requested for non-existent email: {email} from IP: {client_ip}")
+        logger.warning(f"Password reset requested for non-existent account from IP: {client_ip}")
     
-    return {"message": "If an account exists with that email, you will receive a password reset link shortly."}
+    if reset_via == "whatsapp":
+        return {"message": "If an account exists with that phone number, you will receive a password reset link via WhatsApp.", "method": "whatsapp"}
+    return {"message": "If an account exists with that email, you will receive a password reset link shortly.", "method": "email"}
 
 
 @router.post("/reset-password")
@@ -795,13 +852,24 @@ async def reset_password(reset_data: PasswordResetConfirmLocal, request: Request
         await db.password_resets.delete_one({"token_hash": token_hash})
         raise HTTPException(status_code=400, detail="Reset token has expired. Please request a new one.")
     
-    email = reset_record["email"]
+    email = reset_record.get("email", "")
+    phone = reset_record.get("phone", "")
     
-    db_user = await db.users.find_one({"email": email}, {"_id": 0})
+    db_user = None
+    if email:
+        db_user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not db_user and phone:
+        db_user = await db.users.find_one({"phone_normalized": phone}, {"_id": 0})
+        if not db_user:
+            phone_digits = phone.replace("+", "")[-10:]
+            db_user = await db.users.find_one({"phone": {"$regex": phone_digits}}, {"_id": 0})
+    
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
     
     now = datetime.now(timezone.utc)
     result = await db.users.update_one(
-        {"email": email},
+        {"user_id": db_user["user_id"]},
         {
             "$set": {
                 "password_hash": hash_password(reset_data.new_password),
