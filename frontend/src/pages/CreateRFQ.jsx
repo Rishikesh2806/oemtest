@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { 
   Upload, FileText, ArrowRight, ArrowLeft, 
   CheckCircle2, Loader2, X, Cpu, Target, Package,
-  AlertTriangle, Ruler, Scale, MapPin, Truck, Globe, Building2, Clock, Zap, Shield
+  AlertTriangle, Ruler, Scale, MapPin, Truck, Globe, Building2, Clock, Zap, Shield, Camera, Search
 } from "lucide-react";
 import { Switch } from "../components/ui/switch";
 
@@ -60,7 +60,7 @@ const CreateRFQ = () => {
   
   const [analysisResult, setAnalysisResult] = useState(null);
   const [partGeometry, setPartGeometry] = useState("rectangular");
-  const [hasImageFiles, setHasImageFiles] = useState(false);
+  const [imageType, setImageType] = useState(null);
   const [noMatchesFound, setNoMatchesFound] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -142,27 +142,16 @@ const CreateRFQ = () => {
   const handleFileSelect = (e) => {
     const selectedFiles = Array.from(e.target.files);
     setFiles(prev => [...prev, ...selectedFiles]);
-    const imageExts = ['.jpg', '.jpeg', '.png', '.webp', '.heic'];
-    const hasImages = selectedFiles.some(f => imageExts.some(ext => f.name.toLowerCase().endsWith(ext)));
-    if (hasImages) setHasImageFiles(true);
   };
 
   const removeFile = (index) => {
-    setFiles(prev => {
-      const updated = prev.filter((_, i) => i !== index);
-      const imageExts = ['.jpg', '.jpeg', '.png', '.webp', '.heic'];
-      setHasImageFiles(updated.some(f => imageExts.some(ext => f.name.toLowerCase().endsWith(ext))));
-      return updated;
-    });
+    setFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     const droppedFiles = Array.from(e.dataTransfer.files);
     setFiles(prev => [...prev, ...droppedFiles]);
-    const imageExts = ['.jpg', '.jpeg', '.png', '.webp', '.heic'];
-    const hasImages = droppedFiles.some(f => imageExts.some(ext => f.name.toLowerCase().endsWith(ext)));
-    if (hasImages) setHasImageFiles(true);
   };
 
   const createRFQ = async () => {
@@ -249,6 +238,7 @@ const CreateRFQ = () => {
       const { 
         analysis, 
         part_geometry, 
+        image_type,
         analyzed_count,
         skipped_cad_files,
         note
@@ -256,10 +246,13 @@ const CreateRFQ = () => {
       
       setAnalysisResult(analysis);
       setPartGeometry(part_geometry || analysis?.part_geometry || "rectangular");
+      setImageType(image_type || analysis?.image_type || "technical_drawing");
       
       // Show appropriate messages based on analysis results
       if (analyzed_count === 0) {
         toast.warning(note || "No drawings could be analyzed. Please add PDF or image files.");
+      } else if (image_type === "reference_photo") {
+        toast.success(`AI detected reference photo(s) - will match against vendor portfolios!`);
       } else if (skipped_cad_files?.length > 0) {
         toast.info(`Analyzed ${analyzed_count} drawing(s). ${skipped_cad_files.length} CAD file(s) kept as attachments.`);
       } else {
@@ -286,11 +279,8 @@ const CreateRFQ = () => {
     setMatching(true);
     setNoMatchesFound(false);
     try {
-      // Use portfolio matching when photos are uploaded (no CAD dimensions)
-      const usePortfolioMatch = hasImageFiles && (
-        !analysisResult?.overall_dimensions ||
-        !analysisResult.overall_dimensions.length
-      );
+      // Use AI-determined image_type for routing
+      const usePortfolioMatch = imageType === "reference_photo";
       
       const endpoint = usePortfolioMatch 
         ? `/rfqs/${rfqId}/portfolio-match`
@@ -967,6 +957,19 @@ const CreateRFQ = () => {
                   <div className="flex items-center gap-2 mb-3">
                     <CheckCircle2 className="w-5 h-5 text-green-600" />
                     <h3 className="font-semibold text-slate-900">Analysis Summary</h3>
+                    {imageType && (
+                      <span data-testid="image-type-badge" className={`ml-auto inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border ${
+                        imageType === "reference_photo"
+                          ? "bg-purple-50 text-purple-700 border-purple-200"
+                          : "bg-blue-50 text-blue-700 border-blue-200"
+                      }`}>
+                        {imageType === "reference_photo" ? (
+                          <><Camera className="w-3 h-3" /> Reference Photo</>
+                        ) : (
+                          <><Cpu className="w-3 h-3" /> Technical Drawing</>
+                        )}
+                      </span>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                     {analysisResult.overall_dimensions && (
@@ -1008,10 +1011,10 @@ const CreateRFQ = () => {
                       <Target className="w-12 h-12 text-orange-600 animate-pulse" />
                     </div>
                     <p className="text-lg font-medium text-slate-900">
-                      {hasImageFiles ? "Matching with Vendor Portfolios..." : "Finding Best Vendors..."}
+                      {imageType === "reference_photo" ? "Matching with Vendor Portfolios..." : "Finding Best Vendors..."}
                     </p>
                     <p className="text-slate-500 mt-1 text-sm">
-                      {hasImageFiles 
+                      {imageType === "reference_photo"
                         ? "Comparing your part photos with vendor portfolio items to find the best fit" 
                         : "Matching your requirements with capable manufacturers"}
                     </p>
@@ -1047,7 +1050,7 @@ const CreateRFQ = () => {
                     <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
                     <p className="text-lg font-medium text-slate-900">Ready to Match!</p>
                     <p className="text-slate-500 mt-1 text-sm">
-                      {hasImageFiles 
+                      {imageType === "reference_photo"
                         ? "We'll match your part photos against vendor portfolios to find the best manufacturers"
                         : "All specifications confirmed — proceed to find matching vendors"}
                     </p>

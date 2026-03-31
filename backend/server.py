@@ -6074,6 +6074,7 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
         return {
             "message": "No analyzable drawings found",
             "analyzed_count": 0,
+            "image_type": "technical_drawing",
             "skipped_cad_files": skipped_cad_files,
             "part_geometry": "unknown",
             "dimensions_missing": True,
@@ -6169,8 +6170,16 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             
             FIRST, identify the part geometry type, then extract appropriate dimensions.
             
+            FIRST, classify each image:
+            - "technical_drawing": Image shows engineering drawings with dimension callouts, tolerance annotations, GD&T symbols, title blocks, section views, or clearly marked measurements/dimensions
+            - "reference_photo": Image shows a photograph of a physical part/product WITHOUT explicit dimensional annotations or engineering drawing conventions
+            
+            If ANY image contains dimensional data or engineering drawing elements, classify as "technical_drawing".
+            Only classify as "reference_photo" if ALL images are plain photographs with no dimensional markings.
+            
             Extract and provide the following information in JSON format:
             {{
+                "image_type": string - "technical_drawing" or "reference_photo",
                 "part_geometry": string - one of: "rectangular", "cylindrical", "circular_flat", "conical", "spherical", "complex", "sheet_metal", "tube_pipe",
                 "overall_dimensions": {{
                     // For RECTANGULAR parts (blocks, brackets, housings):
@@ -6228,15 +6237,17 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             }}
             
             IMPORTANT RULES:
-            1. Read ALL dimension callouts carefully from ALL drawings
-            2. Cross-reference dimensions between different views
-            3. Identify the PRIMARY geometry type first
-            4. Only populate dimension fields relevant to that geometry
-            5. For cylindrical/turned parts, ALWAYS extract diameter and length
-            6. For flat circular parts (flanges, discs), extract diameter and thickness
-            7. Look for angles, tapers, and radii - these are critical for machining
-            8. Check title block for material specs
-            9. For recommended_processes, list SPECIFIC operations"""
+            1. FIRST decide image_type: Does the image have dimension callouts, measurement lines, tolerances, GD&T symbols, or title blocks? If YES -> "technical_drawing". If it is just a photo of a physical part/product -> "reference_photo"
+            2. Read ALL dimension callouts carefully from ALL drawings
+            3. Cross-reference dimensions between different views
+            4. Identify the PRIMARY geometry type first
+            5. Only populate dimension fields relevant to that geometry
+            6. For cylindrical/turned parts, ALWAYS extract diameter and length
+            7. For flat circular parts (flanges, discs), extract diameter and thickness
+            8. Look for angles, tapers, and radii - these are critical for machining
+            9. Check title block for material specs
+            10. For recommended_processes, list SPECIFIC operations
+            11. For reference_photo images, still provide your BEST GUESS for geometry and processes but set dimensions to null"""
         ).with_model("openai", "gpt-5.2")
         
         # Get RFQ description for additional context
@@ -6445,9 +6456,19 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
         
         dimensions_missing = not has_all_required
         
+        # Determine image_type from AI analysis
+        image_type = ai_analysis.get("image_type", "technical_drawing")
+        
+        # Store image_type on the RFQ for downstream matching
+        await db.rfqs.update_one(
+            {"rfq_id": rfq_id},
+            {"$set": {"image_type": image_type}}
+        )
+        
         return {
             "message": f"Analysis complete - analyzed {len(analyzed_files)} drawing(s)", 
             "analysis": ai_analysis,
+            "image_type": image_type,
             "part_geometry": part_geometry,
             "dimensions_missing": dimensions_missing,
             "required_dimensions": required_dims,
@@ -6489,6 +6510,7 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
         return {
             "message": "Analysis complete with fallback", 
             "analysis": fallback_analysis,
+            "image_type": "technical_drawing",
             "part_geometry": "unknown",
             "dimensions_missing": True,
             "required_dimensions": ["length", "width", "height"],
