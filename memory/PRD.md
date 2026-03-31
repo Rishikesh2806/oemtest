@@ -1638,4 +1638,24 @@ Physics-based vendor matching that validates actual machine specifications again
 `/app/test_reports/iteration_49.json` — Backend 100% (16/16), Frontend 100%
 
 ### Future Spec (Saved for later)
+
+## Duplicate Phone Number Protection (Implemented Mar 31, 2026)
+
+### 5-Layer Protection
+1. **Normalization** — `phone_utils.py` normalizes all formats to E.164 (+91XXXXXXXXXX)
+2. **Frontend real-time check** — Debounced 600ms check with visual indicators (green/red border + message)
+3. **Backend API validation** — `POST /api/auth/check-phone` public endpoint
+4. **Backend registration/update enforcement** — Blocks duplicate at registration and profile update
+5. **MongoDB unique partial index** — `idx_users_phone_normalized`, `idx_vendors_phone_normalized`
+
+### Files
+- `/app/backend/app/utils/phone_utils.py` — `normalize_phone()`, `is_valid_phone()`
+- `/app/backend/server.py` — check-phone endpoint, register enforcement
+- `/app/backend/app/routes/auth.py` — Modular route phone enforcement (fixed by testing agent)
+- `/app/frontend/src/components/PhoneCheck.jsx` — `usePhoneCheck` hook + `PhoneStatusIndicator`
+- Integrated in: `RegisterPage.jsx`, `VendorProfile.jsx`, `BuyerProfile.jsx`
+
+### Test Report
+`/app/test_reports/iteration_50.json` — Backend 100% (15/15), Frontend 100%
+
 Full multi-operation decomposition & split-vendor matching spec saved at `/app/memory/FEATURE_MULTI_OP_MATCHING.md`
