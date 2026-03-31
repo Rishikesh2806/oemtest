@@ -359,6 +359,14 @@ See ARCHITECTURE.md for detailed refactoring plan.
 
 
 
+
+### Admin Edit User Details & GSTIN (NEW - Mar 31, 2026)
+- **Expanded admin edit dialog**: Name, Email, Company, Phone, WhatsApp, Base/Custom Role, GST Information
+- **GSTIN verify in admin**: Admin can enter/verify GSTIN from the edit dialog using the same `/gstin/verify` API
+- **Dual sync**: GST data saved to both `users` and `vendors` collections
+- **Duplicate protection**: DuplicateKeyError handled gracefully with user-friendly message
+- **Files changed**: `server.py` (admin_update_user expanded allowed_fields + GST sync), `AdminDashboard.jsx` (expanded edit dialog with GST section)
+
 ### GSTIN Field in Vendor Profile (NEW - Mar 31, 2026)
 - **Editable GSTIN input** added to vendor profile with real-time Verify button
 - **Verification flow**: Enter 15-char GSTIN → Click Verify → Calls `/api/gstin/verify/{gstin}` → Shows verified details (GSTIN, Status, Legal Name, Trade Name, etc.)

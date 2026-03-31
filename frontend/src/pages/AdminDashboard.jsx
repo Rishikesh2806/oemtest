@@ -258,12 +258,14 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("all");
   const [editUser, setEditUser] = useState(null);
-  const [editForm, setEditForm] = useState({ name: "", role: "", custom_role: "" });
+  const [editForm, setEditForm] = useState({ name: "", role: "", custom_role: "", email: "", phone_number: "", whatsapp_number: "", company_name: "", gstin: "", gst_verified: false, gst_status: "", legal_name: "", trade_name: "", taxpayer_type: "", constitution: "", gst_registration_date: "" });
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [addForm, setAddForm] = useState({ name: "", email: "", password: "", role: "", custom_role: "", company_name: "" });
   const [adding, setAdding] = useState(false);
   const [availableRoles, setAvailableRoles] = useState([]);
   const [loadingRoles, setLoadingRoles] = useState(false);
+  const [gstVerifying, setGstVerifying] = useState(false);
+  const [loadingUserDetail, setLoadingUserDetail] = useState(false);
   
   // Fetch available roles
   useEffect(() => {
@@ -294,9 +296,87 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
     return matchesSearch && matchesRole;
   });
   
-  const handleEdit = (user) => {
+  const handleEdit = async (user) => {
     setEditUser(user);
-    setEditForm({ name: user.name, role: user.role, custom_role: user.custom_role || "", company_name: user.company_name || "" });
+    setEditForm({
+      name: user.name || "",
+      role: user.role || "",
+      custom_role: user.custom_role || "",
+      company_name: user.company_name || "",
+      email: user.email || "",
+      phone_number: user.phone_number || "",
+      whatsapp_number: user.whatsapp_number || "",
+      gstin: user.gstin || "",
+      gst_verified: user.gst_verified || false,
+      gst_status: user.gst_status || "",
+      legal_name: user.legal_name || "",
+      trade_name: user.trade_name || "",
+      taxpayer_type: user.taxpayer_type || "",
+      constitution: user.constitution || "",
+      gst_registration_date: user.gst_registration_date || ""
+    });
+    // Fetch full detail including vendor profile for GST info
+    setLoadingUserDetail(true);
+    try {
+      const res = await api.get(`/admin/users/${user.user_id}`);
+      const vp = res.data?.vendor_profile;
+      if (vp) {
+        setEditForm(prev => ({
+          ...prev,
+          gstin: vp.gstin || prev.gstin || "",
+          gst_verified: vp.gst_verified || prev.gst_verified || false,
+          gst_status: vp.gst_status || prev.gst_status || "",
+          legal_name: vp.legal_name || prev.legal_name || "",
+          trade_name: vp.trade_name || prev.trade_name || "",
+          taxpayer_type: vp.taxpayer_type || prev.taxpayer_type || "",
+          constitution: vp.constitution || prev.constitution || "",
+          gst_registration_date: vp.gst_registration_date || prev.gst_registration_date || "",
+          phone_number: res.data.phone_number || prev.phone_number || "",
+          whatsapp_number: res.data.whatsapp_number || prev.whatsapp_number || ""
+        }));
+      }
+    } catch (e) {
+      console.error("Failed to load user detail", e);
+    } finally {
+      setLoadingUserDetail(false);
+    }
+  };
+
+  const handleVerifyGstin = async () => {
+    const gstin = (editForm.gstin || "").toUpperCase().trim();
+    if (!gstin || gstin.length !== 15) {
+      toast.error("Enter a valid 15-character GSTIN");
+      return;
+    }
+    setGstVerifying(true);
+    try {
+      const res = await api.get(`/gstin/verify/${gstin}`);
+      const data = res.data;
+      if (data.duplicate) {
+        toast.error(data.error || "This GSTIN is already registered");
+        return;
+      }
+      if (data.valid) {
+        setEditForm(prev => ({
+          ...prev,
+          gstin: data.gstin,
+          gst_verified: true,
+          gst_status: data.status || "",
+          legal_name: data.legal_name || "",
+          trade_name: data.trade_name || "",
+          taxpayer_type: data.taxpayer_type || "",
+          constitution: data.constitution || "",
+          gst_registration_date: data.registration_date || ""
+        }));
+        toast.success("GSTIN verified!");
+      } else {
+        toast.error(data.error || "Verification failed");
+      }
+    } catch (err) {
+      toast.error("GSTIN verification failed");
+    } finally {
+      setGstVerifying(false);
+    }
   };
   
   const handleSave = async () => {
@@ -417,27 +497,63 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
       
       {/* Edit Dialog */}
       <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
+            <DialogTitle>Edit User — {editUser?.name}</DialogTitle>
           </DialogHeader>
+          {loadingUserDetail ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-orange-500" /></div>
+          ) : (
           <div className="space-y-4 mt-4">
-            <div>
-              <Label>Name</Label>
-              <Input
-                value={editForm.name}
-                onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                data-testid="edit-user-name"
-              />
+            {/* Basic Info */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Name</Label>
+                <Input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                  data-testid="edit-user-name"
+                />
+              </div>
+              <div>
+                <Label>Email</Label>
+                <Input
+                  value={editForm.email || ""}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
+                  data-testid="edit-user-email"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Company Name</Label>
+                <Input
+                  value={editForm.company_name || ""}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, company_name: e.target.value }))}
+                  data-testid="edit-user-company"
+                />
+              </div>
+              <div>
+                <Label>Phone Number</Label>
+                <Input
+                  value={editForm.phone_number || ""}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, phone_number: e.target.value }))}
+                  placeholder="+91 98XXX XXXXX"
+                  data-testid="edit-user-phone"
+                />
+              </div>
             </div>
             <div>
-              <Label>Company Name</Label>
+              <Label>WhatsApp Number</Label>
               <Input
-                value={editForm.company_name || ""}
-                onChange={(e) => setEditForm(prev => ({ ...prev, company_name: e.target.value }))}
-                data-testid="edit-user-company"
+                value={editForm.whatsapp_number || ""}
+                onChange={(e) => setEditForm(prev => ({ ...prev, whatsapp_number: e.target.value }))}
+                placeholder="+91 98XXX XXXXX"
+                data-testid="edit-user-whatsapp"
               />
             </div>
+            
+            {/* Roles */}
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Base Role</Label>
@@ -487,10 +603,50 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
                 User will have permissions from both {editForm.role} role and {availableRoles.find(r => r.role_id === editForm.custom_role)?.name || editForm.custom_role} role
               </p>
             )}
+            
+            {/* GST Section */}
+            <div className="border-t pt-4 mt-2">
+              <Label className="text-sm font-semibold text-slate-700 mb-2 block">GST Information</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={editForm.gstin || ""}
+                  onChange={(e) => setEditForm(prev => ({ ...prev, gstin: e.target.value.toUpperCase() }))}
+                  placeholder="15-character GSTIN"
+                  maxLength={15}
+                  className="font-mono uppercase"
+                  data-testid="edit-user-gstin"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={handleVerifyGstin}
+                  disabled={gstVerifying || (editForm.gstin || "").length !== 15}
+                  className={editForm.gst_verified ? "bg-green-600 hover:bg-green-700" : "bg-orange-600 hover:bg-orange-700"}
+                  data-testid="edit-user-gstin-verify"
+                >
+                  {gstVerifying ? <Loader2 className="w-4 h-4 animate-spin" /> : editForm.gst_verified ? "Verified" : "Verify"}
+                </Button>
+              </div>
+              {editForm.gstin && (editForm.gstin || "").length !== 15 && (
+                <p className="text-xs text-amber-600 mt-1">{(editForm.gstin || "").length}/15 characters</p>
+              )}
+              {editForm.gst_verified && (
+                <div className="grid grid-cols-2 gap-2 mt-3 p-3 bg-green-50 rounded-lg border border-green-200">
+                  <div><span className="text-xs text-slate-500 font-medium">Status:</span> <span className="text-sm text-green-700 font-medium">{editForm.gst_status || "N/A"}</span></div>
+                  <div><span className="text-xs text-slate-500 font-medium">Legal Name:</span> <span className="text-sm">{editForm.legal_name || "N/A"}</span></div>
+                  {editForm.trade_name && <div><span className="text-xs text-slate-500 font-medium">Trade Name:</span> <span className="text-sm">{editForm.trade_name}</span></div>}
+                  {editForm.taxpayer_type && <div><span className="text-xs text-slate-500 font-medium">Type:</span> <span className="text-sm">{editForm.taxpayer_type}</span></div>}
+                  {editForm.constitution && <div><span className="text-xs text-slate-500 font-medium">Constitution:</span> <span className="text-sm">{editForm.constitution}</span></div>}
+                  {editForm.gst_registration_date && <div><span className="text-xs text-slate-500 font-medium">Reg Date:</span> <span className="text-sm">{editForm.gst_registration_date}</span></div>}
+                </div>
+              )}
+            </div>
+            
             <Button onClick={handleSave} className="w-full bg-orange-600 hover:bg-orange-700" data-testid="save-user-btn">
               Save Changes
             </Button>
           </div>
+          )}
         </DialogContent>
       </Dialog>
 

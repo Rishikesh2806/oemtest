@@ -11118,15 +11118,44 @@ async def admin_update_user(user_id: str, request: Request, user: dict = Depends
         raise HTTPException(status_code=403, detail="Admin access required")
     
     body = await request.json()
-    allowed_fields = ["name", "role", "custom_role", "company_name"]
-    update_data = {k: v for k, v in body.items() if k in allowed_fields}
     
-    if not update_data:
+    # Fields allowed on users collection
+    user_allowed = ["name", "role", "custom_role", "company_name", "email", "phone_number", "whatsapp_number"]
+    user_update = {k: v for k, v in body.items() if k in user_allowed and v is not None}
+    
+    # GST fields - update both users and vendors collections
+    gst_fields = ["gstin", "gst_verified", "gst_status", "legal_name", "trade_name", "taxpayer_type", "constitution", "gst_registration_date"]
+    gst_update = {k: v for k, v in body.items() if k in gst_fields}
+    
+    if not user_update and not gst_update:
         raise HTTPException(status_code=400, detail="No valid fields to update")
     
-    result = await db.users.update_one({"user_id": user_id}, {"$set": update_data})
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="User not found")
+    # Update users collection
+    if user_update:
+        result = await db.users.update_one({"user_id": user_id}, {"$set": user_update})
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+    
+    # Update vendor profile with GST data + synced user fields
+    vendor_update = {}
+    if gst_update:
+        vendor_update.update(gst_update)
+    # Sync relevant fields to vendor profile too
+    for f in ["company_name", "phone_number"]:
+        if f in user_update:
+            vendor_update[f if f != "phone_number" else "phone"] = user_update[f]
+    
+    if vendor_update:
+        try:
+            await db.vendors.update_one({"user_id": user_id}, {"$set": vendor_update})
+        except Exception as e:
+            if "DuplicateKeyError" in str(type(e).__name__) or "11000" in str(e):
+                raise HTTPException(status_code=400, detail="This GSTIN is already registered with another vendor")
+            raise
+    
+    # Also store GST fields on users collection for quick access
+    if gst_update:
+        await db.users.update_one({"user_id": user_id}, {"$set": gst_update})
     
     return {"message": "User updated successfully"}
 
