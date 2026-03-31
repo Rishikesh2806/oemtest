@@ -357,6 +357,16 @@ See ARCHITECTURE.md for detailed refactoring plan.
 
 ## What's Been Implemented
 
+
+### Dynamic RFQ Image Matching Routing (NEW - Mar 31, 2026)
+- **AI Image Classification**: The `analyze_rfq_drawings` endpoint now classifies uploaded images as either `technical_drawing` (has dimensional data, tolerances, GD&T symbols) or `reference_photo` (plain photo without dimensions)
+- **Smart Matching Routing**: Based on `image_type`:
+  - `technical_drawing` → Routes to machine-based matching (`/rfqs/{rfq_id}/match`) using extracted dimensions
+  - `reference_photo` → Routes to portfolio-based matching (`/rfqs/{rfq_id}/portfolio-match`) using visual similarity
+- **Backend**: `image_type` stored on RFQ document, returned in analyze response
+- **Frontend**: `CreateRFQ.jsx` replaced heuristic `hasImageFiles` check with AI-determined `imageType` state. Step 4 shows classification badge (Technical Drawing / Reference Photo)
+- **Test Report**: /app/test_reports/iteration_51.json (100% pass)
+
 ### Vendor Location Preference Matching (NEW - Mar 2, 2026)
 - **Enhanced RFQ Creation**: Buyers can specify:
   - Delivery Location (address, city, state, country, pincode)
