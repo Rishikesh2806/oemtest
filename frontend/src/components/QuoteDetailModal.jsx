@@ -391,7 +391,7 @@ const QuoteDetailModal = ({ quoteId, open, onOpenChange, onQuoteUpdated, rfqId }
                   <div className="grid grid-cols-2 gap-2 text-sm">
                     <div><span className="text-slate-500">Material:</span> <span className="text-slate-900">{quote.rfq_material}</span></div>
                     <div><span className="text-slate-500">Quantity:</span> <span className="text-slate-900">{quote.rfq_quantity} units</span></div>
-                    <div><span className="text-slate-500">Tolerance:</span> <span className="text-slate-900">±{quote.rfq_tolerance} mm</span></div>
+                    <div><span className="text-slate-500">Tolerance:</span> <span className="text-slate-900">{quote.rfq_tolerance ? `±${quote.rfq_tolerance} mm` : "As per drawing"}</span></div>
                     <div><span className="text-slate-500">Your Preferred Terms:</span> <span className="text-slate-900">{getPaymentTermLabel(quote.rfq_preferred_payment_terms)}</span></div>
                   </div>
                 </div>

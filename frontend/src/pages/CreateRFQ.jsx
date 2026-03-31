@@ -68,7 +68,7 @@ const CreateRFQ = () => {
     description: "",
     material_type: "",
     quantity: 1,
-    tolerance: 0.1,
+    tolerance: null,
     surface_finish: "",
     supply_type: "vendor_material",
     deadline: "",
@@ -987,6 +987,16 @@ const CreateRFQ = () => {
                       <div className="p-2 bg-white rounded border">
                         <p className="text-xs text-slate-500 font-medium">Complexity</p>
                         <p className="text-slate-800">{analysisResult.complexity_score}/10</p>
+                      </div>
+                    )}
+                    {analysisResult.critical_tolerances?.length > 0 && (
+                      <div className="p-2 bg-white rounded border" data-testid="ai-tolerance-display">
+                        <p className="text-xs text-slate-500 font-medium">Tolerance (from drawing)</p>
+                        <p className="text-slate-800 font-mono text-xs">
+                          {analysisResult.critical_tolerances.map(t => 
+                            `${t.feature}: ±${t.tolerance}${t.unit || 'mm'}`
+                          ).join(', ')}
+                        </p>
                       </div>
                     )}
                     {analysisResult.recommended_processes?.length > 0 && (

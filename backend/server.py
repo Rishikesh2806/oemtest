@@ -502,7 +502,7 @@ def get_email_template(template_type: str, data: dict) -> tuple:
                         <table style="width: 100%; border-collapse: collapse;">
                             <tr><td style="color: #64748b; padding: 8px 0;"><strong>Material:</strong></td><td style="color: #1e293b;">{data.get('material', 'N/A')}</td></tr>
                             <tr><td style="color: #64748b; padding: 8px 0;"><strong>Quantity:</strong></td><td style="color: #1e293b;">{data.get('quantity', 'N/A')} units</td></tr>
-                            <tr><td style="color: #64748b; padding: 8px 0;"><strong>Tolerance:</strong></td><td style="color: #1e293b;">±{data.get('tolerance', 'N/A')}mm</td></tr>
+                            <tr><td style="color: #64748b; padding: 8px 0;"><strong>Tolerance:</strong></td><td style="color: #1e293b;">{('±' + str(data.get('tolerance')) + 'mm') if data.get('tolerance') else 'As per drawing'}</td></tr>
                             <tr><td style="color: #64748b; padding: 8px 0;"><strong>Buyer:</strong></td><td style="color: #1e293b;">{data.get('buyer_name', 'N/A')}</td></tr>
                         </table>
                     </div>
@@ -1349,7 +1349,7 @@ class RFQCreate(BaseModel):
     description: Optional[str] = None
     material_type: str
     quantity: int = 1
-    tolerance: float = 0.1
+    tolerance: Optional[float] = None
     surface_finish: Optional[str] = None
     supply_type: str = SupplyType.VENDOR_MATERIAL
     deadline: Optional[str] = None
@@ -6309,14 +6309,28 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             )
         
         # Update RFQ with analysis
+        # Extract tightest tolerance from AI analysis
+        ai_tolerance = None
+        critical_tolerances = ai_analysis.get("critical_tolerances", [])
+        if critical_tolerances:
+            tolerance_values = [t.get("tolerance") for t in critical_tolerances if isinstance(t, dict) and t.get("tolerance")]
+            if tolerance_values:
+                ai_tolerance = min(tolerance_values)
+                logger.info(f"AI extracted tightest tolerance: {ai_tolerance}mm from {len(tolerance_values)} tolerance(s)")
+        
+        rfq_update = {
+            "ai_analysis": ai_analysis,
+            "status": RFQStatus.MATCHING,
+            "cad_attachments": skipped_cad_files,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        # Only update tolerance if AI found one and RFQ doesn't already have one set by buyer
+        if ai_tolerance and not rfq.get("tolerance"):
+            rfq_update["tolerance"] = ai_tolerance
+        
         await db.rfqs.update_one(
             {"rfq_id": rfq_id},
-            {"$set": {
-                "ai_analysis": ai_analysis,
-                "status": RFQStatus.MATCHING,
-                "cad_attachments": skipped_cad_files,
-                "updated_at": datetime.now(timezone.utc).isoformat()
-            }}
+            {"$set": rfq_update}
         )
         
         # Check if dimensions are missing based on geometry type
@@ -6469,6 +6483,7 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             "message": f"Analysis complete - analyzed {len(analyzed_files)} drawing(s)", 
             "analysis": ai_analysis,
             "image_type": image_type,
+            "ai_tolerance": ai_tolerance,
             "part_geometry": part_geometry,
             "dimensions_missing": dimensions_missing,
             "required_dimensions": required_dims,
@@ -6844,7 +6859,17 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     # Calculate max diameter for turning operations
     max_diameter = ai_analysis.get("max_diameter_mm") or max(part_diameter, part_large_diameter, part_inner_diameter) or 0
     
-    required_tolerance = rfq.get("tolerance", 0.1)
+    # Get tolerance from RFQ (set by buyer or AI analysis), None means no specific requirement
+    required_tolerance = rfq.get("tolerance")
+    
+    # Try to extract from AI critical_tolerances if not set on RFQ
+    if not required_tolerance:
+        critical_tols = ai_analysis.get("critical_tolerances", [])
+        if critical_tols:
+            tol_values = [t.get("tolerance") for t in critical_tols if isinstance(t, dict) and t.get("tolerance")]
+            if tol_values:
+                required_tolerance = min(tol_values)
+    
     required_material = rfq.get("material_type", "").lower()
     
     # Extract material from AI if available
@@ -7529,9 +7554,14 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
             
             # ============== TOLERANCE CHECK (+20 points) ==============
             machine_tolerance = machine.get("tolerance") or machine.get("tolerance_capability") or 1.0
-            if machine_tolerance <= required_tolerance:
+            if required_tolerance:
+                if machine_tolerance <= required_tolerance:
+                    tolerance_capable = True
+                    machine_score += 20
+            else:
+                # No specific tolerance requirement - all machines pass
                 tolerance_capable = True
-                machine_score += 20
+                machine_score += 10
             
             # ============== MATERIAL CHECK (+15 points) ==============
             machine_materials = [m.lower() for m in (machine.get("materials_supported") or machine.get("materials") or [])]

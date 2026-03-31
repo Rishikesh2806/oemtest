@@ -358,6 +358,13 @@ See ARCHITECTURE.md for detailed refactoring plan.
 ## What's Been Implemented
 
 
+### Tolerance from Drawing/Description (NEW - Mar 31, 2026)
+- **Removed hardcoded 0.1mm default**: RFQ tolerance is now `null` by default instead of 0.1mm
+- **AI-Extracted Tolerance**: After drawing analysis, tightest tolerance from `critical_tolerances` is automatically set on the RFQ
+- **Smart Matching**: Vendor matching uses AI-extracted tolerance; when no tolerance specified, all machines pass tolerance check
+- **UI Updates**: All tolerance displays across 5 pages/components now show "As per drawing" when no explicit tolerance is set
+- **Files changed**: `server.py` (RFQCreate model, analyze endpoint, matching logic), `CreateRFQ.jsx`, `RFQDetail.jsx`, `BuyerRFQList.jsx`, `VendorMatchedRFQs.jsx`, `QuoteDetailModal.jsx`
+
 ### Dynamic RFQ Image Matching Routing (NEW - Mar 31, 2026)
 - **AI Image Classification**: The `analyze_rfq_drawings` endpoint now classifies uploaded images as either `technical_drawing` (has dimensional data, tolerances, GD&T symbols) or `reference_photo` (plain photo without dimensions)
 - **Smart Matching Routing**: Based on `image_type`:

@@ -208,7 +208,7 @@ const VendorMatchedRFQs = () => {
                                 <Package className="w-4 h-4" /> {rfq.material_type}
                               </span>
                               <span>Qty: {rfq.quantity}</span>
-                              <span>Tolerance: ±{rfq.tolerance}mm</span>
+                              <span>Tolerance: {rfq.tolerance ? `±${rfq.tolerance}mm` : "As per drawing"}</span>
                               {rfq.buyer_company && (
                                 <span className="flex items-center gap-1">
                                   <Building2 className="w-4 h-4" /> {rfq.buyer_company}

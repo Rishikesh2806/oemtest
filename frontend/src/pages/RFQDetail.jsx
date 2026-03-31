@@ -372,7 +372,9 @@ const RFQDetail = () => {
               </div>
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Tolerance</p>
-                <p className="text-slate-900 font-medium mt-1">±{rfq.tolerance} mm</p>
+                <p className="text-slate-900 font-medium mt-1">
+                  {rfq.tolerance ? `±${rfq.tolerance} mm` : "As per drawing"}
+                </p>
               </div>
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Surface Finish</p>
