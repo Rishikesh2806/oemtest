@@ -729,8 +729,9 @@ async def change_password(
 
 @router.post("/forgot-password")
 async def forgot_password(reset_request: PasswordResetRequestLocal, request: Request):
-    """Request password reset via email or WhatsApp (for phone-only users)"""
+    """Request password reset via email (link) or WhatsApp (OTP code)"""
     from app.utils.phone_utils import normalize_phone
+    import random
     
     client_ip = request.client.host if request.client else "unknown"
     
@@ -753,42 +754,57 @@ async def forgot_password(reset_request: PasswordResetRequestLocal, request: Req
         raise HTTPException(status_code=400, detail="Please provide either email or phone number")
     
     if user:
-        reset_token = generate_secure_token(32)
-        token_hash = hash_token(reset_token)
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
-        
         identifier = user.get("email") or user.get("phone_normalized") or user.get("phone", "")
-        
         await db.password_resets.delete_many({"identifier": identifier})
-        await db.password_resets.insert_one({
-            "identifier": identifier,
-            "email": user.get("email", ""),
-            "phone": user.get("phone_normalized") or user.get("phone", ""),
-            "token_hash": token_hash,
-            "expires_at": expires_at.isoformat(),
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "used": False,
-            "reset_via": reset_via
-        })
-        
-        reset_link = f"https://oemlinker.com/reset-password?token={reset_token}"
         
         if reset_via == "email" and user.get("email"):
-            email_html = f'''
+            reset_token = generate_secure_token(32)
+            token_hash = hash_token(reset_token)
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+            
+            await db.password_resets.insert_one({
+                "identifier": identifier,
+                "email": user.get("email", ""),
+                "phone": user.get("phone_normalized") or user.get("phone", ""),
+                "token_hash": token_hash,
+                "expires_at": expires_at.isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "used": False,
+                "reset_via": "email"
+            })
+            
+            reset_link = f"https://oemlinker.com/reset-password?token={reset_token}"
+            email_html = f"""
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #1e40af;">Password Reset Request</h2>
                 <p>Hello {user.get("name", "User")},</p>
-                <p>We received a request to reset your password. Click the button below to reset (expires in 1 hour).</p>
+                <p>We received a request to reset your password. Click the button below (expires in 1 hour).</p>
                 <div style="text-align: center; margin: 30px 0;">
                     <a href="{reset_link}" style="background-color: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset Password</a>
                 </div>
-                <p style="color: #666; font-size: 14px;">If you didn't request this, please ignore this email.</p>
+                <p style="color: #666; font-size: 14px;">If you did not request this, please ignore this email.</p>
             </div>
-            '''
+            """
             asyncio.create_task(send_email_async(user["email"], "Reset Your OEMLinker Password", email_html))
             logger.info(f"Password reset email sent to: {user['email']} from IP: {client_ip}")
         
         elif reset_via == "whatsapp":
+            otp_code = str(random.randint(100000, 999999))
+            otp_hash = hash_token(otp_code)
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=2)
+            
+            await db.password_resets.insert_one({
+                "identifier": identifier,
+                "email": user.get("email", ""),
+                "phone": user.get("phone_normalized") or user.get("phone", ""),
+                "otp_hash": otp_hash,
+                "expires_at": expires_at.isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "used": False,
+                "reset_via": "whatsapp",
+                "attempts": 0
+            })
+            
             phone_number = user.get("phone_normalized") or user.get("phone", "")
             if phone_number:
                 try:
@@ -798,32 +814,117 @@ async def forgot_password(reset_request: PasswordResetRequestLocal, request: Req
                     
                     await whatsapp_service.send_gupshup_template(
                         to_number=wa_phone,
-                        template_id="forgot_password",
-                        params=[user.get("name", "User"), reset_link],
+                        template_id="415262d3-2a66-45dc-8b49-e968ffcd7dbc",
+                        params=[otp_code],
                         context="password_reset",
                         user_id=user.get("user_id")
                     )
-                    logger.info(f"Password reset WhatsApp sent to: {wa_phone} from IP: {client_ip}")
+                    logger.info(f"Password reset OTP sent via WhatsApp to: {wa_phone} from IP: {client_ip}")
                 except Exception as e:
-                    logger.error(f"WhatsApp reset failed for {phone_number}: {e}")
-                    if user.get("email"):
-                        email_html = f'''
-                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                            <h2 style="color: #1e40af;">Password Reset Request</h2>
-                            <p>Hello {user.get("name", "User")},</p>
-                            <p>Click below to reset your password (expires in 1 hour):</p>
-                            <div style="text-align: center; margin: 30px 0;">
-                                <a href="{reset_link}" style="background-color: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset Password</a>
-                            </div>
-                        </div>
-                        '''
-                        asyncio.create_task(send_email_async(user["email"], "Reset Your OEMLinker Password", email_html))
+                    logger.error(f"WhatsApp OTP failed for {phone_number}: {e}")
     else:
         logger.warning(f"Password reset requested for non-existent account from IP: {client_ip}")
     
     if reset_via == "whatsapp":
-        return {"message": "If an account exists with that phone number, you will receive a password reset link via WhatsApp.", "method": "whatsapp"}
+        return {"message": "If an account exists with that phone number, you will receive a recovery code via WhatsApp.", "method": "whatsapp"}
     return {"message": "If an account exists with that email, you will receive a password reset link shortly.", "method": "email"}
+
+
+class OTPVerifyRequest(BaseModel):
+    phone: str
+    otp: str
+    new_password: str
+    
+    @field_validator('new_password')
+    @classmethod
+    def validate_new_password(cls, v):
+        is_valid, message = validate_password_strength(v)
+        if not is_valid:
+            raise ValueError(message)
+        return v
+
+
+@router.post("/verify-reset-otp")
+async def verify_reset_otp(data: OTPVerifyRequest, request: Request):
+    """Verify WhatsApp OTP and reset password in one step"""
+    from app.utils.phone_utils import normalize_phone
+    from app.config import locked_accounts
+    
+    client_ip = request.client.host if request.client else "unknown"
+    normalized = normalize_phone(data.phone)
+    
+    reset_record = await db.password_resets.find_one({
+        "phone": normalized,
+        "reset_via": "whatsapp",
+        "used": False
+    }, {"_id": 0})
+    
+    if not reset_record:
+        phone_digits = normalized.replace("+", "")[-10:]
+        reset_record = await db.password_resets.find_one({
+            "phone": {"$regex": phone_digits},
+            "reset_via": "whatsapp",
+            "used": False
+        }, {"_id": 0})
+    
+    if not reset_record:
+        raise HTTPException(status_code=400, detail="No active reset request found. Please request a new code.")
+    
+    expires_at = datetime.fromisoformat(reset_record["expires_at"].replace('Z', '+00:00'))
+    if datetime.now(timezone.utc) > expires_at:
+        await db.password_resets.delete_one({"identifier": reset_record["identifier"], "reset_via": "whatsapp"})
+        raise HTTPException(status_code=400, detail="Code has expired. Please request a new one.")
+    
+    if reset_record.get("attempts", 0) >= 5:
+        await db.password_resets.delete_one({"identifier": reset_record["identifier"], "reset_via": "whatsapp"})
+        raise HTTPException(status_code=400, detail="Too many incorrect attempts. Please request a new code.")
+    
+    otp_hash = hash_token(data.otp)
+    if otp_hash != reset_record.get("otp_hash"):
+        await db.password_resets.update_one(
+            {"identifier": reset_record["identifier"], "reset_via": "whatsapp"},
+            {"$inc": {"attempts": 1}}
+        )
+        remaining = 5 - reset_record.get("attempts", 0) - 1
+        raise HTTPException(status_code=400, detail=f"Invalid code. {remaining} attempts remaining.")
+    
+    phone = reset_record.get("phone", "")
+    email = reset_record.get("email", "")
+    
+    db_user = None
+    if email:
+        db_user = await db.users.find_one({"email": email}, {"_id": 0})
+    if not db_user and phone:
+        db_user = await db.users.find_one({"phone_normalized": phone}, {"_id": 0})
+        if not db_user:
+            phone_digits = phone.replace("+", "")[-10:]
+            db_user = await db.users.find_one({"phone": {"$regex": phone_digits}}, {"_id": 0})
+    
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User account not found.")
+    
+    now = datetime.now(timezone.utc)
+    await db.users.update_one(
+        {"user_id": db_user["user_id"]},
+        {"$set": {
+            "password_hash": hash_password(data.new_password),
+            "failed_login_attempts": 0,
+            "security_settings.password_changed_at": now.isoformat()
+        }}
+    )
+    
+    await db.password_resets.update_one(
+        {"identifier": reset_record["identifier"], "reset_via": "whatsapp"},
+        {"$set": {"used": True}}
+    )
+    
+    user_id = db_user["user_id"]
+    if user_id in locked_accounts:
+        del locked_accounts[user_id]
+    
+    logger.info(f"Password reset via WhatsApp OTP for user: {user_id} from IP: {client_ip}")
+    return {"message": "Password reset successfully. You can now login with your new password."}
+
 
 
 @router.post("/reset-password")

@@ -3001,7 +3001,24 @@ async def forgot_password(reset_request: PasswordResetRequest, request: Request)
             logger.info(f"Password reset email sent to: {user['email']} from IP: {client_ip}")
         
         elif reset_via == "whatsapp":
-            # Send reset link via WhatsApp forgot_password template
+            # WhatsApp flow: send 6-digit OTP code (2 min expiry) via Gupshup template
+            import random as _random
+            otp_code = str(_random.randint(100000, 999999))
+            otp_hash = hash_token(otp_code)
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=2)
+            
+            await db.password_resets.insert_one({
+                "identifier": identifier,
+                "email": user.get("email", ""),
+                "phone": user.get("phone_normalized") or user.get("phone", ""),
+                "otp_hash": otp_hash,
+                "expires_at": expires_at.isoformat(),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "used": False,
+                "reset_via": "whatsapp",
+                "attempts": 0
+            })
+            
             phone_number = user.get("phone_normalized") or user.get("phone", "")
             if phone_number and whatsapp_service.is_configured():
                 try:
@@ -3011,35 +3028,20 @@ async def forgot_password(reset_request: PasswordResetRequest, request: Request)
                     
                     await whatsapp_service.send_gupshup_template(
                         to_number=wa_phone,
-                        template_id="forgot_password",
-                        params=[user.get("name", "User"), reset_link],
+                        template_id="415262d3-2a66-45dc-8b49-e968ffcd7dbc",
+                        params=[otp_code],
                         context="password_reset",
                         user_id=user.get("user_id")
                     )
-                    logger.info(f"Password reset WhatsApp sent to: {wa_phone} from IP: {client_ip}")
+                    logger.info(f"Password reset OTP sent via WhatsApp to: {wa_phone} from IP: {client_ip}")
                 except Exception as e:
-                    logger.error(f"WhatsApp reset failed for {phone_number}: {e}")
-                    # Fallback: if user also has an email, send via email
-                    if user.get("email"):
-                        email_html = f'''
-                        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                            <h2 style="color: #1e40af;">Password Reset Request</h2>
-                            <p>Hello {user.get("name", "User")},</p>
-                            <p>Click below to reset your password (expires in 1 hour):</p>
-                            <div style="text-align: center; margin: 30px 0;">
-                                <a href="{reset_link}" style="background-color: #f97316; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset Password</a>
-                            </div>
-                        </div>
-                        '''
-                        asyncio.create_task(send_email_async(user["email"], "Reset Your OEMLinker Password", email_html))
-            else:
-                logger.warning(f"WhatsApp not configured, cannot send reset to phone-only user")
+                    logger.error(f"WhatsApp OTP failed for {phone_number}: {e}")
     else:
         logger.warning(f"Password reset requested for non-existent account from IP: {client_ip}")
     
     # Always return success to prevent enumeration
     if reset_via == "whatsapp":
-        return {"message": "If an account exists with that phone number, you will receive a password reset link via WhatsApp.", "method": "whatsapp"}
+        return {"message": "If an account exists with that phone number, you will receive a recovery code via WhatsApp.", "method": "whatsapp"}
     return {"message": "If an account exists with that email, you will receive a password reset link shortly.", "method": "email"}
 
 @api_router.post("/auth/reset-password")
