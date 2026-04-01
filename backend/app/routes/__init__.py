@@ -12,6 +12,7 @@ from app.routes.vendor import router as vendor_router
 from app.routes.orders import router as orders_router
 from app.routes.chatbot import router as chatbot_router
 from app.routes.google_auth import router as google_auth_router
+from app.routes.demo import router as demo_router
 
 # Include routers - these will be prefixed by the main app's /api
 api_router.include_router(auth_router)
@@ -20,3 +21,4 @@ api_router.include_router(vendor_router)
 api_router.include_router(orders_router)
 api_router.include_router(chatbot_router)
 api_router.include_router(google_auth_router)
+api_router.include_router(demo_router)

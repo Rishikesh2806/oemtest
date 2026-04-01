@@ -1,0 +1,57 @@
+{
+  "summary": "Tested Demo Feature - /demo page with 3 role cards (Buyer, Vendor, Admin). Fixed JWT secret mismatch bug in demo.py. All backend APIs working, all frontend flows working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_demo_feature.py",
+    "/app/test_reports/pytest/demo_feature_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FIXED: demo.py was using JWT_SECRET env var with default 'your-secret-key', but server.py uses JWT_SECRET_KEY with default 'offloadex_secret_key'. Changed demo.py to use JWT_SECRET_KEY for token compatibility."
+  ],
+  "updated_files": [
+    "/app/backend/app/routes/demo.py",
+    "/app/backend/tests/test_demo_feature.py"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 tests passed)",
+    "frontend": "100% (All 3 demo flows work: Buyer, Vendor, Admin)"
+  },
+  "test_credentials": {
+    "demo_buyer": "demo.buyer@oemlinker.com / demo123",
+    "demo_vendor": "demo.vendor@oemlinker.com / demo123",
+    "admin": "admin@offoadex.com / admin123"
+  },
+  "seed_data_creation": "Demo seed creates: 1 buyer, 2 vendors, 4 machines, 3 RFQs, 2 quotes, 1 order",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Demo feature fully tested. Key fix: JWT_SECRET_KEY env var in demo.py (was JWT_SECRET). Demo page at /demo has 3 cards that auto-seed data and login. Backend endpoints: POST /api/demo/seed, POST /api/demo/login. Test file: /app/backend/tests/test_demo_feature.py",
+  "features_tested": {
+    "POST /api/demo/seed": "PASS - Seeds demo buyer, vendor, machines, RFQs, quotes, orders",
+    "POST /api/demo/login role=buyer": "PASS - Returns valid token and user data",
+    "POST /api/demo/login role=vendor": "PASS - Returns valid token and user data",
+    "POST /api/demo/login role=admin": "PASS - Returns valid token and user data",
+    "POST /api/demo/login invalid role": "PASS - Returns 400 error",
+    "Demo buyer has RFQs": "PASS - 3+ demo RFQs visible via GET /api/rfqs",
+    "Demo vendor has machines": "PASS - 3+ machines visible via GET /api/machines",
+    "Token validity for /api/auth/me": "PASS - All 3 demo tokens work",
+    "Frontend /demo page renders": "PASS - 3 journey cards visible",
+    "Frontend Enter as Buyer": "PASS - Seeds, logs in, navigates to /buyer/dashboard",
+    "Frontend Enter as Vendor": "PASS - Seeds, logs in, navigates to /vendor/dashboard",
+    "Frontend Enter as Admin": "PASS - Seeds, logs in, navigates to /admin/dashboard",
+    "Buyer dashboard shows demo RFQs": "PASS - Shows Aerospace Bracket, CNC Shaft, Aluminium Housing",
+    "Vendor dashboard shows data": "PASS - Shows 4 Matched RFQs, 3 Machines"
+  },
+  "mocked_apis": {
+    "has_mocked_apis": false,
+    "mocked_apis_list": []
+  }
+}
