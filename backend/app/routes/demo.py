@@ -504,27 +504,39 @@ async def demo_login(request_data: dict):
 
 DEMO_USER_IDS = ["user_demo_buyer_001", "user_demo_vendor_001", "user_demo_vendor_002"]
 DEMO_VENDOR_IDS = ["vendor_demo_001", "vendor_demo_002"]
-DEMO_RFQ_IDS = ["rfq_demo_001", "rfq_demo_002", "rfq_demo_003"]
-DEMO_QUOTE_IDS = ["quote_demo_001", "quote_demo_002"]
-DEMO_ORDER_IDS = ["order_demo_001"]
 DEMO_MACHINE_IDS = ["mach_demo_001", "mach_demo_002", "mach_demo_003", "mach_demo_004"]
+
+
+def is_demo_user(user_id: str) -> bool:
+    """Check if a user_id belongs to a demo account"""
+    return user_id in DEMO_USER_IDS
 
 
 @router.post("/cleanup")
 async def cleanup_demo_data():
-    """Delete all demo-created data (RFQs, orders, quotes, machines, vendor profiles, users)"""
+    """Delete ALL data created by demo users — RFQs, orders, quotes, machines, vendor profiles, users"""
     results = {}
 
-    # Delete demo orders
-    r = await db.orders.delete_many({"order_id": {"$in": DEMO_ORDER_IDS}})
+    # Delete ALL orders involving demo users (as buyer or vendor)
+    r = await db.orders.delete_many({
+        "$or": [
+            {"buyer_id": {"$in": DEMO_USER_IDS}},
+            {"vendor_id": {"$in": DEMO_VENDOR_IDS}}
+        ]
+    })
     results["orders_deleted"] = r.deleted_count
 
-    # Delete demo quotes
-    r = await db.quotes.delete_many({"quote_id": {"$in": DEMO_QUOTE_IDS}})
+    # Delete ALL quotes involving demo users
+    r = await db.quotes.delete_many({
+        "$or": [
+            {"buyer_id": {"$in": DEMO_USER_IDS}},
+            {"vendor_id": {"$in": DEMO_VENDOR_IDS}}
+        ]
+    })
     results["quotes_deleted"] = r.deleted_count
 
-    # Delete demo RFQs
-    r = await db.rfqs.delete_many({"rfq_id": {"$in": DEMO_RFQ_IDS}})
+    # Delete ALL RFQs created by demo buyer
+    r = await db.rfqs.delete_many({"buyer_id": {"$in": DEMO_USER_IDS}})
     results["rfqs_deleted"] = r.deleted_count
 
     # Delete demo machines
@@ -538,6 +550,10 @@ async def cleanup_demo_data():
     # Delete demo users (buyer + vendors, NOT admin)
     r = await db.users.delete_many({"user_id": {"$in": DEMO_USER_IDS}})
     results["users_deleted"] = r.deleted_count
+
+    # Delete any NDA acceptances by demo vendors
+    r = await db.nda_acceptances.delete_many({"vendor_id": {"$in": DEMO_VENDOR_IDS}})
+    results["nda_acceptances_deleted"] = r.deleted_count
 
     logger.info(f"Demo cleanup complete: {results}")
     return {"message": "Demo data cleaned up", "details": results}

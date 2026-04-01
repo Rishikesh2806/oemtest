@@ -3808,8 +3808,12 @@ async def portfolio_match_vendors(rfq_id: str, user: dict = Depends(get_current_
     
     buyer_profile["drawing_analyses"] = drawing_analyses
     
-    # Get all vendor portfolio items
-    all_portfolios = await db.vendor_portfolio.find({}, {"_id": 0}).to_list(500)
+    # Demo users only match with demo vendors — never real vendors
+    is_demo = user["user_id"] in ["user_demo_buyer_001", "user_demo_vendor_001", "user_demo_vendor_002"]
+    if is_demo:
+        all_portfolios = await db.vendor_portfolio.find({"vendor_id": {"$in": ["vendor_demo_001", "vendor_demo_002"]}}, {"_id": 0}).to_list(500)
+    else:
+        all_portfolios = await db.vendor_portfolio.find({}, {"_id": 0}).to_list(500)
     
     if not all_portfolios:
         # No portfolios — fall back to standard match
@@ -5295,16 +5299,18 @@ async def create_rfq(rfq: RFQCreate, user: dict = Depends(get_current_user)):
     
     await db.rfqs.insert_one(rfq_doc)
     
-    # Send admin notification for new RFQ
-    asyncio.create_task(send_admin_notification("new_rfq", {
-        "rfq_id": rfq_id,
-        "title": rfq.title,
-        "buyer_name": user.get("name", "Unknown"),
-        "buyer_email": user.get("email", ""),
-        "material_type": rfq.material_type,
-        "quantity": rfq.quantity,
-        "created_at": now
-    }))
+    # Send admin notification for new RFQ (skip for demo users)
+    _is_demo = user.get("user_id", "") in ["user_demo_buyer_001", "user_demo_vendor_001", "user_demo_vendor_002"]
+    if not _is_demo:
+        asyncio.create_task(send_admin_notification("new_rfq", {
+            "rfq_id": rfq_id,
+            "title": rfq.title,
+            "buyer_name": user.get("name", "Unknown"),
+            "buyer_email": user.get("email", ""),
+            "material_type": rfq.material_type,
+            "quantity": rfq.quantity,
+            "created_at": now
+        }))
     
     return RFQ(**rfq_doc)
 
@@ -6716,8 +6722,13 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     if not rfq:
         raise HTTPException(status_code=404, detail="RFQ not found")
     
-    # Get all approved vendors
-    vendors = await db.vendors.find({"is_approved": True}, {"_id": 0}).to_list(100)
+    # Demo users only match with demo vendors — never real vendors
+    is_demo = user["user_id"] in ["user_demo_buyer_001", "user_demo_vendor_001", "user_demo_vendor_002"]
+    if is_demo:
+        vendors = await db.vendors.find({"vendor_id": {"$in": ["vendor_demo_001", "vendor_demo_002"]}, "is_approved": True}, {"_id": 0}).to_list(100)
+    else:
+        # Get all approved vendors
+        vendors = await db.vendors.find({"is_approved": True}, {"_id": 0}).to_list(100)
     
     if not vendors:
         # Return demo vendors for testing
@@ -7838,6 +7849,17 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     
     qualified_vendors = [v for v in matched_vendors if v.get("suitability_score", 0) >= 50]
     
+    # Skip ALL notifications for demo users
+    _is_demo = user["user_id"] in ["user_demo_buyer_001", "user_demo_vendor_001", "user_demo_vendor_002"]
+    if _is_demo:
+        return {
+            "message": f"Demo matching complete. Found {len(matched_vendors)} vendor(s).",
+            "matched_vendors": matched_vendors,
+            "total_matched": len(matched_vendors),
+            "qualified_for_notification": len(qualified_vendors),
+            "match_type": "machine_specs"
+        }
+    
     # Send admin notification for vendor matching
     top_vendor = matched_vendors[0] if matched_vendors else {}
     asyncio.create_task(send_admin_notification("vendor_matching", {
@@ -8853,10 +8875,11 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
         {"$set": {"status": RFQStatus.QUOTED, "updated_at": now.isoformat()}}
     )
     
-    # Send email notification to buyer
+    # Send email notification to buyer (skip for demo users)
     app_url = "https://oemlinker.com"
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "email": 1, "name": 1})
-    if buyer and buyer.get("email"):
+    _is_demo_q = user.get("user_id", "") in ["user_demo_buyer_001", "user_demo_vendor_001", "user_demo_vendor_002"]
+    if not _is_demo_q and buyer and buyer.get("email"):
         email_data = {
             "buyer_name": buyer.get("name", "Buyer"),
             "rfq_title": rfq.get("title", "Your RFQ"),
@@ -8883,18 +8906,20 @@ async def create_quote(quote: QuoteCreate, user: dict = Depends(get_current_user
         }
     )
     
-    # Send admin notification for new quotation
-    asyncio.create_task(send_admin_notification("new_quotation", {
-        "quote_id": quote_id,
-        "rfq_title": rfq.get("title", "Untitled"),
-        "vendor_name": vendor.get("company_name", "Unknown"),
-        "buyer_name": buyer.get("name", "Unknown") if buyer else "Unknown",
-        "total_amount": quote.price,
-        "lead_time": quote.lead_time_days
-    }))
+    # Send admin notification for new quotation (skip for demo)
+    _is_demo_q = user.get("user_id", "") in ["user_demo_buyer_001", "user_demo_vendor_001", "user_demo_vendor_002"]
+    if not _is_demo_q:
+        asyncio.create_task(send_admin_notification("new_quotation", {
+            "quote_id": quote_id,
+            "rfq_title": rfq.get("title", "Untitled"),
+            "vendor_name": vendor.get("company_name", "Unknown"),
+            "buyer_name": buyer.get("name", "Unknown") if buyer else "Unknown",
+            "total_amount": quote.price,
+            "lead_time": quote.lead_time_days
+        }))
     
     # Send WhatsApp notification to buyer about new quote
-    if buyer and whatsapp_service.is_configured():
+    if not _is_demo_q and buyer and whatsapp_service.is_configured():
         buyer_profile = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "phone": 1})
         if buyer_profile and buyer_profile.get("phone"):
             # Generate magic link for buyer
@@ -18447,6 +18472,10 @@ async def notify_vendors_new_rfq(
     """
     if not has_admin_access(user) and user.get("role") != "buyer":
         raise HTTPException(status_code=403, detail="Not authorized")
+    
+    # Block demo users from sending real notifications
+    if user.get("user_id") in ["user_demo_buyer_001", "user_demo_vendor_001", "user_demo_vendor_002"]:
+        return {"success": True, "message": "Demo mode — notifications skipped", "notified_count": 0, "results": []}
     
     if not whatsapp_service.is_configured():
         return {"success": False, "error": "WhatsApp not configured", "notified_count": 0}
