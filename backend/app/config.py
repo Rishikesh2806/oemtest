@@ -39,7 +39,7 @@ MAX_OTP_ATTEMPTS = 3
 
 # ============== EMAIL SETTINGS ==============
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
-APP_URL = os.environ.get("APP_URL")
+APP_URL = os.environ.get("FRONTEND_URL", os.environ.get("APP_URL", "https://oemlinker.com"))
 ADMIN_EMAIL = "oemlinker@gmail.com"
 FROM_EMAIL = "OEMLinker <notifications@oemlinker.com>"
 
