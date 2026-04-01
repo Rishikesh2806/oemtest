@@ -360,6 +360,16 @@ See ARCHITECTURE.md for detailed refactoring plan.
 
 
 
+### Demo Site at /demo (NEW - Apr 1, 2026)
+- **Interactive demo page** at `/demo` with 3 journey cards: Buyer, Vendor, Admin
+- **Auto-seeding**: Clicking any card seeds realistic demo data (2 vendors, 4 machines, 3 RFQs, 2 quotes, 1 order) then auto-logs in
+- **Buyer demo**: Rajesh Kumar with Aerospace Bracket RFQ (quoted), CNC Shaft (matching), Aluminium Housing (draft)
+- **Vendor demo**: Suresh Patel with Mazak, DMG Mori, Okuma machines, ISO 9001/AS9100D certified, aerospace/automotive experience
+- **Backend**: `/api/demo/seed` (idempotent seeding), `/api/demo/login` (quick auth by role)
+- **Files**: `/app/backend/app/routes/demo.py`, `/app/frontend/src/pages/DemoPage.jsx`
+- **Test Report**: /app/test_reports/iteration_52.json (100% pass, JWT fix applied)
+
+
 ### Admin Edit User Details & GSTIN (NEW - Mar 31, 2026)
 - **Expanded admin edit dialog**: Name, Email, Company, Phone, WhatsApp, Base/Custom Role, GST Information
 - **GSTIN verify in admin**: Admin can enter/verify GSTIN from the edit dialog using the same `/gstin/verify` API
