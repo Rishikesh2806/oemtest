@@ -4,7 +4,7 @@ Email Service - Handles all email operations using Resend
 import logging
 import asyncio
 import resend
-from app.config import RESEND_API_KEY, APP_URL, ADMIN_EMAIL
+from app.config import RESEND_API_KEY, SITE_URL, ADMIN_EMAIL
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ async def send_admin_notification(event_type: str, data: dict):
 
 async def send_verification_email(email: str, name: str, verification_token: str):
     """Send email verification link"""
-    verification_url = f"{APP_URL}/verify-email?token={verification_token}"
+    verification_url = f"{SITE_URL}/verify-email?token={verification_token}"
     
     html_content = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">

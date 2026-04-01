@@ -1816,7 +1816,7 @@ async def create_notification(
 
 async def send_verification_email(email: str, name: str, verification_token: str):
     """Send email verification link to new user"""
-    # Use frontend URL for the verification link
+    # Use SITE_URL for the verification link — always production domain
     frontend_url = os.environ.get("FRONTEND_URL", "https://oemlinker.com")
     verification_link = f"{frontend_url}/verify-email?token={verification_token}"
     

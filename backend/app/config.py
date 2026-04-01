@@ -7,7 +7,11 @@ from dotenv import load_dotenv
 from collections import defaultdict
 
 ROOT_DIR = Path(__file__).parent.parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / '.env', override=True)
+
+# ============== SITE URL (for email links - always production domain) ==============
+# This must ALWAYS point to the production domain, never a preview URL
+SITE_URL = os.environ.get("FRONTEND_URL", "https://oemlinker.com")
 
 # ============== DATABASE ==============
 MONGO_URL = os.environ['MONGO_URL']
