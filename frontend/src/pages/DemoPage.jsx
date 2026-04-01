@@ -54,27 +54,6 @@ const JOURNEYS = [
       rfqs: "2 matched RFQs waiting for quotes",
       portfolio: "Aerospace, Automotive & Medical experience",
     }
-  },
-  {
-    role: "admin",
-    title: "Admin Dashboard",
-    subtitle: "Full platform oversight & analytics",
-    icon: Shield,
-    color: "from-orange-600 to-red-700",
-    accent: "orange",
-    steps: [
-      { icon: Users, label: "User Management", desc: "Manage buyers, vendors & roles" },
-      { icon: Factory, label: "Vendor Approval", desc: "Verify & approve vendors" },
-      { icon: BarChart3, label: "Analytics", desc: "Platform metrics & insights" },
-      { icon: Package, label: "Order Oversight", desc: "Monitor all active orders" },
-      { icon: Shield, label: "Quality Control", desc: "Inspections & NDA management" },
-    ],
-    dashboardPath: "/admin/dashboard",
-    demoData: {
-      users: "75+ users across roles",
-      vendors: "23 verified manufacturers",
-      rfqs: "248 RFQs processed",
-    }
   }
 ];
 
