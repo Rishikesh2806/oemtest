@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../App";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { toast } from "sonner";
 import {
-  ShoppingCart, Factory, Shield, ArrowRight, Loader2,
-  FileText, Search, BarChart3, Send, Package, CheckCircle2,
-  Wrench, ClipboardList, DollarSign, Truck, Eye, Users
+  ShoppingCart, Factory, ArrowRight, Loader2,
+  FileText, Search, BarChart3, Package, CheckCircle2,
+  Wrench, ClipboardList, DollarSign, Truck, Eye, Lock
 } from "lucide-react";
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -59,10 +59,49 @@ const JOURNEYS = [
 
 export default function DemoPage() {
   const navigate = useNavigate();
-  const { updateUser } = useAuth();
+  const { user, loading: authLoading, updateUser, logout } = useAuth();
   const [loading, setLoading] = useState(null);
   const [seeding, setSeeding] = useState(false);
   const [seeded, setSeeded] = useState(false);
+
+  // Auth gate — only admin or authorized users can access
+  const isAuthorized = user && (user.role === "admin" || user.custom_role);
+
+  // If auth is still loading, show nothing
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+      </div>
+    );
+  }
+
+  // If not logged in or not authorized, show access denied
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
+        <div className="text-center max-w-md mx-auto px-4">
+          <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-4">
+            <Lock className="w-8 h-8 text-red-400" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Access Restricted</h2>
+          <p className="text-slate-400 mb-6">
+            {!user 
+              ? "Please log in as an admin to access the demo environment."
+              : "Only admin and authorized users can access the demo."
+            }
+          </p>
+          <Button 
+            onClick={() => navigate(user ? "/" : "/login")} 
+            className="bg-orange-600 hover:bg-orange-700"
+            data-testid="demo-access-denied-btn"
+          >
+            {user ? "Go to Homepage" : "Log In"}
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   const seedDemoData = async () => {
     setSeeding(true);
@@ -96,6 +135,9 @@ export default function DemoPage() {
       });
       if (!res.ok) throw new Error("Login failed");
       const data = await res.json();
+
+      // Mark this as a demo session for cleanup on logout
+      localStorage.setItem("demo_session", "true");
 
       // Store auth and update context
       localStorage.setItem("token", data.access_token);

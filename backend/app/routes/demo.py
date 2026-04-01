@@ -500,3 +500,44 @@ async def demo_login(request_data: dict):
             "company_name": user.get("company_name", ""),
         }
     }
+
+
+DEMO_USER_IDS = ["user_demo_buyer_001", "user_demo_vendor_001", "user_demo_vendor_002"]
+DEMO_VENDOR_IDS = ["vendor_demo_001", "vendor_demo_002"]
+DEMO_RFQ_IDS = ["rfq_demo_001", "rfq_demo_002", "rfq_demo_003"]
+DEMO_QUOTE_IDS = ["quote_demo_001", "quote_demo_002"]
+DEMO_ORDER_IDS = ["order_demo_001"]
+DEMO_MACHINE_IDS = ["mach_demo_001", "mach_demo_002", "mach_demo_003", "mach_demo_004"]
+
+
+@router.post("/cleanup")
+async def cleanup_demo_data():
+    """Delete all demo-created data (RFQs, orders, quotes, machines, vendor profiles, users)"""
+    results = {}
+
+    # Delete demo orders
+    r = await db.orders.delete_many({"order_id": {"$in": DEMO_ORDER_IDS}})
+    results["orders_deleted"] = r.deleted_count
+
+    # Delete demo quotes
+    r = await db.quotes.delete_many({"quote_id": {"$in": DEMO_QUOTE_IDS}})
+    results["quotes_deleted"] = r.deleted_count
+
+    # Delete demo RFQs
+    r = await db.rfqs.delete_many({"rfq_id": {"$in": DEMO_RFQ_IDS}})
+    results["rfqs_deleted"] = r.deleted_count
+
+    # Delete demo machines
+    r = await db.machines.delete_many({"machine_id": {"$in": DEMO_MACHINE_IDS}})
+    results["machines_deleted"] = r.deleted_count
+
+    # Delete demo vendor profiles
+    r = await db.vendors.delete_many({"vendor_id": {"$in": DEMO_VENDOR_IDS}})
+    results["vendor_profiles_deleted"] = r.deleted_count
+
+    # Delete demo users (buyer + vendors, NOT admin)
+    r = await db.users.delete_many({"user_id": {"$in": DEMO_USER_IDS}})
+    results["users_deleted"] = r.deleted_count
+
+    logger.info(f"Demo cleanup complete: {results}")
+    return {"message": "Demo data cleaned up", "details": results}

@@ -159,6 +159,16 @@ const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
+    // If this was a demo session, cleanup demo data
+    const isDemoSession = localStorage.getItem("demo_session") === "true";
+    if (isDemoSession) {
+      try {
+        await fetch(`${API_URL}/api/demo/cleanup`, { method: "POST" });
+      } catch (e) {
+        console.error("Demo cleanup error:", e);
+      }
+      localStorage.removeItem("demo_session");
+    }
     try {
       await api.post("/auth/logout");
     } catch (e) {
