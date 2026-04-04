@@ -1648,40 +1648,50 @@ IP Protection feature allowing buyers to enforce Non-Disclosure Agreements (NDAs
 
 ---
 
-## Strict Machine Capability Validation System (Implemented Mar 31, 2026)
+## Strict Machine Capability Validation Engine v2.0 (Upgraded Apr 4, 2026)
 
 ### Overview
-Physics-based vendor matching that validates actual machine specifications against job requirements before scoring. Vendors are categorized into 4 groups:
-1. **Fully Capable** — specs confirmed, machine fits
-2. **Capable but Unverified** — right machine type, missing specs
-3. **Wrong Machine Type** — incompatible machine for the operation
-4. **Machine Too Small** — right type, dimensions insufficient
+Complete rewrite of physics-based vendor matching. Multi-operation decomposition with hard dimension/tolerance/weight gates (NOT scoring penalties). A 3000mm shaft on a 2000mm lathe = EXCLUDED, not penalized.
+
+### Categories (5 buckets)
+1. **Confirmed Capable** — All operations have verified-capable machines (dimensions + tolerance pass)
+2. **Likely Capable** — Right machine types for all ops, but missing dimension specs (cannot verify)
+3. **Partial Match** — Can handle SOME operations but not all
+4. **Excluded: Too Small** — Right machine type but dimensions insufficient
+5. **Excluded: Wrong Type** — No compatible machines for required operations
 
 ### Backend
-- **New Module**: `/app/backend/app/services/machine_validation.py`
-  - `PROCESS_MACHINE_COMPATIBILITY` — 18-process strict compatibility matrix
-  - `validate_machine_for_job()` — checks process compatibility, physical size (10% clearance), tolerance (IT grade mapping), weight
-  - `has_complete_specs()` — checks if critical dimension fields are filled for a machine type
-  - `categorize_vendor_match()` — aggregates validation across all vendor machines
-- **Updated Endpoints**:
-  - `POST /api/machines` — auto-computes `has_complete_specs`
-  - `PUT /api/machines/{id}` — recomputes `has_complete_specs` on update
-  - Match results now include `validation_category`, `validation_coverage`, `validated_machines`, `unverified_machines`, `failed_machines`
-- **New RFQ fields**: `unverified_vendors`, `too_small_vendors`, `wrong_type_vendors`
+- **Core Engine**: `/app/backend/app/services/machine_validation.py` (complete rewrite)
+  - `OPERATION_MACHINE_MAP` — 20+ operations mapped to allowed machine types
+  - `DIMENSION_RULES` per operation (turning checks diameter/length, milling checks X/Y/Z, etc.)
+  - `validate_machine_for_operation()` — per-machine per-operation hard gate
+  - `validate_vendor_strict()` — multi-operation validation across all vendor machines
+  - `normalize_operation()` — maps AI-generated process names to standard operations
+  - `infer_operations_from_geometry()` — fallback when AI doesn't detect specific processes
+  - Tolerance gate: IT grade mapping (IT3-IT12)
+  - Weight gate: 1.2x safety factor
+  - Dimension gate: 1.1x clearance factor on all dimensions
+- **Updated match endpoint** (`POST /api/rfqs/{rfq_id}/match`):
+  - Returns `match_engine: strict_physics_v2`
+  - Returns `required_operations` list
+  - Returns `matched_vendors` (confirmed_capable), `likely_vendors`, `partial_vendors`, `too_small_vendors`, `wrong_type_vendors`
+  - Each vendor includes `operations_summary` with per-operation status/machine
+  - Scoring engine still runs (suitability_score) for ranking within buckets
 
 ### Frontend
-- **New Component**: `/app/frontend/src/components/ExcludedVendorsSection.jsx`
-  - 3 collapsible sections: Unverified, Too Small, Wrong Type
-  - Each shows vendor name, location, rating, fail reasons, machine specs
+- **Updated**: `ExcludedVendorsSection.jsx` (complete rewrite)
+  - 4 collapsible sections: Likely Capable, Partial Match, Too Small, Wrong Type
+  - Per-vendor operation summary badges
+  - Fail reason displays with machine specs
 - **Updated**: `RFQDetail.jsx`
-  - Validation category badges on matched vendor cards
-  - Process Coverage % badge
-  - ExcludedVendorsSection below main matched vendors
+  - "Confirmed Capable" header (replaces "Matched Vendors")
+  - Required operations badges below header
+  - OPERATION VALIDATION section on each vendor card with per-op status
+  - Coverage % display
 
-### Test Report
-`/app/test_reports/iteration_49.json` — Backend 100% (16/16), Frontend 100%
-
-### Future Spec (Saved for later)
+### Test Reports
+- `/app/test_reports/iteration_53.json` — Backend 100% (18/18), Frontend 100%
+- `/app/backend/tests/test_strict_physics_validation.py` — Unit tests for validation engine
 
 ## Duplicate Phone Number Protection (Implemented Mar 31, 2026)
 
@@ -1703,3 +1713,11 @@ Physics-based vendor matching that validates actual machine specifications again
 `/app/test_reports/iteration_50.json` — Backend 100% (15/15), Frontend 100%
 
 Full multi-operation decomposition & split-vendor matching spec saved at `/app/memory/FEATURE_MULTI_OP_MATCHING.md`
+
+## Changelog (Apr 4, 2026)
+- Upgraded machine validation engine to v2.0 with strict physics-based hard gates
+- Added multi-operation decomposition (turning + milling + grinding per part)
+- Added DIMENSION_RULES per operation type (turning checks swing/bed, milling checks X/Y/Z)
+- 5 vendor categories: confirmed_capable, likely_capable, partial_match, excluded_too_small, excluded_wrong_type
+- Frontend: "Confirmed Capable" header, operation badges, OPERATION VALIDATION section per vendor
+- Test: /app/test_reports/iteration_53.json (18/18 backend, all frontend pass)
