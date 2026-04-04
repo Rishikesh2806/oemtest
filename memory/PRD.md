@@ -1720,4 +1720,7 @@ Full multi-operation decomposition & split-vendor matching spec saved at `/app/m
 - Added DIMENSION_RULES per operation type (turning checks swing/bed, milling checks X/Y/Z)
 - 5 vendor categories: confirmed_capable, likely_capable, partial_match, excluded_too_small, excluded_wrong_type
 - Frontend: "Confirmed Capable" header, operation badges, OPERATION VALIDATION section per vendor
-- Test: /app/test_reports/iteration_53.json (18/18 backend, all frontend pass)
+- **CRITICAL BUG FIX**: Vendor approval query mismatch — vendors with `status: "approved"` were invisible to the matching engine which only checked `is_approved: True`. All queries now use `$or: [{is_approved: true}, {status: "approved"}]`
+- Added migration script: `/app/backend/migrate_vendor_approval.py` — normalizes both fields for all existing vendors
+- Admin approve endpoint now sets BOTH `is_approved: True` AND `status: "approved"` for consistency
+- Test: /app/test_reports/iteration_53.json (18/18), iteration_54.json (15/15)
