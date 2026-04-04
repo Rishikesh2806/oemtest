@@ -3341,7 +3341,7 @@ async def update_vendor_profile(profile: VendorProfileCreate, user: dict = Depen
 
 @api_router.get("/vendors/list")
 async def list_vendors(approved_only: bool = True):
-    query = {"is_approved": True} if approved_only else {}
+    query = {"$or": [{"is_approved": True}, {"status": "approved"}]} if approved_only else {}
     vendors = await db.vendors.find(query, {"_id": 0}).to_list(100)
     return vendors
 
@@ -5320,7 +5320,7 @@ async def list_rfqs(user: dict = Depends(get_current_user)):
         rfqs = await db.rfqs.find({"buyer_id": user["user_id"]}, {"_id": 0}).to_list(100)
     elif user["role"] == UserRole.VENDOR:
         vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})
-        if not vendor or not vendor.get("is_approved"):
+        if not vendor or (not vendor.get("is_approved") and vendor.get("status") != "approved"):
             return []
         # Get RFQs where this vendor is matched
         rfqs = await db.rfqs.find(
@@ -6727,8 +6727,13 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     if is_demo:
         vendors = await db.vendors.find({"vendor_id": {"$in": ["vendor_demo_001", "vendor_demo_002"]}, "is_approved": True}, {"_id": 0}).to_list(100)
     else:
-        # Get all approved vendors
-        vendors = await db.vendors.find({"is_approved": True}, {"_id": 0}).to_list(100)
+        # Get all approved vendors (support both is_approved flag and status field)
+        vendors = await db.vendors.find(
+            {"$or": [{"is_approved": True}, {"status": "approved"}]}, 
+            {"_id": 0}
+        ).to_list(100)
+    
+    logger.info(f"Matching RFQ {rfq_id}: found {len(vendors)} approved vendors")
     
     if not vendors:
         # Return demo vendors for testing
@@ -8110,8 +8115,11 @@ async def analyze_and_match_rfq(request: Request, user: dict = Depends(get_curre
         }}
     )
     
-    # Get all approved vendors
-    vendors = await db.vendors.find({"is_approved": True}, {"_id": 0}).to_list(200)
+    # Get all approved vendors (support both approval formats)
+    vendors = await db.vendors.find(
+        {"$or": [{"is_approved": True}, {"status": "approved"}]}, 
+        {"_id": 0}
+    ).to_list(200)
     
     # Match vendors based on process requirements
     matched_vendors = []
@@ -10993,7 +11001,10 @@ async def get_pending_vendors(user: dict = Depends(get_current_user)):
     if not has_admin_access(user):
         raise HTTPException(status_code=403, detail="Admin access required")
     
-    vendors = await db.vendors.find({"is_approved": False}, {"_id": 0}).to_list(100)
+    vendors = await db.vendors.find(
+        {"$and": [{"is_approved": {"$ne": True}}, {"status": {"$ne": "approved"}}]}, 
+        {"_id": 0}
+    ).to_list(100)
     return vendors
 
 @api_router.post("/admin/vendors/{vendor_id}/approve")
@@ -11003,7 +11014,7 @@ async def approve_vendor(vendor_id: str, user: dict = Depends(get_current_user))
     
     result = await db.vendors.update_one(
         {"vendor_id": vendor_id},
-        {"$set": {"is_approved": True}}
+        {"$set": {"is_approved": True, "status": "approved"}}
     )
     
     if result.matched_count == 0:
@@ -11018,7 +11029,7 @@ async def get_admin_stats(user: dict = Depends(get_current_user)):
     
     total_users = await db.users.count_documents({})
     total_vendors = await db.vendors.count_documents({})
-    approved_vendors = await db.vendors.count_documents({"is_approved": True})
+    approved_vendors = await db.vendors.count_documents({"$or": [{"is_approved": True}, {"status": "approved"}]})
     total_rfqs = await db.rfqs.count_documents({})
     total_orders = await db.orders.count_documents({})
     
@@ -12186,12 +12197,16 @@ async def admin_search_vendors_for_matching(
     
     query = {}
     if approved_only:
-        query["is_approved"] = True
+        query["$or"] = [{"is_approved": True}, {"status": "approved"}]
     if search:
-        query["$or"] = [
+        search_filter = [
             {"company_name": {"$regex": search, "$options": "i"}},
             {"description": {"$regex": search, "$options": "i"}}
         ]
+        if "$or" in query:
+            query = {"$and": [query, {"$or": search_filter}]}
+        else:
+            query["$or"] = search_filter
     if city:
         query["city"] = {"$regex": city, "$options": "i"}
     if state:
@@ -12681,7 +12696,10 @@ async def admin_list_vendors(user: dict = Depends(get_current_user), approved: O
     
     query = {}
     if approved is not None:
-        query["is_approved"] = approved
+        if approved:
+            query["$or"] = [{"is_approved": True}, {"status": "approved"}]
+        else:
+            query["$and"] = [{"is_approved": {"$ne": True}}, {"status": {"$ne": "approved"}}]
     
     vendors = await db.vendors.find(query, {"_id": 0}).to_list(200)
     
@@ -13771,12 +13789,12 @@ async def get_platform_analytics(user: dict = Depends(get_current_user)):
     
     # ============== VENDOR METRICS ==============
     total_vendor_profiles = await db.vendors.count_documents({})
-    approved_vendors = await db.vendors.count_documents({"is_approved": True})
-    pending_vendors = await db.vendors.count_documents({"is_approved": False})
+    approved_vendors = await db.vendors.count_documents({"$or": [{"is_approved": True}, {"status": "approved"}]})
+    pending_vendors = await db.vendors.count_documents({"$and": [{"is_approved": {"$ne": True}}, {"status": {"$ne": "approved"}}]})
     
     # Top vendors by jobs
     top_vendors = await db.vendors.find(
-        {"is_approved": True},
+        {"$or": [{"is_approved": True}, {"status": "approved"}]},
         {"_id": 0, "company_name": 1, "total_jobs": 1, "rating": 1, "city": 1}
     ).sort("total_jobs", -1).to_list(10)
     
