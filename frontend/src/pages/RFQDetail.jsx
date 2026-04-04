@@ -837,14 +837,17 @@ const RFQDetail = () => {
           </Card>
         )}
 
-        {/* Matched Vendors - Unified View (Buyer View) */}
+        {/* Matched Vendors - Confirmed Capable (Buyer View) */}
         {isBuyer && rfq.matched_vendors?.length > 0 && (
-          <Card className="border-slate-200" data-testid="matched-vendors-section">
+          <Card className="border-emerald-200" data-testid="matched-vendors-section">
             <CardHeader className="flex flex-row items-start justify-between">
               <div>
                 <CardTitle className="font-heading text-lg flex items-center gap-2">
-                  <Target className="w-5 h-5 text-orange-600" /> Matched Vendors
-                  <span data-testid="match-mode-badge" className={`ml-2 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border ${
+                  <Target className="w-5 h-5 text-emerald-600" /> Confirmed Capable
+                  <span className="text-xs bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full px-2.5 py-0.5 font-semibold">
+                    {rfq.matched_vendors.length}
+                  </span>
+                  <span data-testid="match-mode-badge" className={`ml-1 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-full border ${
                     rfq.match_type === "portfolio"
                       ? "bg-purple-50 text-purple-700 border-purple-200"
                       : "bg-blue-50 text-blue-700 border-blue-200"
@@ -859,9 +862,19 @@ const RFQDetail = () => {
                 <p className="text-sm text-slate-500 mt-1">
                   {rfq.match_type === "portfolio"
                     ? "Vendors ranked by portfolio similarity to your uploaded images"
-                    : "Vendors ranked by machine capability, material compatibility, and tolerance requirements"
+                    : "Machines verified — dimensions, tolerance, and process compatibility confirmed"
                   }
                 </p>
+                {rfq.required_operations?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2" data-testid="required-operations">
+                    <span className="text-[10px] text-slate-400 self-center mr-1">Operations:</span>
+                    {rfq.required_operations.map(op => (
+                      <span key={op} className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded px-1.5 py-0.5 font-medium">
+                        {op.replace(/_/g, " ")}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
               <Button
                 variant="outline"
@@ -967,6 +980,37 @@ const RFQDetail = () => {
                             {/* Drawing-Based Details */}
                             {!isPortfolioMatch && (
                               <>
+                                {/* Operations Validation Summary */}
+                                {vendor.operations_summary && Object.keys(vendor.operations_summary).length > 0 && (
+                                  <div className="mt-3" data-testid={`ops-summary-${vendor.vendor_id}`}>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+                                      Operation Validation
+                                    </p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {Object.entries(vendor.operations_summary).map(([op, detail]) => {
+                                        const st = detail?.status || "wrong_type";
+                                        const opColors = {
+                                          capable: "bg-emerald-50 text-emerald-700 border-emerald-200",
+                                          unverified: "bg-amber-50 text-amber-700 border-amber-200",
+                                          too_small: "bg-red-50 text-red-700 border-red-200",
+                                          tolerance_fail: "bg-red-50 text-red-700 border-red-200",
+                                          wrong_type: "bg-slate-100 text-slate-600 border-slate-200",
+                                        };
+                                        return (
+                                          <span
+                                            key={op}
+                                            className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded border ${opColors[st] || opColors.wrong_type}`}
+                                            title={detail?.best_machine?.machine_name || ""}
+                                          >
+                                            {st === "capable" && <CheckCircle2 className="w-2.5 h-2.5" />}
+                                            {op.replace(/_/g, " ")}
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+
                                 {/* Capability Badges */}
                                 <div className="flex flex-wrap gap-2 mt-3">
                                   {vendor.has_available_machine && (rfq.urgency === 'urgent' || rfq.urgency === 'high') && (
@@ -1176,14 +1220,14 @@ const RFQDetail = () => {
                           </div>
                           {/* Validation Category Badge */}
                           {vendor.validation_category && (
-                            <span data-testid={`val-cat-${vendor.vendor_id}`} className={`mt-2 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
-                              vendor.validation_category === "fully_capable" ? "bg-green-100 text-green-800 border-green-200"
-                              : vendor.validation_category === "unverified" ? "bg-amber-100 text-amber-800 border-amber-200"
-                              : "bg-slate-200 text-slate-600 border-slate-300"
-                            }`}>
-                              {vendor.validation_category === "fully_capable" ? "Verified Capable" 
-                              : vendor.validation_category === "unverified" ? "Specs Unverified"
-                              : vendor.validation_category}
+                            <span data-testid={`val-cat-${vendor.vendor_id}`} className="mt-2 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border bg-emerald-100 text-emerald-800 border-emerald-200">
+                              Confirmed Capable
+                            </span>
+                          )}
+                          {/* Operation coverage */}
+                          {vendor.validation_coverage > 0 && (
+                            <span className="mt-1 text-[10px] text-slate-500">
+                              {vendor.validation_coverage}% ops covered
                             </span>
                           )}
                           {/* Per-vendor match mode indicator */}
@@ -1220,12 +1264,15 @@ const RFQDetail = () => {
           </Card>
         )}
 
-        {/* Excluded Vendors - Validation Categories (Buyer View) */}
-        {isBuyer && (rfq.unverified_vendors?.length > 0 || rfq.too_small_vendors?.length > 0 || rfq.wrong_type_vendors?.length > 0) && (
+        {/* Validation Categories — Likely, Partial, Too Small, Wrong Type (Buyer View) */}
+        {isBuyer && (rfq.likely_vendors?.length > 0 || rfq.partial_vendors?.length > 0 || rfq.unverified_vendors?.length > 0 || rfq.too_small_vendors?.length > 0 || rfq.wrong_type_vendors?.length > 0) && (
           <ExcludedVendorsSection
+            likelyVendors={rfq.likely_vendors}
+            partialVendors={rfq.partial_vendors}
             unverifiedVendors={rfq.unverified_vendors}
             tooSmallVendors={rfq.too_small_vendors}
             wrongTypeVendors={rfq.wrong_type_vendors}
+            requiredOperations={rfq.required_operations}
           />
         )}
 

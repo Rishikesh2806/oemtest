@@ -1,247 +1,295 @@
 """
-Strict Machine Capability Validation Engine for OEMLinker.
+Strict Machine Capability Validation Engine v2.0 for OEMLinker.
 
-Enforces physics-based matching: vendors only appear in results if their machines
-can physically and technically perform every required operation.
+Physics-based HARD GATES - not scoring penalties.
+A 3000mm shaft on a 2000mm lathe = EXCLUDED, not penalized.
 
-Categories:
-  1. Fully Capable — specs confirmed, machine fits
-  2. Capable but Unverified — right machine type, missing specs
-  3. Wrong Machine Type — incompatible machine for the operation
-  4. Machine Too Small — right type but dimensions insufficient
+Multi-Operation Decomposition:
+  "Shaft with keyway and ground finish" -> turning + milling (keyway) + grinding
+
+Vendor Categories:
+  1. confirmed_capable  - Right machines + dimensions verified for ALL operations
+  2. likely_capable      - Right machine types, missing dimension specs (cannot verify)
+  3. partial_match       - Can handle SOME operations but not all
+  4. excluded_too_small  - Right machine type, fails dimension gate
+  5. excluded_wrong_type - No compatible machine for any operation
 """
 
 import logging
+import re
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# ──────────────────────────────────────────────────────────────
-# 1. PROCESS → MACHINE COMPATIBILITY MATRIX
-# ──────────────────────────────────────────────────────────────
-PROCESS_MACHINE_COMPATIBILITY = {
-    "turning": {
-        "can": ["cnc lathe", "cnc turning", "turret lathe", "capstan lathe", "engine lathe",
-                "gap bed lathe", "heavy duty lathe", "swiss lathe", "cnc turn-mill",
-                "turn-mill center", "turn-mill", "vtl", "vertical turret lathe", "cnc vtl"],
-        "cannot": ["vmc", "hmc", "drill press", "surface grinder", "cylindrical grinder",
-                   "milling machine", "press brake", "edm", "laser", "broaching"]
-    },
-    "facing": {
-        "can": ["cnc lathe", "cnc turning", "turret lathe", "engine lathe", "facing lathe",
-                "cnc turn-mill", "turn-mill center", "vtl", "vertical turret lathe", "cnc vtl"],
-        "cannot": ["vmc", "drill press", "surface grinder", "cylindrical grinder", "press brake"]
-    },
-    "milling": {
-        "can": ["vmc", "cnc vmc", "hmc", "cnc hmc", "milling machine", "universal milling",
-                "vertical milling", "horizontal milling", "bed mill", "knee mill",
-                "5-axis vmc", "5-axis hmc", "5-axis mill-turn", "5-axis gantry",
-                "cnc turn-mill", "turn-mill center", "double column vmc", "high speed vmc"],
-        "cannot": ["cnc lathe", "turret lathe", "drill press", "surface grinder",
-                   "cylindrical grinder", "press brake", "laser"]
-    },
-    "keyway": {
-        "can": ["vmc", "cnc vmc", "hmc", "cnc hmc", "milling machine", "broaching machine",
-                "shaping machine", "slotting machine", "5-axis vmc"],
-        "cannot": ["cnc lathe", "turret lathe", "drill press", "surface grinder",
-                   "cylindrical grinder", "press brake", "laser"]
-    },
-    "drilling": {
-        "can": ["cnc lathe", "cnc turning", "cnc turn-mill", "turn-mill center",
-                "drill press", "radial drill", "deep hole drill",
-                "vmc", "cnc vmc", "hmc", "cnc hmc", "5-axis vmc"],
-        "cannot": ["surface grinder", "cylindrical grinder", "press brake", "laser"]
-    },
-    "boring": {
-        "can": ["boring machine", "floor boring", "cnc boring", "horizontal boring",
-                "vmc", "cnc vmc", "hmc", "cnc hmc",
-                "cnc lathe", "cnc turning", "vtl", "vertical turret lathe"],
-        "cannot": ["drill press", "surface grinder", "cylindrical grinder", "press brake", "laser"]
-    },
-    "threading_external": {
-        "can": ["cnc lathe", "cnc turning", "turret lathe", "engine lathe",
-                "thread rolling machine", "cnc turn-mill", "turn-mill center"],
-        "cannot": ["vmc", "drill press", "surface grinder", "press brake"]
-    },
-    "threading_internal": {
-        "can": ["cnc lathe", "cnc turning", "vmc", "cnc vmc", "hmc", "cnc hmc",
-                "tapping machine", "drill press", "cnc turn-mill"],
-        "cannot": ["surface grinder", "cylindrical grinder", "press brake"]
-    },
-    "surface_grinding": {
-        "can": ["surface grinder", "cnc surface grinder"],
-        "cannot": ["cylindrical grinder", "vmc", "cnc lathe", "drill press", "press brake"]
-    },
-    "cylindrical_grinding": {
-        "can": ["cylindrical grinder", "cnc cylindrical grinder", "universal grinder",
-                "centerless grinder"],
-        "cannot": ["surface grinder", "vmc", "cnc lathe", "drill press"]
-    },
-    "grinding": {
-        "can": ["surface grinder", "cnc surface grinder", "cylindrical grinder",
-                "cnc cylindrical grinder", "universal grinder", "centerless grinder",
-                "tool & cutter grinder"],
-        "cannot": ["vmc", "cnc lathe", "drill press", "press brake", "laser"]
-    },
-    "broaching": {
-        "can": ["broaching machine", "vertical broaching", "horizontal broaching"],
-        "cannot": ["cnc lathe", "drill press", "surface grinder", "press brake", "laser"]
-    },
-    "bending": {
-        "can": ["press brake", "cnc press brake", "hydraulic press", "roll bending machine",
-                "bending machine"],
-        "cannot": ["cnc lathe", "vmc", "drill press", "surface grinder", "milling machine"]
-    },
-    "laser_cutting": {
-        "can": ["laser cutting machine", "fiber laser", "co2 laser", "laser cutter"],
-        "cannot": []  # Only laser machines
-    },
-    "edm_wire": {
-        "can": ["wire edm", "wire cut edm", "cnc wire edm"],
-        "cannot": []  # Only wire EDM
-    },
-    "edm_sink": {
-        "can": ["sink edm", "die sink edm", "cnc sink edm", "sinker edm"],
-        "cannot": ["wire edm"]
-    },
-    "welding": {
-        "can": ["mig welder", "tig welder", "arc welder", "spot welder",
-                "welding machine", "mig/mag", "tig", "arc", "robotic welder"],
-        "cannot": []
-    },
-    "sheet_metal": {
-        "can": ["press brake", "cnc press brake", "hydraulic press", "shearing machine",
-                "punch press", "cnc punch", "laser cutting machine", "fiber laser",
-                "co2 laser", "plasma cutting", "roll forming"],
-        "cannot": ["cnc lathe", "surface grinder", "cylindrical grinder"]
-    },
-    "heat_treatment": {
-        "can": ["heat treatment furnace", "furnace", "induction heater",
-                "quenching tank", "tempering furnace"],
-        "cannot": []
-    },
-}
+CLEARANCE_FACTOR = 1.10  # 10% safety margin on all dimensions
 
-# ──────────────────────────────────────────────────────────────
-# 2. TOLERANCE → IT GRADE MAPPING
-# ──────────────────────────────────────────────────────────────
-TOLERANCE_IT_MAP = {
-    0.001: "IT3",
-    0.005: "IT5",
-    0.01:  "IT6",
-    0.02:  "IT6",
-    0.025: "IT7",
-    0.05:  "IT7",
-    0.1:   "IT8",
-    0.2:   "IT9",
-    0.5:   "IT11",
-    1.0:   "IT12",
-}
+# =====================================================================
+# 1. OPERATION -> REQUIRED MACHINE TYPES (hard compatibility)
+# =====================================================================
+# Each operation maps to machine types that CAN physically perform it.
+# If a vendor has NONE of these, that operation is a hard fail.
 
-# Machine type → minimum achievable IT grade (lower = tighter)
-MACHINE_TOLERANCE_CAPABILITY = {
-    "cnc": 6,        # IT6
-    "cnc_grinder": 4, # IT4
-    "manual": 8,      # IT8
-    "conventional": 9, # IT9
-    "press": 11,      # IT11
-    "laser": 9,       # IT9
-    "edm": 5,         # IT5
-}
-
-# Critical dimension fields per machine category
-CRITICAL_SPECS = {
-    "turning": ["max_length", "max_diameter"],
-    "lathe": ["max_length", "max_diameter"],
-    "vtl": ["max_diameter", "max_length"],
-    "vmc": ["max_x", "max_y", "max_z"],
-    "hmc": ["max_x", "max_y", "max_z"],
-    "milling": ["max_x", "max_y", "max_z"],
-    "5-axis": ["max_x", "max_y", "max_z"],
-    "boring": ["bore_diameter", "max_x", "max_y"],
-    "drilling": ["max_diameter", "max_depth"],
-    "surface_grinder": ["max_x", "max_y"],
-    "cylindrical_grinder": ["max_length", "max_diameter"],
-    "press_brake": ["max_x", "tonnage"],
-    "laser": ["max_x", "max_y", "max_thickness"],
-    "edm": ["max_x", "max_y", "max_z"],
-    "welding": ["amperage", "max_thickness"],
-    "gear": ["max_diameter", "max_module"],
+OPERATION_MACHINE_MAP = {
+    # -- Rotational operations --
+    "turning": [
+        "cnc lathe", "cnc turning", "turret lathe", "capstan lathe", "engine lathe",
+        "gap bed lathe", "heavy duty lathe", "swiss lathe", "cnc turn-mill",
+        "turn-mill center", "turn-mill", "vtl", "vertical turret lathe", "cnc vtl",
+    ],
+    "facing": [
+        "cnc lathe", "cnc turning", "turret lathe", "engine lathe", "facing lathe",
+        "cnc turn-mill", "turn-mill center", "vtl", "vertical turret lathe", "cnc vtl",
+    ],
+    "boring": [
+        "boring machine", "floor boring", "cnc boring", "horizontal boring",
+        "vmc", "cnc vmc", "hmc", "cnc hmc",
+        "cnc lathe", "cnc turning", "vtl", "vertical turret lathe",
+    ],
+    "threading_external": [
+        "cnc lathe", "cnc turning", "turret lathe", "engine lathe",
+        "thread rolling machine", "cnc turn-mill", "turn-mill center",
+    ],
+    "threading_internal": [
+        "cnc lathe", "cnc turning", "vmc", "cnc vmc", "hmc", "cnc hmc",
+        "tapping machine", "drill press", "cnc turn-mill",
+    ],
+    # -- Prismatic / 3-axis operations --
+    "milling": [
+        "vmc", "cnc vmc", "hmc", "cnc hmc", "milling machine", "universal milling",
+        "vertical milling", "horizontal milling", "bed mill", "knee mill",
+        "5-axis vmc", "5-axis hmc", "5-axis mill-turn", "5-axis gantry",
+        "cnc turn-mill", "turn-mill center", "double column vmc", "high speed vmc",
+    ],
+    "keyway": [
+        "vmc", "cnc vmc", "hmc", "cnc hmc", "milling machine", "broaching machine",
+        "shaping machine", "slotting machine", "5-axis vmc",
+    ],
+    "drilling": [
+        "cnc lathe", "cnc turning", "cnc turn-mill", "turn-mill center",
+        "drill press", "radial drill", "deep hole drill",
+        "vmc", "cnc vmc", "hmc", "cnc hmc", "5-axis vmc",
+    ],
+    "5axis": [
+        "5-axis vmc", "5-axis hmc", "5-axis mill-turn", "5-axis gantry",
+    ],
+    # -- Grinding --
+    "surface_grinding": ["surface grinder", "cnc surface grinder"],
+    "cylindrical_grinding": [
+        "cylindrical grinder", "cnc cylindrical grinder", "universal grinder",
+        "centerless grinder",
+    ],
+    "grinding": [
+        "surface grinder", "cnc surface grinder", "cylindrical grinder",
+        "cnc cylindrical grinder", "universal grinder", "centerless grinder",
+        "tool & cutter grinder",
+    ],
+    # -- Specialty --
+    "broaching": ["broaching machine", "vertical broaching", "horizontal broaching"],
+    "bending": [
+        "press brake", "cnc press brake", "hydraulic press",
+        "roll bending machine", "bending machine",
+    ],
+    "laser_cutting": ["laser cutting machine", "fiber laser", "co2 laser", "laser cutter"],
+    "edm_wire": ["wire edm", "wire cut edm", "cnc wire edm"],
+    "edm_sink": ["sink edm", "die sink edm", "cnc sink edm", "sinker edm"],
+    "welding": [
+        "mig welder", "tig welder", "arc welder", "spot welder",
+        "welding machine", "mig/mag", "tig", "arc", "robotic welder",
+    ],
+    "sheet_metal": [
+        "press brake", "cnc press brake", "hydraulic press", "shearing machine",
+        "punch press", "cnc punch", "laser cutting machine", "fiber laser",
+        "co2 laser", "plasma cutting", "roll forming",
+    ],
+    "heat_treatment": [
+        "heat treatment furnace", "furnace", "induction heater",
+        "quenching tank", "tempering furnace",
+    ],
+    "gear_cutting": [
+        "gear hobbing", "gear shaping", "gear grinder", "gear machine",
+        "hobbing machine", "gear shaper",
+    ],
 }
 
 
-def _classify_machine(machine_type_lower: str) -> str:
-    """Classify a machine type string into a broad category."""
-    if any(k in machine_type_lower for k in ["lathe", "turn", "capstan"]):
-        if "vtl" in machine_type_lower or "vertical turret" in machine_type_lower:
-            return "vtl"
-        return "turning"
-    if any(k in machine_type_lower for k in ["vmc", "vertical machining"]):
-        return "vmc"
-    if any(k in machine_type_lower for k in ["hmc", "horizontal machining"]):
-        return "hmc"
-    if "5-axis" in machine_type_lower or "5 axis" in machine_type_lower:
-        return "5-axis"
-    if any(k in machine_type_lower for k in ["mill", "milling"]):
-        return "milling"
-    if any(k in machine_type_lower for k in ["boring", "floor boring"]):
-        return "boring"
-    if any(k in machine_type_lower for k in ["drill", "radial drill"]):
-        return "drilling"
-    if "surface grind" in machine_type_lower:
-        return "surface_grinder"
-    if "cylindrical grind" in machine_type_lower or "centerless" in machine_type_lower:
-        return "cylindrical_grinder"
-    if "grind" in machine_type_lower:
-        return "surface_grinder"  # default grinder
-    if any(k in machine_type_lower for k in ["press brake", "press", "bend", "shear"]):
-        return "press_brake"
-    if any(k in machine_type_lower for k in ["laser", "fiber laser", "co2 laser"]):
-        return "laser"
-    if any(k in machine_type_lower for k in ["wire edm", "wire cut"]):
-        return "edm"
-    if any(k in machine_type_lower for k in ["sink edm", "die sink", "sinker"]):
-        return "edm"
-    if "edm" in machine_type_lower:
-        return "edm"
-    if any(k in machine_type_lower for k in ["weld", "mig", "tig", "arc"]):
-        return "welding"
-    if any(k in machine_type_lower for k in ["gear", "hob"]):
-        return "gear"
-    if any(k in machine_type_lower for k in ["heat treat", "furnace"]):
-        return "heat_treatment"
-    return "other"
+# =====================================================================
+# 2. DIMENSION RULES PER OPERATION
+# =====================================================================
+# For each operation, which machine dimension fields to check against
+# which job dimension fields. These are HARD GATES.
+
+def _get_dimension_rules(operation: str) -> list:
+    """
+    Returns list of dimension check rules for an operation.
+    Each rule: {
+        "machine_fields": [list of machine fields to try, first non-zero wins],
+        "job_field": "job requirement field name",
+        "job_fallback": "optional fallback field",
+        "label": "human-readable label for fail message",
+    }
+    """
+    rules = {
+        "turning": [
+            {
+                "machine_fields": ["max_diameter", "max_swing", "swing_over_bed"],
+                "job_field": "diameter",
+                "job_fallback": "outer_diameter",
+                "label": "swing/diameter",
+            },
+            {
+                "machine_fields": ["max_length", "distance_between_centers"],
+                "job_field": "length",
+                "label": "bed length",
+            },
+        ],
+        "facing": [
+            {
+                "machine_fields": ["max_diameter", "max_swing", "swing_over_bed"],
+                "job_field": "diameter",
+                "job_fallback": "outer_diameter",
+                "label": "swing/diameter",
+            },
+        ],
+        "boring": [
+            {
+                "machine_fields": ["bore_diameter", "max_diameter"],
+                "job_field": "inner_diameter",
+                "job_fallback": "diameter",
+                "label": "bore diameter",
+            },
+        ],
+        "milling": [
+            {
+                "machine_fields": ["max_x", "table_size_x", "x_travel"],
+                "job_field": "length",
+                "label": "X-travel",
+            },
+            {
+                "machine_fields": ["max_y", "table_size_y", "y_travel"],
+                "job_field": "width",
+                "label": "Y-travel",
+            },
+            {
+                "machine_fields": ["max_z", "z_travel"],
+                "job_field": "height",
+                "label": "Z-travel",
+            },
+        ],
+        "keyway": [
+            {
+                "machine_fields": ["max_x", "table_size_x"],
+                "job_field": "length",
+                "label": "X-travel",
+            },
+            {
+                "machine_fields": ["max_y", "table_size_y"],
+                "job_field": "width",
+                "label": "Y-travel",
+            },
+        ],
+        "5axis": [
+            {
+                "machine_fields": ["max_x", "table_size_x"],
+                "job_field": "length",
+                "label": "X-travel",
+            },
+            {
+                "machine_fields": ["max_y", "table_size_y"],
+                "job_field": "width",
+                "label": "Y-travel",
+            },
+            {
+                "machine_fields": ["max_z"],
+                "job_field": "height",
+                "label": "Z-travel",
+            },
+        ],
+        "drilling": [
+            {
+                "machine_fields": ["max_diameter", "bore_diameter"],
+                "job_field": "hole_diameter",
+                "job_fallback": "diameter",
+                "label": "drill capacity",
+            },
+        ],
+        "surface_grinding": [
+            {
+                "machine_fields": ["max_x", "max_length"],
+                "job_field": "length",
+                "label": "grinding length",
+            },
+            {
+                "machine_fields": ["max_y", "max_diameter"],
+                "job_field": "width",
+                "label": "grinding width",
+            },
+        ],
+        "cylindrical_grinding": [
+            {
+                "machine_fields": ["max_length", "max_x"],
+                "job_field": "length",
+                "label": "grinding length",
+            },
+            {
+                "machine_fields": ["max_diameter", "max_y"],
+                "job_field": "diameter",
+                "label": "grinding diameter",
+            },
+        ],
+        "grinding": [
+            {
+                "machine_fields": ["max_x", "max_length", "max_diameter"],
+                "job_field": "length",
+                "job_fallback": "diameter",
+                "label": "grinding capacity",
+            },
+        ],
+        "bending": [
+            {
+                "machine_fields": ["max_x", "max_length"],
+                "job_field": "length",
+                "label": "bending length",
+            },
+        ],
+        "laser_cutting": [
+            {
+                "machine_fields": ["max_x"],
+                "job_field": "length",
+                "label": "bed X",
+            },
+            {
+                "machine_fields": ["max_y"],
+                "job_field": "width",
+                "label": "bed Y",
+            },
+            {
+                "machine_fields": ["max_thickness"],
+                "job_field": "thickness",
+                "label": "cutting thickness",
+            },
+        ],
+        "sheet_metal": [
+            {
+                "machine_fields": ["max_x", "max_length"],
+                "job_field": "length",
+                "label": "working length",
+            },
+        ],
+        "gear_cutting": [
+            {
+                "machine_fields": ["max_diameter"],
+                "job_field": "diameter",
+                "label": "max gear diameter",
+            },
+        ],
+    }
+    return rules.get(operation, [])
 
 
-def has_complete_specs(machine: dict) -> bool:
-    """Check if a machine has all critical dimension fields filled for its type."""
-    mt = (machine.get("machine_type") or "").lower()
-    cat = _classify_machine(mt)
-    required_fields = CRITICAL_SPECS.get(cat, [])
-    if not required_fields:
-        return True  # No critical fields defined = assume complete
-    filled = 0
-    for field in required_fields:
-        val = machine.get(field)
-        if val and float(val) > 0:
-            filled += 1
-    return filled >= len(required_fields)
-
-
-def _is_machine_compatible_with_process(machine_type_lower: str, process: str) -> bool:
-    """Check if a machine type can perform a given manufacturing process."""
-    compat = PROCESS_MACHINE_COMPATIBILITY.get(process)
-    if not compat:
-        return True  # Unknown process — allow all
-    can_list = compat["can"]
-    for allowed in can_list:
-        if allowed in machine_type_lower or machine_type_lower in allowed:
-            return True
-    return False
-
-
+# =====================================================================
+# 3. TOLERANCE MAPPING
+# =====================================================================
 def _tolerance_to_it_grade(tolerance_mm: float) -> int:
-    """Convert a ± tolerance in mm to an approximate IT grade number."""
     if tolerance_mm <= 0.001:
         return 3
     if tolerance_mm <= 0.005:
@@ -259,427 +307,391 @@ def _tolerance_to_it_grade(tolerance_mm: float) -> int:
     return 12
 
 
-def _machine_it_capability(machine: dict) -> int:
-    """Estimate the IT grade a machine can achieve."""
+def _machine_achievable_it(machine: dict) -> int:
+    """Estimate the IT grade a machine can achieve from its specs or type."""
     mt = (machine.get("machine_type") or "").lower()
     tol = machine.get("tolerance") or machine.get("tolerance_capability")
-    if tol and float(tol) > 0:
-        return _tolerance_to_it_grade(float(tol))
-    # Infer from machine type
+    if tol:
+        try:
+            return _tolerance_to_it_grade(float(tol))
+        except (ValueError, TypeError):
+            pass
     if "grind" in mt:
         return 5
     if "edm" in mt:
         return 5
-    if "cnc" in mt:
+    if "cnc" in mt or "vmc" in mt or "hmc" in mt or "5-axis" in mt or "5 axis" in mt:
         return 6
     if any(k in mt for k in ["conventional", "engine lathe", "turret lathe", "manual"]):
         return 9
-    return 8  # default
+    return 8
 
 
-def validate_machine_for_job(machine: dict, job_requirements: dict) -> dict:
+# =====================================================================
+# 4. MACHINE TYPE CLASSIFIER
+# =====================================================================
+def _classify_machine_type(machine_type_lower: str) -> str:
+    """Classify a machine type string into a broad category for quick lookup."""
+    if any(k in machine_type_lower for k in ["lathe", "turn", "capstan"]):
+        if "vtl" in machine_type_lower or "vertical turret" in machine_type_lower:
+            return "vtl"
+        return "turning"
+    if "5-axis" in machine_type_lower or "5 axis" in machine_type_lower:
+        return "5axis"
+    if any(k in machine_type_lower for k in ["vmc", "vertical machining"]):
+        return "vmc"
+    if any(k in machine_type_lower for k in ["hmc", "horizontal machining"]):
+        return "hmc"
+    if any(k in machine_type_lower for k in ["mill", "milling"]):
+        return "milling"
+    if any(k in machine_type_lower for k in ["boring", "floor boring"]):
+        return "boring"
+    if any(k in machine_type_lower for k in ["drill", "radial drill"]):
+        return "drilling"
+    if "surface grind" in machine_type_lower:
+        return "surface_grinder"
+    if "cylindrical grind" in machine_type_lower or "centerless" in machine_type_lower:
+        return "cylindrical_grinder"
+    if "grind" in machine_type_lower:
+        return "grinder"
+    if any(k in machine_type_lower for k in ["press brake", "press", "bend", "shear"]):
+        return "press_brake"
+    if any(k in machine_type_lower for k in ["laser", "fiber laser", "co2 laser"]):
+        return "laser"
+    if any(k in machine_type_lower for k in ["wire edm", "wire cut"]):
+        return "wire_edm"
+    if any(k in machine_type_lower for k in ["sink edm", "die sink", "sinker"]):
+        return "sink_edm"
+    if "edm" in machine_type_lower:
+        return "edm"
+    if any(k in machine_type_lower for k in ["weld", "mig", "tig", "arc"]):
+        return "welding"
+    if any(k in machine_type_lower for k in ["gear", "hob"]):
+        return "gear"
+    if any(k in machine_type_lower for k in ["heat treat", "furnace"]):
+        return "heat_treatment"
+    if any(k in machine_type_lower for k in ["broach"]):
+        return "broaching"
+    if any(k in machine_type_lower for k in ["shap", "slot"]):
+        return "shaping"
+    return "other"
+
+
+# =====================================================================
+# 5. CHECK: Can this machine type perform this operation?
+# =====================================================================
+def _machine_can_do_operation(machine_type_lower: str, operation: str) -> bool:
+    """Hard gate: is this machine type physically capable of this operation?"""
+    allowed_types = OPERATION_MACHINE_MAP.get(operation)
+    if not allowed_types:
+        return True  # Unknown operation -> allow all (soft pass)
+    for allowed in allowed_types:
+        if allowed in machine_type_lower or machine_type_lower in allowed:
+            return True
+    return False
+
+
+# =====================================================================
+# 6. CHECK: Do machine dimensions pass the hard gate for this operation?
+# =====================================================================
+def _check_dimension_gate(machine: dict, job: dict, operation: str) -> dict:
     """
-    Core validation function. Checks if a specific machine can perform the job.
-
-    Args:
-        machine: Machine document from MongoDB
-        job_requirements: Dict with keys:
-            - process (str): Required process (turning, milling, etc.)
-            - length (float): Job part length in mm
-            - width (float): Job part width in mm
-            - height (float): Job part height in mm
-            - diameter (float): Job part diameter in mm
-            - inner_diameter (float): Inner bore diameter
-            - thickness (float): Sheet/plate thickness
-            - tolerance (float): Required tolerance in mm
-            - weight_kg (float): Part weight
-            - part_geometry (str): cylindrical, rectangular, etc.
-
-    Returns:
-        Dict with:
-            - can_perform: True / False / None (unknown)
-            - category: "fully_capable" / "unverified" / "wrong_type" / "too_small"
-            - confidence: "high" / "medium" / "low" / "none"
-            - fail_reasons: list of strings
-            - warnings: list of strings
-            - machine_specs: dict of relevant specs shown to user
-    """
-    mt = (machine.get("machine_type") or "").lower()
-    machine_cat = _classify_machine(mt)
-    process = (job_requirements.get("process") or "").lower().replace(" ", "_")
-    result = {
-        "can_perform": False,
-        "category": "wrong_type",
-        "confidence": "none",
+    Hard dimension gate. Returns:
+      {
+        "passed": True/False/None (None = cannot verify, missing specs),
         "fail_reasons": [],
-        "warnings": [],
-        "machine_specs": {},
-    }
-
-    # ── Step 1: Process-Machine Compatibility ──
-    if process and not _is_machine_compatible_with_process(mt, process):
-        compat = PROCESS_MACHINE_COMPATIBILITY.get(process, {})
-        can_list = compat.get("can", [])[:5]
-        result["fail_reasons"].append(
-            f"{machine.get('machine_type', mt)} cannot perform {process}. "
-            f"Required: {', '.join(can_list)}"
-        )
-        result["category"] = "wrong_type"
-        return result
-
-    # ── Step 2: Check if machine has complete specs ──
-    complete = has_complete_specs(machine)
-    if not complete:
-        # Check if ANY size-dependent dimension is required
-        needs_size = any(
-            job_requirements.get(k, 0) and job_requirements[k] > 0
-            for k in ["length", "width", "height", "diameter", "inner_diameter", "thickness"]
-        )
-        if needs_size:
-            result["can_perform"] = None  # Unknown
-            result["category"] = "unverified"
-            result["confidence"] = "none"
-            result["fail_reasons"].append(
-                "Machine specifications not provided. Cannot verify capacity for this job."
-            )
-            result["warnings"].append(
-                "Vendor has not entered machine dimensions. Contact vendor to verify."
-            )
-            # Still collect whatever specs exist
-            result["machine_specs"] = _extract_machine_specs(machine, machine_cat)
-            return result
-
-    # ── Step 3: Physical Size Validation ──
-    size_result = _validate_size(machine, machine_cat, job_requirements)
-    if size_result["failed"]:
-        result["category"] = "too_small"
-        result["confidence"] = "high" if complete else "medium"
-        result["fail_reasons"].extend(size_result["reasons"])
-        result["machine_specs"] = size_result["specs"]
-        return result
-    result["warnings"].extend(size_result.get("warnings", []))
-    result["machine_specs"] = size_result["specs"]
-
-    # ── Step 4: Tolerance Validation ──
-    req_tolerance = job_requirements.get("tolerance", 0)
-    if req_tolerance and req_tolerance > 0:
-        machine_it = _machine_it_capability(machine)
-        required_it = _tolerance_to_it_grade(req_tolerance)
-        if machine_it > required_it:
-            result["fail_reasons"].append(
-                f"Machine tolerance capability ~IT{machine_it} cannot achieve "
-                f"required ±{req_tolerance}mm (~IT{required_it})"
-            )
-            result["category"] = "too_small"
-            result["machine_specs"]["tolerance_it"] = f"IT{machine_it}"
-            return result
-
-    # ── Step 5: Weight Check ──
-    weight = job_requirements.get("weight_kg", 0)
-    max_weight = machine.get("max_weight") or 0
-    if weight > 0 and max_weight > 0:
-        if max_weight < weight * 1.2:
-            result["fail_reasons"].append(
-                f"Part weight {weight}kg exceeds machine capacity {max_weight}kg"
-            )
-            result["category"] = "too_small"
-            result["machine_specs"]["max_weight_kg"] = max_weight
-            return result
-
-    # ── All checks passed ──
-    result["can_perform"] = True
-    result["category"] = "fully_capable"
-    result["confidence"] = "high" if (complete and machine.get("specs_verified_by_admin")) else "medium"
-    return result
-
-
-def _validate_size(machine: dict, machine_cat: str, job: dict) -> dict:
-    """Check physical dimension constraints. Returns {failed, reasons, warnings, specs}."""
-    reasons = []
-    warnings = []
-    specs = _extract_machine_specs(machine, machine_cat)
-    clearance = 1.1  # 10% clearance
-
-    if machine_cat in ("turning", "vtl"):
-        m_dia = machine.get("max_diameter") or machine.get("max_swing") or 0
-        m_len = machine.get("max_length") or 0
-        j_dia = job.get("diameter", 0) or job.get("outer_diameter", 0) or 0
-        j_len = job.get("length", 0) or 0
-
-        if j_dia > 0 and m_dia > 0 and m_dia < j_dia * clearance:
-            reasons.append(
-                f"Part diameter {j_dia}mm exceeds machine swing {m_dia}mm "
-                f"(need ≥{j_dia * clearance:.0f}mm)"
-            )
-        elif j_dia > 0 and m_dia == 0:
-            warnings.append("Diameter capacity unverified")
-
-        if j_len > 0 and m_len > 0 and m_len < j_len * clearance:
-            reasons.append(
-                f"Part length {j_len}mm exceeds machine capacity {m_len}mm "
-                f"(need ≥{j_len * clearance:.0f}mm)"
-            )
-        elif j_len > 0 and m_len == 0:
-            warnings.append("Length capacity unverified")
-
-    elif machine_cat in ("vmc", "hmc", "milling", "5-axis"):
-        m_x = machine.get("max_x") or machine.get("table_size_x") or 0
-        m_y = machine.get("max_y") or machine.get("table_size_y") or 0
-        m_z = machine.get("max_z") or 0
-        j_l = job.get("length", 0) or 0
-        j_w = job.get("width", 0) or 0
-        j_h = job.get("height", 0) or 0
-
-        if j_l > 0 and m_x > 0 and m_x < j_l * clearance:
-            reasons.append(f"X-travel {m_x}mm < part length {j_l}mm (need ≥{j_l * clearance:.0f}mm)")
-        elif j_l > 0 and m_x == 0:
-            warnings.append("X-travel capacity unverified")
-
-        if j_w > 0 and m_y > 0 and m_y < j_w * clearance:
-            reasons.append(f"Y-travel {m_y}mm < part width {j_w}mm (need ≥{j_w * clearance:.0f}mm)")
-        elif j_w > 0 and m_y == 0:
-            warnings.append("Y-travel capacity unverified")
-
-        if j_h > 0 and m_z > 0 and m_z < j_h * clearance:
-            reasons.append(f"Z-travel {m_z}mm < part height {j_h}mm (need ≥{j_h * clearance:.0f}mm)")
-        elif j_h > 0 and m_z == 0:
-            warnings.append("Z-travel capacity unverified")
-
-    elif machine_cat == "boring":
-        m_bore = machine.get("bore_diameter") or machine.get("max_diameter") or 0
-        j_dia = job.get("diameter", 0) or job.get("inner_diameter", 0) or 0
-        if j_dia > 0 and m_bore > 0 and m_bore < j_dia * clearance:
-            reasons.append(f"Bore capacity {m_bore}mm < required {j_dia}mm")
-
-    elif machine_cat == "drilling":
-        m_drill_dia = machine.get("max_diameter") or machine.get("bore_diameter") or 0
-        m_depth = machine.get("max_depth") or machine.get("max_z") or 0
-        j_dia = job.get("diameter", 0) or 0
-        j_depth = job.get("height", 0) or job.get("length", 0) or 0
-        if j_dia > 0 and m_drill_dia > 0 and m_drill_dia < j_dia:
-            reasons.append(f"Max drill diameter {m_drill_dia}mm < required {j_dia}mm")
-        if j_depth > 0 and m_depth > 0 and m_depth < j_depth:
-            reasons.append(f"Max drill depth {m_depth}mm < required {j_depth}mm")
-
-    elif machine_cat in ("surface_grinder", "cylindrical_grinder"):
-        m_len = machine.get("max_x") or machine.get("max_length") or 0
-        m_width = machine.get("max_y") or machine.get("max_diameter") or 0
-        j_len = job.get("length", 0) or 0
-        j_width = job.get("width", 0) or job.get("diameter", 0) or 0
-        if j_len > 0 and m_len > 0 and m_len < j_len:
-            reasons.append(f"Grinding length {m_len}mm < part {j_len}mm")
-        if j_width > 0 and m_width > 0 and m_width < j_width:
-            reasons.append(f"Grinding width/dia {m_width}mm < part {j_width}mm")
-
-    elif machine_cat == "press_brake":
-        m_bend_len = machine.get("max_x") or machine.get("max_length") or 0
-        m_tonnage = machine.get("tonnage") or 0
-        j_len = job.get("length", 0) or 0
-        j_thickness = job.get("thickness", 0) or 0
-        if j_len > 0 and m_bend_len > 0 and m_bend_len < j_len:
-            reasons.append(f"Bending length {m_bend_len}mm < part {j_len}mm")
-        if j_thickness > 0 and m_tonnage > 0:
-            # Rough tonnage estimate: thickness(mm) * length(m) * 8 (for mild steel)
-            required_tonnage = j_thickness * (j_len / 1000) * 8 if j_len else j_thickness * 8
-            if m_tonnage < required_tonnage:
-                reasons.append(f"Tonnage {m_tonnage}T < estimated required {required_tonnage:.0f}T")
-
-    elif machine_cat == "laser":
-        m_x = machine.get("max_x") or 0
-        m_y = machine.get("max_y") or 0
-        m_thick = machine.get("max_thickness") or 0
-        j_l = job.get("length", 0) or 0
-        j_w = job.get("width", 0) or 0
-        j_t = job.get("thickness", 0) or 0
-        if j_l > 0 and m_x > 0 and m_x < j_l:
-            reasons.append(f"Laser bed X {m_x}mm < sheet length {j_l}mm")
-        if j_w > 0 and m_y > 0 and m_y < j_w:
-            reasons.append(f"Laser bed Y {m_y}mm < sheet width {j_w}mm")
-        if j_t > 0 and m_thick > 0 and m_thick < j_t:
-            reasons.append(f"Max cutting thickness {m_thick}mm < required {j_t}mm")
-
-    elif machine_cat == "gear":
-        m_dia = machine.get("max_diameter") or 0
-        j_dia = job.get("diameter", 0) or 0
-        if j_dia > 0 and m_dia > 0 and m_dia < j_dia:
-            reasons.append(f"Max gear diameter {m_dia}mm < required {j_dia}mm")
-
-    return {"failed": len(reasons) > 0, "reasons": reasons, "warnings": warnings, "specs": specs}
-
-
-def _extract_machine_specs(machine: dict, machine_cat: str) -> dict:
-    """Extract relevant human-readable specs for display."""
-    specs = {}
-    name = f"{machine.get('machine_type', '')} - {machine.get('brand', '')} {machine.get('model', '')}".strip(" -")
-    specs["machine_name"] = name
-
-    if machine_cat in ("turning", "vtl"):
-        if machine.get("max_diameter"):
-            specs["max_diameter_mm"] = machine["max_diameter"]
-        if machine.get("max_swing"):
-            specs["max_swing_mm"] = machine["max_swing"]
-        if machine.get("max_length"):
-            specs["max_length_mm"] = machine["max_length"]
-    elif machine_cat in ("vmc", "hmc", "milling", "5-axis"):
-        for k in ("max_x", "max_y", "max_z"):
-            if machine.get(k):
-                specs[f"travel_{k[-1].upper()}_mm"] = machine[k]
-        if machine.get("table_size_x"):
-            specs["table_size"] = f"{machine['table_size_x']}x{machine.get('table_size_y', '')}mm"
-    elif machine_cat == "boring":
-        if machine.get("bore_diameter"):
-            specs["bore_diameter_mm"] = machine["bore_diameter"]
-    elif machine_cat == "press_brake":
-        if machine.get("tonnage"):
-            specs["tonnage"] = machine["tonnage"]
-        if machine.get("max_x") or machine.get("max_length"):
-            specs["bending_length_mm"] = machine.get("max_x") or machine.get("max_length")
-    elif machine_cat == "laser":
-        if machine.get("max_x"):
-            specs["bed_x_mm"] = machine["max_x"]
-        if machine.get("max_y"):
-            specs["bed_y_mm"] = machine["max_y"]
-        if machine.get("laser_power"):
-            specs["laser_power_kw"] = machine["laser_power"]
-    elif machine_cat == "gear":
-        if machine.get("max_diameter"):
-            specs["max_gear_diameter_mm"] = machine["max_diameter"]
-        if machine.get("max_module"):
-            specs["max_module"] = machine["max_module"]
-
-    tol = machine.get("tolerance") or machine.get("tolerance_capability")
-    if tol:
-        specs["tolerance_mm"] = tol
-    if machine.get("availability_status"):
-        specs["availability"] = machine["availability_status"]
-
-    return specs
-
-
-def categorize_vendor_match(
-    vendor: dict,
-    machines: list,
-    job_requirements: dict,
-    process_list: list,
-) -> dict:
+        "unverified_reasons": [],
+        "specs_checked": {}
+      }
     """
-    Run strict validation across ALL of a vendor's machines for the given job.
+    rules = _get_dimension_rules(operation)
+    if not rules:
+        return {"passed": True, "fail_reasons": [], "unverified_reasons": [], "specs_checked": {}}
+
+    fail_reasons = []
+    unverified_reasons = []
+    specs_checked = {}
+    has_any_unverifiable = False
+
+    for rule in rules:
+        # Get job requirement value
+        job_val = job.get(rule["job_field"], 0) or 0
+        if not job_val and rule.get("job_fallback"):
+            job_val = job.get(rule["job_fallback"], 0) or 0
+
+        if not job_val or float(job_val) <= 0:
+            continue  # No requirement for this dimension -> skip
+
+        job_val = float(job_val)
+        required = job_val * CLEARANCE_FACTOR
+
+        # Get machine spec value (try multiple fields)
+        machine_val = 0
+        spec_field_used = None
+        for mf in rule["machine_fields"]:
+            v = machine.get(mf, 0) or 0
+            try:
+                v = float(v)
+            except (ValueError, TypeError):
+                v = 0
+            if v > 0:
+                machine_val = v
+                break
+
+        label = rule["label"]
+        if machine_val > 0:
+            specs_checked[label] = machine_val
+            if machine_val < required:
+                fail_reasons.append(
+                    f"{label}: machine {machine_val:.0f}mm < required {required:.0f}mm "
+                    f"(part {job_val:.0f}mm + 10% clearance)"
+                )
+            # else: passes
+        else:
+            # Machine spec missing for this dimension -> cannot verify
+            has_any_unverifiable = True
+            unverified_reasons.append(
+                f"{label}: spec not provided, cannot verify for {job_val:.0f}mm requirement"
+            )
+
+    if fail_reasons:
+        return {"passed": False, "fail_reasons": fail_reasons, "unverified_reasons": [], "specs_checked": specs_checked}
+    if has_any_unverifiable:
+        return {"passed": None, "fail_reasons": [], "unverified_reasons": unverified_reasons, "specs_checked": specs_checked}
+    return {"passed": True, "fail_reasons": [], "unverified_reasons": [], "specs_checked": specs_checked}
+
+
+# =====================================================================
+# 7. TOLERANCE GATE
+# =====================================================================
+def _check_tolerance_gate(machine: dict, required_tolerance: float) -> dict:
+    """Hard gate for tolerance. Returns {passed, reason}."""
+    if not required_tolerance or required_tolerance <= 0:
+        return {"passed": True, "reason": None}
+
+    machine_it = _machine_achievable_it(machine)
+    required_it = _tolerance_to_it_grade(required_tolerance)
+
+    if machine_it > required_it:
+        return {
+            "passed": False,
+            "reason": (
+                f"Machine achieves ~IT{machine_it}, job requires ~IT{required_it} "
+                f"(+/-{required_tolerance}mm)"
+            ),
+        }
+    return {"passed": True, "reason": None}
+
+
+# =====================================================================
+# 8. WEIGHT GATE
+# =====================================================================
+def _check_weight_gate(machine: dict, weight_kg: float) -> dict:
+    if not weight_kg or weight_kg <= 0:
+        return {"passed": True, "reason": None}
+    max_w = machine.get("max_weight") or machine.get("table_load_capacity") or 0
+    try:
+        max_w = float(max_w)
+    except (ValueError, TypeError):
+        max_w = 0
+    if max_w <= 0:
+        return {"passed": True, "reason": None}  # No spec -> can't gate
+    if max_w < weight_kg * 1.2:
+        return {
+            "passed": False,
+            "reason": f"Part weight {weight_kg}kg exceeds machine capacity {max_w}kg",
+        }
+    return {"passed": True, "reason": None}
+
+
+# =====================================================================
+# 9. SINGLE OPERATION VALIDATION (core per-machine per-operation check)
+# =====================================================================
+def validate_machine_for_operation(machine: dict, operation: str, job: dict) -> dict:
+    """
+    Validate ONE machine against ONE operation with hard gates.
 
     Returns:
         {
-            "category": "fully_capable" | "unverified" | "wrong_type" | "too_small",
-            "best_machines": [...],       # machines that passed
-            "unverified_machines": [...],  # right type, missing specs
-            "failed_machines": [...],      # with fail reasons
-            "coverage_pct": float,         # % of processes this vendor can cover
-            "validation_details": [...]    # per-machine validation results
+            "result": "capable" | "unverified" | "too_small" | "wrong_type" | "tolerance_fail",
+            "machine_id": str,
+            "machine_name": str,
+            "operation": str,
+            "fail_reasons": [],
+            "unverified_reasons": [],
+            "specs": {},
         }
     """
-    best_machines = []
-    unverified_machines = []
-    failed_machines = []
-    all_validations = []
+    mt = (machine.get("machine_type") or "").lower()
+    machine_name = f"{machine.get('machine_type', '')} - {machine.get('brand', '')} {machine.get('model', '')}".strip(" -")
+    machine_id = machine.get("machine_id", "")
 
-    # If no specific processes, infer from geometry
-    if not process_list:
-        geom = job_requirements.get("part_geometry", "")
-        process_list = _infer_processes_from_geometry(geom)
-
-    processes_covered = set()
-
-    for machine in machines:
-        if not machine.get("is_active", True):
-            continue
-
-        machine_id = machine.get("machine_id", "")
-
-        # Check each required process
-        for proc in process_list:
-            proc_key = proc.lower().replace(" ", "_")
-            vresult = validate_machine_for_job(machine, {**job_requirements, "process": proc_key})
-            vresult["process"] = proc
-            vresult["machine_id"] = machine_id
-            vresult["machine_type"] = machine.get("machine_type", "")
-            vresult["machine_name"] = f"{machine.get('machine_type', '')} - {machine.get('brand', '')} {machine.get('model', '')}".strip(" -")
-            all_validations.append(vresult)
-
-            if vresult["can_perform"] is True:
-                processes_covered.add(proc_key)
-                if machine_id not in [m.get("machine_id") for m in best_machines]:
-                    best_machines.append({
-                        "machine_id": machine_id,
-                        "machine_name": vresult["machine_name"],
-                        "machine_type": machine.get("machine_type", ""),
-                        "specs": vresult["machine_specs"],
-                        "confidence": vresult["confidence"],
-                        "availability": machine.get("availability_status", "unknown"),
-                        "processes_covered": [proc],
-                    })
-                else:
-                    for bm in best_machines:
-                        if bm["machine_id"] == machine_id:
-                            bm["processes_covered"].append(proc)
-                            break
-
-            elif vresult["can_perform"] is None:
-                # Unverified
-                if machine_id not in [m.get("machine_id") for m in unverified_machines]:
-                    unverified_machines.append({
-                        "machine_id": machine_id,
-                        "machine_name": vresult["machine_name"],
-                        "machine_type": machine.get("machine_type", ""),
-                        "specs": vresult["machine_specs"],
-                        "warnings": vresult["warnings"],
-                        "processes": [proc],
-                    })
-                else:
-                    for um in unverified_machines:
-                        if um["machine_id"] == machine_id:
-                            um["processes"].append(proc)
-                            break
-            else:
-                failed_machines.append({
-                    "machine_id": machine_id,
-                    "machine_name": vresult["machine_name"],
-                    "machine_type": machine.get("machine_type", ""),
-                    "process": proc,
-                    "category": vresult["category"],
-                    "fail_reasons": vresult["fail_reasons"],
-                    "specs": vresult["machine_specs"],
-                })
-
-    # Determine overall category
-    coverage = len(processes_covered) / len(process_list) * 100 if process_list else 0
-
-    if best_machines and coverage >= 50:
-        category = "fully_capable"
-    elif unverified_machines and not best_machines:
-        category = "unverified"
-    elif failed_machines and not best_machines and not unverified_machines:
-        # Distinguish wrong_type vs too_small
-        wrong_types = [f for f in failed_machines if f["category"] == "wrong_type"]
-        if len(wrong_types) == len(failed_machines):
-            category = "wrong_type"
-        else:
-            category = "too_small"
-    elif best_machines:
-        category = "fully_capable"
-    else:
-        category = "wrong_type"
-
-    return {
-        "category": category,
-        "best_machines": best_machines,
-        "unverified_machines": unverified_machines,
-        "failed_machines": failed_machines[:5],  # limit
-        "coverage_pct": round(coverage, 1),
-        "validation_details": all_validations,
-        "has_complete_specs": all(has_complete_specs(m) for m in machines if m.get("is_active", True)),
+    base = {
+        "machine_id": machine_id,
+        "machine_name": machine_name,
+        "machine_type": machine.get("machine_type", ""),
+        "operation": operation,
+        "fail_reasons": [],
+        "unverified_reasons": [],
+        "specs": {},
+        "availability": machine.get("availability_status", "unknown"),
     }
 
+    # Gate 1: Machine type compatibility
+    if not _machine_can_do_operation(mt, operation):
+        base["result"] = "wrong_type"
+        base["fail_reasons"].append(
+            f"{machine.get('machine_type', mt)} cannot perform '{operation}'"
+        )
+        return base
 
-def _infer_processes_from_geometry(geometry: str) -> list:
-    """Infer required processes from part geometry when not explicitly provided."""
+    # Gate 2: Dimension check
+    dim_check = _check_dimension_gate(machine, job, operation)
+    base["specs"] = dim_check["specs_checked"]
+
+    if dim_check["passed"] is False:
+        base["result"] = "too_small"
+        base["fail_reasons"] = dim_check["fail_reasons"]
+        return base
+
+    if dim_check["passed"] is None:
+        base["result"] = "unverified"
+        base["unverified_reasons"] = dim_check["unverified_reasons"]
+        return base
+
+    # Gate 3: Tolerance check
+    tol_check = _check_tolerance_gate(machine, job.get("tolerance", 0))
+    if not tol_check["passed"]:
+        base["result"] = "tolerance_fail"
+        base["fail_reasons"].append(tol_check["reason"])
+        return base
+
+    # Gate 4: Weight check
+    wt_check = _check_weight_gate(machine, job.get("weight_kg", 0))
+    if not wt_check["passed"]:
+        base["result"] = "too_small"
+        base["fail_reasons"].append(wt_check["reason"])
+        return base
+
+    # All gates passed
+    base["result"] = "capable"
+    return base
+
+
+# =====================================================================
+# 10. NORMALIZE PROCESS NAMES
+# =====================================================================
+_PROCESS_ALIASES = {
+    "cnc turning": "turning",
+    "cnc lathe": "turning",
+    "lathe work": "turning",
+    "cnc milling": "milling",
+    "face milling": "milling",
+    "pocket milling": "milling",
+    "profile milling": "milling",
+    "slot milling": "milling",
+    "end milling": "milling",
+    "5-axis machining": "5axis",
+    "5 axis machining": "5axis",
+    "5-axis milling": "5axis",
+    "surface grinding": "surface_grinding",
+    "cylindrical grinding": "cylindrical_grinding",
+    "centerless grinding": "cylindrical_grinding",
+    "od grinding": "cylindrical_grinding",
+    "id grinding": "cylindrical_grinding",
+    "keyway cutting": "keyway",
+    "keyway milling": "keyway",
+    "broaching": "broaching",
+    "wire edm": "edm_wire",
+    "wire cut": "edm_wire",
+    "wire cut edm": "edm_wire",
+    "sink edm": "edm_sink",
+    "die sink edm": "edm_sink",
+    "spark erosion": "edm_sink",
+    "external threading": "threading_external",
+    "internal threading": "threading_internal",
+    "tapping": "threading_internal",
+    "thread cutting": "threading_external",
+    "laser cutting": "laser_cutting",
+    "plasma cutting": "laser_cutting",
+    "waterjet cutting": "laser_cutting",
+    "sheet metal work": "sheet_metal",
+    "press brake bending": "bending",
+    "bending": "bending",
+    "welding": "welding",
+    "fabrication": "welding",
+    "heat treatment": "heat_treatment",
+    "hardening": "heat_treatment",
+    "tempering": "heat_treatment",
+    "annealing": "heat_treatment",
+    "gear hobbing": "gear_cutting",
+    "gear shaping": "gear_cutting",
+    "gear cutting": "gear_cutting",
+    "boring": "boring",
+    "drilling": "drilling",
+    "deep hole drilling": "drilling",
+    "reaming": "boring",
+}
+
+
+def normalize_operation(raw_process: str) -> str:
+    """Normalize a raw process string to a standard operation key."""
+    p = raw_process.lower().strip()
+    if p in OPERATION_MACHINE_MAP:
+        return p
+    if p in _PROCESS_ALIASES:
+        return _PROCESS_ALIASES[p]
+    # Fuzzy match
+    for alias, op in _PROCESS_ALIASES.items():
+        if alias in p or p in alias:
+            return op
+    # Try keyword detection
+    if "turn" in p or "lathe" in p:
+        return "turning"
+    if "mill" in p:
+        return "milling"
+    if "grind" in p:
+        return "grinding"
+    if "drill" in p:
+        return "drilling"
+    if "bore" in p or "boring" in p:
+        return "boring"
+    if "weld" in p or "fabricat" in p:
+        return "welding"
+    if "edm" in p:
+        return "edm_wire"
+    if "laser" in p or "cut" in p:
+        return "laser_cutting"
+    if "sheet" in p or "press" in p or "bend" in p:
+        return "sheet_metal"
+    if "heat" in p or "harden" in p or "temper" in p:
+        return "heat_treatment"
+    if "gear" in p or "hob" in p:
+        return "gear_cutting"
+    if "5.axis" in p or "5-axis" in p or "5 axis" in p:
+        return "5axis"
+    if "thread" in p or "tap" in p:
+        return "threading_external"
+    if "key" in p or "slot" in p:
+        return "keyway"
+    if "broach" in p:
+        return "broaching"
+    if "face" in p or "facing" in p:
+        return "facing"
+    if "deburr" in p or "chamfer" in p:
+        return "milling"  # Deburring/chamfering = milling operation
+    if "forg" in p:
+        return "milling"  # Forging prep typically needs milling post-process
+    if "profil" in p:
+        return "milling"  # Profiling = milling operation
+    return p  # Return as-is if no match
+
+
+# =====================================================================
+# 11. INFER OPERATIONS FROM PART GEOMETRY (fallback)
+# =====================================================================
+def infer_operations_from_geometry(geometry: str, job: dict) -> list:
+    """When AI doesn't detect specific processes, infer from geometry."""
     mapping = {
         "cylindrical": ["turning"],
         "conical": ["turning"],
@@ -690,4 +702,283 @@ def _infer_processes_from_geometry(geometry: str) -> list:
         "sheet_metal": ["sheet_metal"],
         "spherical": ["turning"],
     }
-    return mapping.get(geometry, ["milling"])
+    ops = mapping.get(geometry, ["milling"])
+
+    # If tolerance is tight, likely needs grinding
+    tol = job.get("tolerance", 0)
+    if tol and float(tol) <= 0.02:
+        if geometry in ("cylindrical", "conical", "tube_pipe"):
+            if "cylindrical_grinding" not in ops:
+                ops.append("cylindrical_grinding")
+        else:
+            if "surface_grinding" not in ops:
+                ops.append("surface_grinding")
+
+    return ops
+
+
+# =====================================================================
+# 12. MAIN: VALIDATE ALL VENDOR MACHINES AGAINST ALL OPERATIONS
+# =====================================================================
+def validate_vendor_strict(
+    vendor: dict,
+    machines: list,
+    job: dict,
+    operations: list,
+) -> dict:
+    """
+    Run strict physics-based validation for a vendor across ALL required operations.
+
+    Args:
+        vendor: Vendor document (vendor_id, company_name, etc.)
+        machines: List of machine documents for this vendor
+        job: Job requirements dict (length, width, height, diameter, tolerance, etc.)
+        operations: List of normalized operation strings
+
+    Returns:
+        {
+            "category": "confirmed_capable" | "likely_capable" | "partial_match"
+                       | "excluded_too_small" | "excluded_wrong_type",
+            "operations_summary": {
+                "operation_name": {
+                    "status": "capable" | "unverified" | "too_small" | "wrong_type",
+                    "best_machine": {...} or None,
+                    "all_candidates": [...]
+                }
+            },
+            "capable_operations": [...],
+            "unverified_operations": [...],
+            "failed_operations": [...],
+            "coverage_pct": float,
+            "best_machines": [...],
+            "unverified_machines": [...],
+            "failed_machines": [...],
+        }
+    """
+    if not operations:
+        operations = ["milling"]  # Default fallback
+
+    active_machines = [m for m in machines if m.get("is_active", True)]
+    if not active_machines:
+        return _empty_result("excluded_wrong_type", operations)
+
+    operations_summary = {}
+    capable_ops = []
+    unverified_ops = []
+    failed_ops = []
+    best_machines_map = {}  # machine_id -> machine info
+    unverified_machines_map = {}
+    failed_machines_list = []
+
+    for op in operations:
+        op_results = []
+        best_for_op = None
+        best_status = "wrong_type"  # worst status
+
+        for machine in active_machines:
+            result = validate_machine_for_operation(machine, op, job)
+            op_results.append(result)
+
+            # Track the best result for this operation
+            if result["result"] == "capable":
+                if best_status != "capable":
+                    best_status = "capable"
+                    best_for_op = result
+                elif best_for_op is None:
+                    best_for_op = result
+            elif result["result"] == "unverified" and best_status not in ("capable",):
+                best_status = "unverified"
+                if best_for_op is None or best_for_op["result"] not in ("capable",):
+                    best_for_op = result
+            elif result["result"] == "too_small" and best_status not in ("capable", "unverified"):
+                best_status = "too_small"
+                if best_for_op is None or best_for_op["result"] not in ("capable", "unverified"):
+                    best_for_op = result
+            elif result["result"] == "tolerance_fail" and best_status not in ("capable", "unverified"):
+                best_status = "tolerance_fail"
+                if best_for_op is None or best_for_op["result"] not in ("capable", "unverified"):
+                    best_for_op = result
+
+        operations_summary[op] = {
+            "status": best_status,
+            "best_machine": _sanitize_machine_result(best_for_op) if best_for_op else None,
+            "candidates_checked": len(op_results),
+        }
+
+        if best_status == "capable":
+            capable_ops.append(op)
+            if best_for_op:
+                mid = best_for_op["machine_id"]
+                if mid not in best_machines_map:
+                    best_machines_map[mid] = {
+                        "machine_id": mid,
+                        "machine_name": best_for_op["machine_name"],
+                        "machine_type": best_for_op["machine_type"],
+                        "specs": best_for_op["specs"],
+                        "availability": best_for_op["availability"],
+                        "operations_covered": [op],
+                    }
+                else:
+                    best_machines_map[mid]["operations_covered"].append(op)
+        elif best_status == "unverified":
+            unverified_ops.append(op)
+            if best_for_op:
+                mid = best_for_op["machine_id"]
+                if mid not in unverified_machines_map:
+                    unverified_machines_map[mid] = {
+                        "machine_id": mid,
+                        "machine_name": best_for_op["machine_name"],
+                        "machine_type": best_for_op["machine_type"],
+                        "specs": best_for_op["specs"],
+                        "unverified_reasons": best_for_op["unverified_reasons"],
+                        "operations": [op],
+                    }
+                else:
+                    unverified_machines_map[mid]["operations"].append(op)
+        else:
+            failed_ops.append(op)
+            if best_for_op:
+                failed_machines_list.append({
+                    "machine_name": best_for_op["machine_name"],
+                    "machine_type": best_for_op["machine_type"],
+                    "operation": op,
+                    "result": best_for_op["result"],
+                    "fail_reasons": best_for_op["fail_reasons"],
+                    "specs": best_for_op["specs"],
+                })
+            else:
+                failed_machines_list.append({
+                    "machine_name": "No machine found",
+                    "machine_type": "",
+                    "operation": op,
+                    "result": "wrong_type",
+                    "fail_reasons": [f"No machine in vendor's shop can perform '{op}'"],
+                    "specs": {},
+                })
+
+    # Determine overall category
+    total_ops = len(operations)
+    capable_count = len(capable_ops)
+    unverified_count = len(unverified_ops)
+    coverage = (capable_count / total_ops * 100) if total_ops > 0 else 0
+
+    if capable_count == total_ops:
+        category = "confirmed_capable"
+    elif capable_count + unverified_count == total_ops and capable_count > 0:
+        category = "likely_capable"
+    elif capable_count + unverified_count == total_ops and capable_count == 0:
+        category = "likely_capable"  # All unverified but right types
+    elif capable_count > 0:
+        category = "partial_match"
+    elif unverified_count > 0:
+        category = "likely_capable"
+    else:
+        # All failed - distinguish too_small vs wrong_type
+        too_small_fails = [f for f in failed_machines_list if f["result"] in ("too_small", "tolerance_fail")]
+        if too_small_fails:
+            category = "excluded_too_small"
+        else:
+            category = "excluded_wrong_type"
+
+    return {
+        "category": category,
+        "operations_summary": operations_summary,
+        "capable_operations": capable_ops,
+        "unverified_operations": unverified_ops,
+        "failed_operations": failed_ops,
+        "coverage_pct": round(coverage, 1),
+        "best_machines": list(best_machines_map.values())[:5],
+        "unverified_machines": list(unverified_machines_map.values())[:5],
+        "failed_machines": failed_machines_list[:5],
+        "total_operations": total_ops,
+    }
+
+
+def _sanitize_machine_result(result: dict) -> dict:
+    """Pick only serializable fields from a machine validation result."""
+    return {
+        "machine_id": result.get("machine_id", ""),
+        "machine_name": result.get("machine_name", ""),
+        "machine_type": result.get("machine_type", ""),
+        "result": result.get("result", ""),
+        "fail_reasons": result.get("fail_reasons", []),
+        "unverified_reasons": result.get("unverified_reasons", []),
+        "specs": result.get("specs", {}),
+        "availability": result.get("availability", "unknown"),
+    }
+
+
+def _empty_result(category: str, operations: list) -> dict:
+    return {
+        "category": category,
+        "operations_summary": {op: {"status": "wrong_type", "best_machine": None, "candidates_checked": 0} for op in operations},
+        "capable_operations": [],
+        "unverified_operations": [],
+        "failed_operations": operations,
+        "coverage_pct": 0.0,
+        "best_machines": [],
+        "unverified_machines": [],
+        "failed_machines": [{"machine_name": "No machines", "operation": op, "result": "wrong_type", "fail_reasons": ["Vendor has no active machines"], "specs": {}} for op in operations],
+        "total_operations": len(operations),
+    }
+
+
+# =====================================================================
+# BACKWARD COMPAT: Keep old function signatures working
+# =====================================================================
+def has_complete_specs(machine: dict) -> bool:
+    """Check if a machine has all critical dimension fields filled."""
+    mt = (machine.get("machine_type") or "").lower()
+    cat = _classify_machine_type(mt)
+    critical = {
+        "turning": ["max_length", "max_diameter"],
+        "vtl": ["max_diameter", "max_length"],
+        "vmc": ["max_x", "max_y", "max_z"],
+        "hmc": ["max_x", "max_y", "max_z"],
+        "milling": ["max_x", "max_y", "max_z"],
+        "5axis": ["max_x", "max_y", "max_z"],
+        "boring": ["bore_diameter"],
+        "drilling": ["max_diameter"],
+        "surface_grinder": ["max_x", "max_y"],
+        "cylindrical_grinder": ["max_length", "max_diameter"],
+        "press_brake": ["max_x"],
+        "laser": ["max_x", "max_y"],
+        "gear": ["max_diameter"],
+    }
+    required = critical.get(cat, [])
+    if not required:
+        return True
+    for field in required:
+        val = machine.get(field)
+        if not val or float(val) <= 0:
+            return False
+    return True
+
+
+def categorize_vendor_match(vendor, machines, job_requirements, process_list):
+    """Backward-compatible wrapper around validate_vendor_strict."""
+    ops = [normalize_operation(p) for p in process_list] if process_list else []
+    if not ops:
+        geom = job_requirements.get("part_geometry", "")
+        ops = infer_operations_from_geometry(geom, job_requirements)
+
+    result = validate_vendor_strict(vendor, machines, job_requirements, ops)
+
+    # Map new categories to old ones for compatibility
+    cat_map = {
+        "confirmed_capable": "fully_capable",
+        "likely_capable": "unverified",
+        "partial_match": "fully_capable",
+        "excluded_too_small": "too_small",
+        "excluded_wrong_type": "wrong_type",
+    }
+
+    return {
+        "category": cat_map.get(result["category"], result["category"]),
+        "best_machines": result["best_machines"],
+        "unverified_machines": result["unverified_machines"],
+        "failed_machines": result["failed_machines"],
+        "coverage_pct": result["coverage_pct"],
+        "validation_details": [],
+        "has_complete_specs": all(has_complete_specs(m) for m in machines if m.get("is_active", True)),
+    }

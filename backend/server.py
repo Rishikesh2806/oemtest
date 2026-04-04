@@ -3818,7 +3818,7 @@ async def portfolio_match_vendors(rfq_id: str, user: dict = Depends(get_current_
     if not all_portfolios:
         # No portfolios — fall back to standard match
         logger.info(f"No vendor portfolios for visual match, falling back to standard match for {rfq_id}")
-        return await match_vendors_to_rfq(rfq_id, user)
+        return await match_vendors(rfq_id, user)
     
     # Group by vendor
     vendor_profiles = {}
@@ -3850,7 +3850,7 @@ async def portfolio_match_vendors(rfq_id: str, user: dict = Depends(get_current_
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
         logger.warning("EMERGENT_LLM_KEY not set, falling back to standard match")
-        return await match_vendors_to_rfq(rfq_id, user)
+        return await match_vendors(rfq_id, user)
     
     match_chat = LlmChat(
         api_key=api_key,
@@ -3880,7 +3880,7 @@ Return ONLY a JSON array sorted by score descending:
             ranked = []
     except Exception as e:
         logger.error(f"Portfolio matching AI failed: {e}")
-        return await match_vendors_to_rfq(rfq_id, user)
+        return await match_vendors(rfq_id, user)
     
     # Save matched vendors to RFQ
     matched_vendors = []
@@ -7753,10 +7753,13 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     matched_vendors.sort(key=lambda x: x["suitability_score"], reverse=True)
     matched_vendors = matched_vendors[:10]  # Top 10
     
-    # ============== STRICT MACHINE VALIDATION (Phase 2) ==============
-    # Run physics-based validation on matched vendors and also capture
-    # rejected vendors that have right type but missing specs (unverified)
-    from app.services.machine_validation import categorize_vendor_match, has_complete_specs as _has_complete_specs
+    # ============== STRICT MACHINE VALIDATION ENGINE (v2.0) ==============
+    # Physics-based hard gates — NOT scoring penalties.
+    # Multi-operation decomposition: each operation validated independently.
+    from app.services.machine_validation import (
+        validate_vendor_strict, normalize_operation, 
+        infer_operations_from_geometry, has_complete_specs as _has_complete_specs
+    )
     
     job_req = {
         "length": part_length,
@@ -7769,26 +7772,46 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         "weight_kg": part_weight,
         "part_geometry": part_geometry,
     }
-    detected_proc_list = list(set(recommended_processes + detected_processes))
+    
+    # Build operations list from AI + keyword detection
+    raw_proc_list = list(set(recommended_processes + detected_processes))
+    operations = [normalize_operation(p) for p in raw_proc_list if p]
+    operations = list(dict.fromkeys(operations))  # dedupe, preserve order
+    if not operations:
+        operations = infer_operations_from_geometry(part_geometry, job_req)
+    
+    logger.info(f"Strict validation: operations={operations}, job_req dims=L{part_length}xW{part_width}xH{part_height} dia={part_diameter}")
     
     # Enrich matched vendors with strict validation
     for mv in matched_vendors:
         v_machines = await db.machines.find(
             {"vendor_id": mv["vendor_id"], "is_active": True}, {"_id": 0}
         ).to_list(50)
-        validation = categorize_vendor_match(
-            {"vendor_id": mv["vendor_id"]}, v_machines, job_req, detected_proc_list
+        validation = validate_vendor_strict(
+            {"vendor_id": mv["vendor_id"]}, v_machines, job_req, operations
         )
-        mv["validation_category"] = validation["category"]
+        mv["strict_category"] = validation["category"]
+        mv["validation_category"] = validation["category"]  # backward compat
         mv["validation_coverage"] = validation["coverage_pct"]
+        mv["operations_summary"] = validation["operations_summary"]
+        mv["capable_operations"] = validation["capable_operations"]
+        mv["unverified_operations"] = validation["unverified_operations"]
+        mv["failed_operations"] = validation["failed_operations"]
         mv["validated_machines"] = validation["best_machines"][:3]
         mv["unverified_machines"] = validation["unverified_machines"][:3]
         mv["failed_machines"] = validation["failed_machines"][:3]
-        mv["has_complete_specs"] = validation["has_complete_specs"]
+        mv["total_operations"] = validation["total_operations"]
+        mv["has_complete_specs"] = all(_has_complete_specs(m) for m in v_machines if m.get("is_active", True))
     
-    # Also check approved vendors that were REJECTED by the old scoring —
-    # find ones that have the right machine type but were excluded (unverified category)
-    unverified_vendors = []
+    # Separate matched vendors into strict buckets
+    confirmed_vendors = [v for v in matched_vendors if v.get("strict_category") == "confirmed_capable"]
+    likely_vendors = [v for v in matched_vendors if v.get("strict_category") == "likely_capable"]
+    partial_vendors = [v for v in matched_vendors if v.get("strict_category") == "partial_match"]
+    
+    # Also check approved vendors that were REJECTED by scoring —
+    # they may still be "likely_capable" or "partial_match"
+    extra_likely = []
+    extra_partial = []
     too_small_vendors = []
     wrong_type_vendors = []
     matched_vendor_ids = {v["vendor_id"] for v in matched_vendors}
@@ -7801,41 +7824,60 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
         ).to_list(50)
         if not v_machines:
             continue
-        validation = categorize_vendor_match(vendor, v_machines, job_req, detected_proc_list)
+        validation = validate_vendor_strict(vendor, v_machines, job_req, operations)
         vendor_entry = {
             "vendor_id": vendor["vendor_id"],
+            "user_id": vendor.get("user_id", ""),
             "company_name": vendor.get("company_name", "Unknown"),
             "city": vendor.get("city", ""),
             "state": vendor.get("state", ""),
             "location": f"{vendor.get('city', '')}, {vendor.get('country', '')}",
             "rating": vendor.get("rating", 0),
             "total_jobs": vendor.get("total_jobs", 0),
+            "suitability_score": int(validation["coverage_pct"]) if validation["coverage_pct"] else 0,
+            "strict_category": validation["category"],
             "validation_category": validation["category"],
             "validation_coverage": validation["coverage_pct"],
-            "validated_machines": validation["best_machines"][:2],
-            "unverified_machines": validation["unverified_machines"][:2],
+            "operations_summary": validation["operations_summary"],
+            "capable_operations": validation["capable_operations"],
+            "unverified_operations": validation["unverified_operations"],
+            "failed_operations": validation["failed_operations"],
+            "validated_machines": validation["best_machines"][:3],
+            "unverified_machines": validation["unverified_machines"][:3],
             "failed_machines": validation["failed_machines"][:3],
-            "has_complete_specs": validation["has_complete_specs"],
+            "total_operations": validation["total_operations"],
+            "has_complete_specs": all(_has_complete_specs(m) for m in v_machines if m.get("is_active", True)),
         }
-        if validation["category"] == "unverified":
-            unverified_vendors.append(vendor_entry)
-        elif validation["category"] == "too_small":
+        cat = validation["category"]
+        if cat == "confirmed_capable":
+            confirmed_vendors.append(vendor_entry)
+        elif cat == "likely_capable":
+            extra_likely.append(vendor_entry)
+        elif cat == "partial_match":
+            extra_partial.append(vendor_entry)
+        elif cat == "excluded_too_small":
             too_small_vendors.append(vendor_entry)
-        elif validation["category"] == "wrong_type":
+        elif cat == "excluded_wrong_type":
             wrong_type_vendors.append(vendor_entry)
     
-    # Limit secondary lists
-    unverified_vendors = unverified_vendors[:10]
+    # Merge and limit
+    likely_vendors = likely_vendors + extra_likely
+    partial_vendors = partial_vendors + extra_partial
+    likely_vendors = likely_vendors[:10]
+    partial_vendors = partial_vendors[:10]
     too_small_vendors = too_small_vendors[:10]
     wrong_type_vendors = wrong_type_vendors[:10]
     
     await db.rfqs.update_one(
         {"rfq_id": rfq_id},
         {"$set": {
-            "matched_vendors": matched_vendors,
-            "unverified_vendors": unverified_vendors,
+            "matched_vendors": confirmed_vendors,
+            "likely_vendors": likely_vendors,
+            "partial_vendors": partial_vendors,
+            "unverified_vendors": likely_vendors,  # backward compat
             "too_small_vendors": too_small_vendors,
             "wrong_type_vendors": wrong_type_vendors,
+            "required_operations": operations,
             "match_type": "drawing",
             "status": RFQStatus.MATCHING,
             "updated_at": datetime.now(timezone.utc).isoformat()
@@ -7847,26 +7889,30 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     buyer = await db.users.find_one({"user_id": rfq["buyer_id"]}, {"_id": 0, "name": 1, "company_name": 1})
     buyer_name = buyer.get("name") or buyer.get("company_name", "Buyer") if buyer else "Buyer"
     
-    qualified_vendors = [v for v in matched_vendors if v.get("suitability_score", 0) >= 50]
+    # Combine all notifiable vendors (confirmed + likely + partial with 50%+ score)
+    all_match_results = confirmed_vendors + likely_vendors + partial_vendors
+    qualified_vendors = [v for v in all_match_results if v.get("suitability_score", 0) >= 50]
     
     # Skip ALL notifications for demo users
     _is_demo = user["user_id"] in ["user_demo_buyer_001", "user_demo_vendor_001", "user_demo_vendor_002"]
     if _is_demo:
         return {
-            "message": f"Demo matching complete. Found {len(matched_vendors)} vendor(s).",
-            "matched_vendors": matched_vendors,
-            "total_matched": len(matched_vendors),
-            "qualified_for_notification": len(qualified_vendors),
-            "match_type": "machine_specs"
+            "message": f"Demo matching complete. Found {len(confirmed_vendors)} confirmed, {len(likely_vendors)} likely, {len(partial_vendors)} partial.",
+            "matched_vendors": confirmed_vendors,
+            "likely_vendors": likely_vendors,
+            "partial_vendors": partial_vendors,
+            "total_matched": len(confirmed_vendors),
+            "required_operations": operations,
+            "match_type": "strict_physics"
         }
     
     # Send admin notification for vendor matching
-    top_vendor = matched_vendors[0] if matched_vendors else {}
+    top_vendor = confirmed_vendors[0] if confirmed_vendors else (likely_vendors[0] if likely_vendors else {})
     asyncio.create_task(send_admin_notification("vendor_matching", {
         "rfq_id": rfq_id,
         "rfq_title": rfq.get("title", "Untitled"),
         "buyer_name": buyer_name,
-        "matched_count": len(matched_vendors),
+        "matched_count": len(confirmed_vendors),
         "top_vendor": top_vendor.get("company_name", "N/A"),
         "top_score": top_vendor.get("suitability_score", 0)
     }))
@@ -7983,20 +8029,25 @@ _Team OEMLinker_"""
                     ))
     
     return {
-        "matched_vendors": matched_vendors, 
-        "total_matches": len(matched_vendors),
+        "matched_vendors": confirmed_vendors, 
+        "likely_vendors": likely_vendors,
+        "partial_vendors": partial_vendors,
+        "total_matches": len(confirmed_vendors),
+        "total_likely": len(likely_vendors),
+        "total_partial": len(partial_vendors),
         "vendors_notified": len(qualified_vendors),
         "notification_threshold": "50%",
         "dimensions_from_text": dimensions_from_text,
         "text_extracted_dimensions": text_dims if dimensions_from_text else None,
+        "required_operations": operations,
         # Urgency info
         "rfq_urgency": rfq_urgency,
         "urgency_applied": is_urgent_rfq,
         "availability_prioritized": is_urgent_rfq,
-        # Strict validation categories
-        "unverified_vendors": unverified_vendors,
+        # Excluded vendor categories
         "too_small_vendors": too_small_vendors,
         "wrong_type_vendors": wrong_type_vendors,
+        "match_engine": "strict_physics_v2",
     }
 
 @api_router.post("/rfqs/{rfq_id}/submit")
