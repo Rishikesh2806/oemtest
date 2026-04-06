@@ -5911,10 +5911,19 @@ async def view_drawing(drawing_id: str, token: Optional[str] = None, request: Re
     )
 
 @api_router.get("/drawings/{drawing_id}/download")
-async def download_drawing(drawing_id: str, user: dict = Depends(get_current_user)):
+async def download_drawing(drawing_id: str, token: Optional[str] = None, request: Request = None, user: dict = Depends(get_current_user_optional)):
     """Download the drawing file as attachment - supports S3 storage and legacy base64"""
     from app.services.s3_storage_service import download_file
     from fastapi.responses import RedirectResponse
+    
+    # Support token via query param (for PDF download links)
+    if not user and token:
+        try:
+            user = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        except Exception:
+            pass
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
     
     drawing = await db.drawings.find_one({"drawing_id": drawing_id}, {"_id": 0})
     if not drawing:
@@ -11472,9 +11481,11 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
         s3_path = drawing.get("s3_path")
         if s3_path:
             try:
-                drawing["file_url"] = get_presigned_url(s3_path, expiration=86400)  # 24 hours for PDF links
-            except:
+                drawing["file_url"] = get_presigned_url(s3_path, expiration=86400)
+            except Exception:
                 drawing["file_url"] = drawing.get("s3_url", "")
+        elif drawing.get("s3_url"):
+            drawing["file_url"] = drawing["s3_url"]
     
     # Get AI analysis
     ai_analysis = rfq.get("ai_analysis") or {}
@@ -11752,6 +11763,9 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
         elements.append(Spacer(1, 6*mm))
     
     # ===== ATTACHMENTS / DRAWINGS =====
+    app_url = request.query_params.get("app_base") or os.environ.get("APP_URL") or "https://oemlinker.com"
+    logger.info(f"PDF generation: {len(drawings)} drawings found for {rfq_id}")
+    
     if drawings:
         elements.append(Paragraph(f'ATTACHMENTS ({len(drawings)})', section_header_style))
         elements.append(HRFlowable(width="100%", thickness=0.5, color=SLATE_200, spaceBefore=0, spaceAfter=6))
@@ -11761,21 +11775,28 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
             file_type = drawing.get("file_type") or "File"
             file_size = drawing.get("file_size") or 0
             file_size_str = f"{file_size / 1024:.1f} KB" if file_size > 0 else ""
-            file_url = drawing.get("file_url") or ""
+            drawing_id = drawing.get("drawing_id") or ""
             
-            # Create attachment row
+            # Build absolute download URL
+            download_url = ""
+            if drawing.get("file_url") and drawing["file_url"].startswith("http"):
+                download_url = drawing["file_url"]
+            elif drawing_id:
+                download_url = f"{app_url}/api/drawings/{drawing_id}/download"
+            
             attach_text = f'<b>{i}. {filename}</b>'
             if file_size_str:
-                attach_text += f' <font size="8" color="#64748b">({file_size_str})</font>'
+                attach_text += f' <font size="8" color="#64748b">({file_type} - {file_size_str})</font>'
+            else:
+                attach_text += f' <font size="8" color="#64748b">({file_type})</font>'
             
             elements.append(Paragraph(attach_text, value_style))
             
-            if file_url:
-                # Truncate long URLs for display
-                display_url = file_url[:80] + "..." if len(file_url) > 80 else file_url
+            if download_url:
+                dl_style = ParagraphStyle('DLLink', fontSize=9, textColor=ORANGE, fontName='Helvetica-Bold', leftIndent=10, spaceAfter=2)
                 elements.append(Paragraph(
-                    f'<link href="{file_url}"><font color="#f97316" size="8">View/Download: {display_url}</font></link>',
-                    ParagraphStyle('AttachLink', fontSize=8, textColor=SLATE_500, leftIndent=10)
+                    f'<link href="{download_url}"><font color="#f97316">Download Drawing</font></link>',
+                    dl_style
                 ))
             elements.append(Spacer(1, 2*mm))
         
