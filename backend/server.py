@@ -5886,12 +5886,18 @@ async def view_drawing(drawing_id: str, token: Optional[str] = None, request: Re
         "jpg": "image/jpeg",
         "jpeg": "image/jpeg",
         "pdf": "application/pdf",
+        "application/pdf": "application/pdf",
+        "image/png": "image/png",
+        "image/jpeg": "image/jpeg",
+        "image/jpg": "image/jpeg",
+        "image/gif": "image/gif",
+        "image/webp": "image/webp",
         "step": "application/step",
         "stp": "application/step",
         "dxf": "application/dxf",
         "dwg": "application/dwg"
     }
-    content_type = content_type_map.get(file_type.lower(), "application/octet-stream")
+    content_type = content_type_map.get(file_type.lower(), file_type if "/" in file_type else "application/octet-stream")
     
     filename = drawing.get("filename", f"drawing.{file_type}")
     
@@ -11328,26 +11334,39 @@ async def admin_get_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
         {"_id": 0, "name": 1, "email": 1, "phone": 1, "company_name": 1, "city": 1, "state": 1, "country": 1}
     )
     
-    # Get drawings with fresh presigned URLs
-    drawings = await db.drawings.find({"rfq_id": rfq_id}, {"_id": 0, "file_data": 0}).to_list(20)
+    # Get drawings — check which ones have file_data stored
+    drawings_raw = await db.drawings.find(
+        {"rfq_id": rfq_id}, 
+        {"_id": 0, "file_data": 0}
+    ).to_list(20)
+    
+    # Also check which drawing_ids have file_data (without loading the actual data)
+    drawing_ids_with_data = set()
+    if drawings_raw:
+        for d in drawings_raw:
+            did = d.get("drawing_id")
+            has_data = await db.drawings.find_one(
+                {"drawing_id": did, "file_data": {"$exists": True, "$ne": None, "$ne": ""}},
+                {"_id": 0, "drawing_id": 1}
+            )
+            if has_data:
+                drawing_ids_with_data.add(did)
+    
+    drawings = drawings_raw
     
     # Generate fresh presigned URLs for drawings
     from app.services.s3_storage_service import get_presigned_url
     for drawing in drawings:
         try:
-            # Get the S3 path from the drawing
             s3_path = drawing.get("s3_path")
             
             if s3_path:
-                # Generate fresh presigned URL (valid for 1 hour)
                 presigned_url = get_presigned_url(s3_path, expiration=3600)
                 drawing["file_url"] = presigned_url
                 drawing["view_url"] = presigned_url
                 drawing["download_url"] = presigned_url
             elif drawing.get("s3_url"):
-                # Extract S3 key from full URL and generate presigned URL
                 s3_url = drawing.get("s3_url")
-                # Parse URL to get key: https://bucket.s3.region.amazonaws.com/path/to/file
                 if ".amazonaws.com/" in s3_url:
                     s3_key = s3_url.split(".amazonaws.com/")[1]
                     presigned_url = get_presigned_url(s3_key, expiration=3600)
@@ -11358,16 +11377,30 @@ async def admin_get_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
                     drawing["file_url"] = s3_url
                     drawing["view_url"] = s3_url
                     drawing["download_url"] = s3_url
+            elif drawing.get("drawing_id") in drawing_ids_with_data:
+                # Legacy base64 stored drawings — serve via the view endpoint
+                did = drawing.get("drawing_id")
+                drawing["file_url"] = f"/api/drawings/{did}/view"
+                drawing["view_url"] = f"/api/drawings/{did}/view"
+                drawing["download_url"] = f"/api/drawings/{did}/download"
             
             # Determine if file is previewable (image or PDF)
             file_type = drawing.get("file_type", "").lower()
-            drawing["is_previewable"] = file_type in ["image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"]
-            drawing["is_image"] = file_type.startswith("image/")
-            drawing["is_pdf"] = file_type == "application/pdf"
+            filename_lower = drawing.get("filename", "").lower()
+            drawing["is_image"] = (
+                file_type.startswith("image/") or 
+                file_type in ("png", "jpg", "jpeg", "gif", "webp") or
+                any(filename_lower.endswith(ext) for ext in (".png", ".jpg", ".jpeg", ".gif", ".webp"))
+            )
+            drawing["is_pdf"] = (
+                file_type == "application/pdf" or 
+                file_type == "pdf" or
+                filename_lower.endswith(".pdf")
+            )
+            drawing["is_previewable"] = drawing["is_image"] or drawing["is_pdf"]
             
         except Exception as e:
-            logger.warning(f"Failed to generate presigned URL for drawing {drawing.get('drawing_id')}: {e}")
-            # Fallback to stored URL
+            logger.warning(f"Failed to generate URL for drawing {drawing.get('drawing_id')}: {e}")
             drawing["file_url"] = drawing.get("s3_url", "")
     
     # Get quotes
@@ -11395,7 +11428,7 @@ async def admin_get_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
             })
     
     # Get AI analysis summary
-    ai_analysis = rfq.get("ai_analysis", {})
+    ai_analysis = rfq.get("ai_analysis") or {}
     
     return {
         **rfq,

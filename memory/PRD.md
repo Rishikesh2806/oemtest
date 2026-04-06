@@ -1714,6 +1714,12 @@ Complete rewrite of physics-based vendor matching. Multi-operation decomposition
 
 Full multi-operation decomposition & split-vendor matching spec saved at `/app/memory/FEATURE_MULTI_OP_MATCHING.md`
 
+## Changelog (Apr 6, 2026)
+- Fixed PDF/drawing display in admin RFQ detail: removed broken iframe, clean View/Download buttons
+- Fixed drawing file_url generation for legacy base64 stored files (serves via `/api/drawings/{id}/view`)
+- Fixed `file_type` detection for both MIME types and simple extensions (e.g., "pdf" vs "application/pdf")
+- Fixed content-type response in drawing view endpoint to handle both formats
+
 ## Changelog (Apr 4, 2026)
 - Upgraded machine validation engine to v2.0 with strict physics-based hard gates
 - Added multi-operation decomposition (turning + milling + grinding per part)

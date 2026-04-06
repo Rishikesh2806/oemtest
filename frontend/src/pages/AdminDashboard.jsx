@@ -1540,36 +1540,14 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
                   </h4>
                   <div className="space-y-3">
                     {viewRFQData.drawings.map((drawing, i) => {
-                      const isImage = drawing.is_image || drawing.file_type?.startsWith('image/');
-                      const isPdf = drawing.is_pdf || drawing.file_type === 'application/pdf';
-                      const fileUrl = drawing.file_url || drawing.view_url || drawing.s3_url;
+                      const token = localStorage.getItem('token');
+                      let fileUrl = drawing.file_url || drawing.view_url || drawing.s3_url || drawing.download_url;
+                      if (fileUrl && fileUrl.startsWith('/api/')) {
+                        fileUrl = `${process.env.REACT_APP_BACKEND_URL}${fileUrl}?token=${token}`;
+                      }
                       
                       return (
                         <div key={i} className="bg-slate-50 rounded-lg border overflow-hidden">
-                          {/* Preview for images */}
-                          {isImage && fileUrl && (
-                            <div className="bg-slate-100 p-2 flex justify-center border-b">
-                              <img 
-                                src={fileUrl} 
-                                alt={drawing.filename || `Drawing ${i + 1}`}
-                                className="max-h-40 max-w-full object-contain rounded"
-                                onError={(e) => { e.target.style.display = 'none'; }}
-                              />
-                            </div>
-                          )}
-                          
-                          {/* Preview for PDFs using iframe */}
-                          {isPdf && fileUrl && (
-                            <div className="bg-slate-100 p-2 border-b">
-                              <iframe 
-                                src={fileUrl} 
-                                className="w-full h-48 border rounded"
-                                title={drawing.filename || `Drawing ${i + 1}`}
-                              />
-                            </div>
-                          )}
-                          
-                          {/* File info and actions */}
                           <div className="flex items-center gap-3 p-3">
                             <div className="w-10 h-10 bg-orange-100 rounded flex items-center justify-center flex-shrink-0">
                               <FileText className="w-5 h-5 text-orange-600" />
@@ -1581,7 +1559,7 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
                                 {drawing.file_size && ` • ${(drawing.file_size / 1024).toFixed(1)} KB`}
                               </p>
                             </div>
-                            {fileUrl && (
+                            {fileUrl ? (
                               <div className="flex gap-2">
                                 <a 
                                   href={fileUrl} 
@@ -1601,8 +1579,7 @@ const RFQsTab = ({ rfqs, loading, onRefresh, onUpdateRFQ, onDeleteRFQ, canEdit =
                                   <FileCheck className="w-3.5 h-3.5" /> Download
                                 </a>
                               </div>
-                            )}
-                            {!fileUrl && (
+                            ) : (
                               <span className="text-xs text-red-500">File not available</span>
                             )}
                           </div>
