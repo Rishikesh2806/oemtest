@@ -11544,31 +11544,31 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
     GREEN_50 = colors.HexColor('#f0fdf4')
     GREEN_700 = colors.HexColor('#15803d')
     
-    # Styles
+    # Styles — compact for single-page fit
     styles = getSampleStyleSheet()
     
     logo_style = ParagraphStyle(
-        'Logo', fontSize=22, textColor=ORANGE, fontName='Helvetica-Bold', spaceAfter=0
+        'Logo', fontSize=20, textColor=ORANGE, fontName='Helvetica-Bold', spaceAfter=0
     )
     subtitle_style = ParagraphStyle(
-        'Subtitle', fontSize=10, textColor=SLATE_500, spaceAfter=0
+        'Subtitle', fontSize=9, textColor=SLATE_500, spaceAfter=0
     )
     section_header_style = ParagraphStyle(
-        'SectionHeader', fontSize=11, textColor=SLATE_900, fontName='Helvetica-Bold',
-        spaceBefore=12, spaceAfter=6, leftIndent=0
+        'SectionHeader', fontSize=10, textColor=SLATE_900, fontName='Helvetica-Bold',
+        spaceBefore=6, spaceAfter=3, leftIndent=0
     )
     label_style = ParagraphStyle(
-        'Label', fontSize=9, textColor=SLATE_500, spaceAfter=2
+        'Label', fontSize=8, textColor=SLATE_500, spaceAfter=1
     )
     value_style = ParagraphStyle(
-        'Value', fontSize=10, textColor=SLATE_700, spaceAfter=4, leading=14
+        'Value', fontSize=9, textColor=SLATE_700, spaceAfter=2, leading=12
     )
     value_bold_style = ParagraphStyle(
-        'ValueBold', fontSize=10, textColor=SLATE_900, fontName='Helvetica-Bold', spaceAfter=4
+        'ValueBold', fontSize=9, textColor=SLATE_900, fontName='Helvetica-Bold', spaceAfter=2
     )
     description_style = ParagraphStyle(
-        'Description', fontSize=9, textColor=SLATE_700, leading=13, 
-        spaceAfter=4, wordWrap='LTR', splitLongWords=True
+        'Description', fontSize=8, textColor=SLATE_700, leading=11, 
+        spaceAfter=2, wordWrap='LTR', splitLongWords=True
     )
     link_style = ParagraphStyle(
         'Link', fontSize=9, textColor=ORANGE
@@ -11596,10 +11596,10 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
         ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
     ]))
     elements.append(header_table)
-    elements.append(Spacer(1, 3*mm))
+    elements.append(Spacer(1, 2*mm))
     
     # Header divider
-    elements.append(HRFlowable(width="100%", thickness=1, color=ORANGE, spaceBefore=2, spaceAfter=8))
+    elements.append(HRFlowable(width="100%", thickness=1, color=ORANGE, spaceBefore=1, spaceAfter=4))
     
     # ===== RFQ INFO BAR =====
     rfq_date = rfq.get("created_at", "")
