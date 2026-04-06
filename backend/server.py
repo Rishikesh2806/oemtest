@@ -11477,7 +11477,7 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
                 drawing["file_url"] = drawing.get("s3_url", "")
     
     # Get AI analysis
-    ai_analysis = rfq.get("ai_analysis", {})
+    ai_analysis = rfq.get("ai_analysis") or {}
     
     # Generate PDF using reportlab with improved layout
     from reportlab.lib import colors
@@ -11598,13 +11598,13 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
         except:
             rfq_date = "N/A"
     
-    status = rfq.get("status", "N/A").upper()
+    status = (rfq.get("status") or "N/A").upper()
     status_color = GREEN_700 if status in ["COMPLETED", "QUOTED"] else ORANGE if status == "MATCHING" else SLATE_700
     
     info_data = [[
         Paragraph(f'<b>Date:</b> {rfq_date}', value_style),
         Paragraph(f'<b>Status:</b> <font color="{status_color.hexval()}">{status}</font>', value_style),
-        Paragraph(f'<b>Material:</b> {rfq.get("material_type", "N/A")}', value_style)
+        Paragraph(f'<b>Material:</b> {rfq.get("material_type") or "N/A"}', value_style)
     ]]
     info_table = Table(info_data, colWidths=[60*mm, 60*mm, 60*mm])
     info_table.setStyle(TableStyle([
@@ -11622,12 +11622,12 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
     elements.append(Paragraph('BUYER DETAILS', section_header_style))
     elements.append(HRFlowable(width="100%", thickness=0.5, color=SLATE_200, spaceBefore=0, spaceAfter=6))
     
-    buyer_name = buyer.get("name", "N/A") if buyer else "N/A"
-    buyer_company = buyer.get("company_name", "N/A") if buyer else "N/A"
-    buyer_email = buyer.get("email", "N/A") if buyer else "N/A"
-    buyer_phone = buyer.get("phone", "N/A") if buyer else "N/A"
-    buyer_city = buyer.get("city", "") if buyer else ""
-    buyer_state = buyer.get("state", "") if buyer else ""
+    buyer_name = (buyer.get("name") or "N/A") if buyer else "N/A"
+    buyer_company = (buyer.get("company_name") or "N/A") if buyer else "N/A"
+    buyer_email = (buyer.get("email") or "N/A") if buyer else "N/A"
+    buyer_phone = (buyer.get("phone") or "N/A") if buyer else "N/A"
+    buyer_city = (buyer.get("city") or "") if buyer else ""
+    buyer_state = (buyer.get("state") or "") if buyer else ""
     buyer_location = f"{buyer_city}, {buyer_state}".strip(", ") or "N/A"
     
     buyer_data = [
@@ -11653,15 +11653,15 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
     
     # Part name prominently
     elements.append(Paragraph('Part Name / Title', label_style))
-    elements.append(Paragraph(f'<b>{rfq.get("title", "N/A")}</b>', 
+    elements.append(Paragraph(f'<b>{rfq.get("title") or "N/A"}</b>', 
         ParagraphStyle('PartName', fontSize=14, textColor=SLATE_900, fontName='Helvetica-Bold', spaceAfter=8)))
     
     # Details grid
     rfq_grid_data = [
-        [Paragraph('Quantity', label_style), Paragraph(str(rfq.get("quantity", "N/A")), value_bold_style),
-         Paragraph('Tolerance', label_style), Paragraph(f'{rfq.get("tolerance", "N/A")} mm' if rfq.get("tolerance") else 'N/A', value_style)],
-        [Paragraph('Surface Finish', label_style), Paragraph(rfq.get("surface_finish", "N/A") or 'N/A', value_style),
-         Paragraph('Deadline', label_style), Paragraph(rfq.get("deadline", "As per discussion") or 'As per discussion', value_style)]
+        [Paragraph('Quantity', label_style), Paragraph(str(rfq.get("quantity") or "N/A"), value_bold_style),
+         Paragraph('Tolerance', label_style), Paragraph(f'{rfq.get("tolerance")} mm' if rfq.get("tolerance") else 'N/A', value_style)],
+        [Paragraph('Surface Finish', label_style), Paragraph(rfq.get("surface_finish") or 'N/A', value_style),
+         Paragraph('Deadline', label_style), Paragraph(rfq.get("deadline") or 'As per discussion', value_style)]
     ]
     rfq_grid = Table(rfq_grid_data, colWidths=[30*mm, 55*mm, 30*mm, 55*mm])
     rfq_grid.setStyle(TableStyle([
@@ -11682,7 +11682,7 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
     elements.append(Spacer(1, 6*mm))
     
     # ===== DESCRIPTION / SPECIFICATIONS =====
-    description = rfq.get("description", "").strip()
+    description = (rfq.get("description") or "").strip()
     if description:
         elements.append(Paragraph('DESCRIPTION / SPECIFICATIONS', section_header_style))
         elements.append(HRFlowable(width="100%", thickness=0.5, color=SLATE_200, spaceBefore=0, spaceAfter=6))
@@ -11712,13 +11712,13 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
         tech_content = []
         
         # Recommended Processes
-        processes = ai_analysis.get("recommended_processes", [])
+        processes = ai_analysis.get("recommended_processes") or []
         if processes:
             proc_text = ', '.join(processes[:6])
             tech_content.append([Paragraph('Recommended Processes', label_style), Paragraph(proc_text, value_style)])
         
         # Dimensions
-        dims = ai_analysis.get("overall_dimensions", {})
+        dims = ai_analysis.get("overall_dimensions") or {}
         if dims:
             dim_parts = []
             if dims.get("length"): dim_parts.append(f"L: {dims['length']}mm")
@@ -11729,12 +11729,12 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
                 tech_content.append([Paragraph('Dimensions', label_style), Paragraph(' × '.join(dim_parts), value_style)])
         
         # Part Geometry
-        geometry = ai_analysis.get("part_geometry", "")
+        geometry = ai_analysis.get("part_geometry") or ""
         if geometry:
             tech_content.append([Paragraph('Part Geometry', label_style), Paragraph(geometry, value_style)])
         
         # Complexity
-        complexity = ai_analysis.get("complexity_score", 0)
+        complexity = ai_analysis.get("complexity_score") or 0
         if complexity:
             tech_content.append([Paragraph('Complexity', label_style), Paragraph(f'{complexity}/10', value_style)])
         
@@ -11757,11 +11757,11 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
         elements.append(HRFlowable(width="100%", thickness=0.5, color=SLATE_200, spaceBefore=0, spaceAfter=6))
         
         for i, drawing in enumerate(drawings, 1):
-            filename = drawing.get("filename", drawing.get("original_filename", f"Drawing {i}"))
-            file_type = drawing.get("file_type", "File")
-            file_size = drawing.get("file_size", 0)
+            filename = drawing.get("filename") or drawing.get("original_filename") or f"Drawing {i}"
+            file_type = drawing.get("file_type") or "File"
+            file_size = drawing.get("file_size") or 0
             file_size_str = f"{file_size / 1024:.1f} KB" if file_size > 0 else ""
-            file_url = drawing.get("file_url", "")
+            file_url = drawing.get("file_url") or ""
             
             # Create attachment row
             attach_text = f'<b>{i}. {filename}</b>'
@@ -11782,7 +11782,7 @@ async def admin_generate_rfq_pdf(rfq_id: str, request: Request, user: dict = Dep
         elements.append(Spacer(1, 4*mm))
     
     # ===== NOTES =====
-    notes = rfq.get("notes", "").strip()
+    notes = (rfq.get("notes") or "").strip()
     if notes:
         elements.append(Paragraph('ADDITIONAL NOTES', section_header_style))
         elements.append(HRFlowable(width="100%", thickness=0.5, color=SLATE_200, spaceBefore=0, spaceAfter=6))
