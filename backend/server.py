@@ -8085,6 +8085,138 @@ async def submit_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
     return {"message": "RFQ submitted to vendors", "status": RFQStatus.SUBMITTED}
 
 
+@api_router.post("/rfqs/{rfq_id}/send-to-vendor")
+async def send_rfq_to_vendor(rfq_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """
+    Send RFQ to a specific vendor (e.g. partial match).
+    Moves vendor to matched_vendors, removes from partial/likely lists,
+    and sends email + WhatsApp + in-app notifications.
+    """
+    if user.get("role") not in [UserRole.ADMIN, UserRole.BUYER]:
+        raise HTTPException(status_code=403, detail="Only buyers and admins can send RFQs to vendors")
+    
+    body = await request.json()
+    vendor_id = body.get("vendor_id")
+    if not vendor_id:
+        raise HTTPException(status_code=400, detail="vendor_id is required")
+    
+    rfq = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    # Only buyer who owns the RFQ or admin can send
+    if user.get("role") == UserRole.BUYER and rfq.get("buyer_id") != user["user_id"]:
+        raise HTTPException(status_code=403, detail="Not authorized for this RFQ")
+    
+    # Check if vendor is already in matched_vendors
+    existing_matched = rfq.get("matched_vendors", [])
+    already_matched = any(v.get("vendor_id") == vendor_id for v in existing_matched)
+    if already_matched:
+        return {"success": True, "message": "Vendor already in matched vendors list", "already_matched": True}
+    
+    # Find vendor info from partial_vendors, likely_vendors, or DB
+    vendor_entry = None
+    source_list = None
+    
+    for list_name in ["partial_vendors", "likely_vendors", "unverified_vendors"]:
+        for v in rfq.get(list_name, []):
+            if v.get("vendor_id") == vendor_id:
+                vendor_entry = v
+                source_list = list_name
+                break
+        if vendor_entry:
+            break
+    
+    # If not found in any list, look up the vendor directly
+    vendor_doc = await db.vendors.find_one({"vendor_id": vendor_id}, {"_id": 0})
+    if not vendor_doc:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    if not vendor_entry:
+        vendor_entry = {
+            "vendor_id": vendor_id,
+            "company_name": vendor_doc.get("company_name", "Unknown"),
+            "city": vendor_doc.get("city", ""),
+            "location": f"{vendor_doc.get('city', '')}, {vendor_doc.get('country', '')}",
+            "rating": vendor_doc.get("rating", 0),
+            "total_jobs": vendor_doc.get("total_jobs", 0),
+            "suitability_score": 0,
+        }
+    
+    # Add to matched_vendors
+    now = datetime.now(timezone.utc).isoformat()
+    vendor_entry["sent_manually"] = True
+    vendor_entry["sent_at"] = now
+    vendor_entry["sent_by"] = user["user_id"]
+    
+    update_ops = {
+        "$addToSet": {"matched_vendors": vendor_entry},
+        "$set": {"updated_at": now}
+    }
+    
+    # Remove from source list if found
+    if source_list:
+        update_ops["$pull"] = {source_list: {"vendor_id": vendor_id}}
+        # Also remove from unverified_vendors if source was likely_vendors (backward compat)
+        if source_list == "likely_vendors":
+            # Can't $pull two fields in same update, do separately
+            await db.rfqs.update_one(
+                {"rfq_id": rfq_id},
+                {"$pull": {"unverified_vendors": {"vendor_id": vendor_id}}}
+            )
+    
+    await db.rfqs.update_one({"rfq_id": rfq_id}, update_ops)
+    
+    # Send notifications to the vendor
+    notified = {"email": False, "whatsapp": False, "in_app": False}
+    
+    buyer = await db.users.find_one({"user_id": rfq.get("buyer_id")}, {"_id": 0, "name": 1, "company_name": 1, "email": 1})
+    
+    # Email notification
+    try:
+        await send_vendor_match_notification_email(vendor_doc, rfq, buyer)
+        notified["email"] = True
+    except Exception as e:
+        logger.error(f"Failed to send email to vendor {vendor_id}: {e}")
+    
+    # WhatsApp notification
+    try:
+        if whatsapp_service.is_configured() and vendor_doc.get("phone"):
+            await send_vendor_match_whatsapp(vendor_doc, rfq)
+            notified["whatsapp"] = True
+    except Exception as e:
+        logger.error(f"Failed to send WhatsApp to vendor {vendor_id}: {e}")
+    
+    # In-app notification
+    try:
+        notification = {
+            "notification_id": f"notif_{uuid.uuid4().hex[:12]}",
+            "user_id": vendor_doc.get("user_id"),
+            "type": "rfq_match",
+            "title": "New RFQ Opportunity",
+            "message": f"You have been invited to quote on RFQ: {rfq.get('title', 'Untitled')}",
+            "data": {
+                "rfq_id": rfq_id,
+                "rfq_title": rfq.get("title"),
+                "match_type": "manual_send"
+            },
+            "is_read": False,
+            "created_at": now
+        }
+        await db.notifications.insert_one(notification)
+        notified["in_app"] = True
+    except Exception as e:
+        logger.error(f"Failed to create notification for vendor {vendor_id}: {e}")
+    
+    return {
+        "success": True,
+        "message": f"RFQ sent to {vendor_entry.get('company_name', 'vendor')}",
+        "vendor_id": vendor_id,
+        "notified": notified,
+        "source_list": source_list
+    }
+
+
 # ============== ENHANCED RFQ ANALYSIS & DISTRIBUTION ==============
 
 @api_router.post("/rfq/analyze-and-match")

@@ -4,9 +4,11 @@ import { Button } from "./ui/button";
 import { 
   AlertTriangle, XCircle, ChevronDown, ChevronUp, 
   Building2, MapPin, Star, Cpu, Eye, HelpCircle,
-  CheckCircle, Wrench, Shield
+  CheckCircle, Wrench, Shield, Send, Loader2
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useAuth, api } from "../App";
+import { toast } from "sonner";
 
 const CATEGORY_CONFIG = {
   confirmed_capable: {
@@ -137,7 +139,10 @@ const MachineSpecsDisplay = ({ machines, type }) => {
   );
 };
 
-const VendorRow = ({ vendor, type }) => {
+const VendorRow = ({ vendor, type, onSendRfq, sendingVendorId }) => {
+  const isSending = sendingVendorId === vendor.vendor_id;
+  const wasSent = vendor._sent;
+  
   return (
     <div className="p-3 bg-white rounded-lg border border-slate-200" data-testid={`${type}-vendor-${vendor.vendor_id}`}>
       <div className="flex items-center justify-between">
@@ -161,6 +166,30 @@ const VendorRow = ({ vendor, type }) => {
         <div className="flex items-center gap-2 shrink-0">
           {vendor.validation_coverage > 0 && (
             <span className="text-xs font-medium text-slate-500">{vendor.validation_coverage}% ops</span>
+          )}
+          {/* Send RFQ button for partial and likely vendors */}
+          {(type === "partial" || type === "likely") && onSendRfq && (
+            wasSent ? (
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md px-2.5 py-1.5" data-testid={`sent-badge-${vendor.vendor_id}`}>
+                <CheckCircle className="w-3 h-3" /> Sent
+              </span>
+            ) : (
+              <Button
+                variant="default"
+                size="sm"
+                className="text-xs h-7 bg-orange-600 hover:bg-orange-700 text-white"
+                onClick={() => onSendRfq(vendor.vendor_id)}
+                disabled={isSending}
+                data-testid={`send-rfq-btn-${vendor.vendor_id}`}
+              >
+                {isSending ? (
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                ) : (
+                  <Send className="w-3 h-3 mr-1" />
+                )}
+                Send RFQ
+              </Button>
+            )
           )}
           <Link to={`/vendor-profile/${vendor.vendor_id}`}>
             <Button variant="outline" size="sm" className="text-xs h-7" data-testid={`profile-btn-${vendor.vendor_id}`}>
@@ -188,9 +217,11 @@ const VendorRow = ({ vendor, type }) => {
 export const ExcludedVendorsSection = ({ 
   likelyVendors, partialVendors, 
   unverifiedVendors, tooSmallVendors, wrongTypeVendors,
-  requiredOperations 
+  requiredOperations, rfqId, onVendorSent
 }) => {
   const [openSection, setOpenSection] = useState(null);
+  const [sendingVendorId, setSendingVendorId] = useState(null);
+  const [sentVendorIds, setSentVendorIds] = useState(new Set());
 
   // Support both new and legacy prop names
   const likely = likelyVendors || unverifiedVendors || [];
@@ -198,24 +229,49 @@ export const ExcludedVendorsSection = ({
   const tooSmall = tooSmallVendors || [];
   const wrongType = wrongTypeVendors || [];
 
+  const handleSendRfq = async (vendorId) => {
+    if (!rfqId) return;
+    setSendingVendorId(vendorId);
+    try {
+      const res = await api.post(`/rfqs/${rfqId}/send-to-vendor`, { vendor_id: vendorId });
+      if (res.data.success) {
+        setSentVendorIds(prev => new Set([...prev, vendorId]));
+        toast.success(res.data.message || "RFQ sent to vendor");
+        if (onVendorSent) onVendorSent(vendorId, res.data);
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to send RFQ to vendor");
+    } finally {
+      setSendingVendorId(null);
+    }
+  };
+
+  // Mark vendors already sent
+  const markSent = (vendors) => vendors.map(v => ({
+    ...v,
+    _sent: sentVendorIds.has(v.vendor_id)
+  }));
+
   const sections = [
     {
-      key: "likely",
-      vendors: likely,
-      icon: <AlertTriangle className="w-4 h-4 text-amber-500" />,
-      title: "Likely Capable",
-      subtitle: "Right machine types found but dimension specs not provided. Contact vendor to verify capacity before quoting.",
-      bgHeader: "bg-amber-50 border-amber-200",
-      textColor: "text-amber-700",
-    },
-    {
       key: "partial",
-      vendors: partial,
+      vendors: markSent(partial),
       icon: <Wrench className="w-4 h-4 text-blue-500" />,
       title: "Partial Match",
-      subtitle: "Can handle some required operations but not all. May need to outsource remaining steps.",
+      subtitle: "Can handle some required operations but not all. You can still send the RFQ — vendor may outsource remaining steps.",
       bgHeader: "bg-blue-50 border-blue-200",
       textColor: "text-blue-700",
+      showSendBtn: true,
+    },
+    {
+      key: "likely",
+      vendors: markSent(likely),
+      icon: <AlertTriangle className="w-4 h-4 text-amber-500" />,
+      title: "Likely Capable",
+      subtitle: "Right machine types found but dimension specs not provided. You can send the RFQ to verify capacity.",
+      bgHeader: "bg-amber-50 border-amber-200",
+      textColor: "text-amber-700",
+      showSendBtn: true,
     },
     {
       key: "too_small",
@@ -225,6 +281,7 @@ export const ExcludedVendorsSection = ({
       subtitle: "Right machine type but dimensions are insufficient for this part.",
       bgHeader: "bg-red-50 border-red-200",
       textColor: "text-red-700",
+      showSendBtn: false,
     },
     {
       key: "wrong_type",
@@ -234,11 +291,15 @@ export const ExcludedVendorsSection = ({
       subtitle: "Vendor's machines cannot perform the required operations for this job.",
       bgHeader: "bg-slate-50 border-slate-200",
       textColor: "text-slate-600",
+      showSendBtn: false,
     },
   ];
 
   const activeSections = sections.filter(s => s.vendors.length > 0);
   if (activeSections.length === 0) return null;
+
+  // Auto-open partial section if it has vendors
+  const defaultOpen = partial.length > 0 ? "partial" : null;
 
   return (
     <Card className="border-slate-200 mt-4" data-testid="excluded-vendors-section">
@@ -262,11 +323,11 @@ export const ExcludedVendorsSection = ({
       </CardHeader>
       <CardContent className="space-y-2">
         {activeSections.map(section => {
-          const isOpen = openSection === section.key;
+          const isOpen = openSection === section.key || (openSection === null && section.key === defaultOpen);
           return (
             <div key={section.key} className={`rounded-lg border ${section.bgHeader}`} data-testid={`section-${section.key}`}>
               <button
-                onClick={() => setOpenSection(isOpen ? null : section.key)}
+                onClick={() => setOpenSection(isOpen ? "_closed" : section.key)}
                 className="w-full flex items-center justify-between p-3 text-left"
                 data-testid={`toggle-${section.key}`}
               >
@@ -276,6 +337,11 @@ export const ExcludedVendorsSection = ({
                   <span className="text-xs bg-white border border-slate-200 rounded-full px-2 py-0.5 text-slate-500 font-medium">
                     {section.vendors.length}
                   </span>
+                  {section.showSendBtn && (
+                    <span className="text-[10px] bg-orange-100 text-orange-700 border border-orange-200 rounded-full px-2 py-0.5 font-medium">
+                      Can Send RFQ
+                    </span>
+                  )}
                 </div>
                 {isOpen ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
               </button>
@@ -283,7 +349,13 @@ export const ExcludedVendorsSection = ({
                 <div className="px-3 pb-3 space-y-2">
                   <p className="text-xs text-slate-500 mb-2">{section.subtitle}</p>
                   {section.vendors.map(v => (
-                    <VendorRow key={v.vendor_id} vendor={v} type={section.key} />
+                    <VendorRow 
+                      key={v.vendor_id} 
+                      vendor={v} 
+                      type={section.key}
+                      onSendRfq={section.showSendBtn ? handleSendRfq : null}
+                      sendingVendorId={sendingVendorId}
+                    />
                   ))}
                 </div>
               )}

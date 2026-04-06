@@ -1273,6 +1273,8 @@ const RFQDetail = () => {
             tooSmallVendors={rfq.too_small_vendors}
             wrongTypeVendors={rfq.wrong_type_vendors}
             requiredOperations={rfq.required_operations}
+            rfqId={rfqId}
+            onVendorSent={() => fetchRFQData()}
           />
         )}
 
