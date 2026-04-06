@@ -109,6 +109,11 @@ OPERATION_MACHINE_MAP = {
         "gear hobbing", "gear shaping", "gear grinder", "gear machine",
         "hobbing machine", "gear shaper",
     ],
+    "sawing": [
+        "band saw", "bandsaw", "hacksaw", "power saw", "circular saw",
+        "cold saw", "metal saw", "saw machine", "cutting saw",
+        "horizontal band saw", "vertical band saw",
+    ],
 }
 
 
@@ -148,6 +153,11 @@ def _get_dimension_rules(operation: str) -> list:
                 "job_field": "diameter",
                 "job_fallback": "outer_diameter",
                 "label": "swing/diameter",
+            },
+            {
+                "machine_fields": ["max_length", "distance_between_centers"],
+                "job_field": "length",
+                "label": "bed length (part must fit)",
             },
         ],
         "boring": [
@@ -282,6 +292,14 @@ def _get_dimension_rules(operation: str) -> list:
                 "label": "max gear diameter",
             },
         ],
+        "sawing": [
+            {
+                "machine_fields": ["max_diameter", "max_x", "cutting_capacity"],
+                "job_field": "diameter",
+                "job_fallback": "width",
+                "label": "cutting capacity",
+            },
+        ],
     }
     return rules.get(operation, [])
 
@@ -374,6 +392,8 @@ def _classify_machine_type(machine_type_lower: str) -> str:
         return "broaching"
     if any(k in machine_type_lower for k in ["shap", "slot"]):
         return "shaping"
+    if any(k in machine_type_lower for k in ["saw", "band saw", "bandsaw", "hacksaw", "cold saw"]):
+        return "sawing"
     return "other"
 
 
@@ -631,6 +651,20 @@ _PROCESS_ALIASES = {
     "drilling": "drilling",
     "deep hole drilling": "drilling",
     "reaming": "boring",
+    "sawing": "sawing",
+    "band saw": "sawing",
+    "bandsaw": "sawing",
+    "hacksaw": "sawing",
+    "stock cutting": "sawing",
+    "cut to length": "sawing",
+    "cut to size": "sawing",
+    "bar cutting": "sawing",
+    "material cutting": "sawing",
+    "cut raw stock": "sawing",
+    "cut raw material": "sawing",
+    "cut raw steel": "sawing",
+    "power saw": "sawing",
+    "cold saw": "sawing",
 }
 
 
@@ -660,8 +694,21 @@ def normalize_operation(raw_process: str) -> str:
         return "welding"
     if "edm" in p:
         return "edm_wire"
-    if "laser" in p or "cut" in p:
+    # Sawing: "cut to length", "cut raw stock", "saw", "band saw" etc.
+    if "saw" in p or "band saw" in p or "bandsaw" in p or "hacksaw" in p:
+        return "sawing"
+    if "cut" in p and any(kw in p for kw in ["stock", "length", "size", "raw", "bar", "material", "piece", "end piece", "billet"]):
+        return "sawing"
+    # Laser/plasma/waterjet cutting - only explicit laser/plasma/waterjet keywords
+    if "laser" in p or "plasma" in p or "waterjet" in p or "water jet" in p:
         return "laser_cutting"
+    # Generic "cut" without stock/length context → check for sheet/profile context
+    if "cut" in p:
+        # If it mentions sheet, plate, profile → laser_cutting
+        if any(kw in p for kw in ["sheet", "plate", "profile", "contour", "pattern", "shape"]):
+            return "laser_cutting"
+        # Default generic cutting to sawing (safer for round/bar stock)
+        return "sawing"
     if "sheet" in p or "press" in p or "bend" in p:
         return "sheet_metal"
     if "heat" in p or "harden" in p or "temper" in p:

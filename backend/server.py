@@ -7797,6 +7797,9 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     raw_proc_list = list(set(recommended_processes + detected_processes))
     operations = [normalize_operation(p) for p in raw_proc_list if p]
     operations = list(dict.fromkeys(operations))  # dedupe, preserve order
+    # Sawing is a basic prep step (band saw) — every workshop has one, 
+    # don't use it as a strict matching gate
+    operations = [op for op in operations if op != "sawing"]
     if not operations:
         operations = infer_operations_from_geometry(part_geometry, job_req)
     

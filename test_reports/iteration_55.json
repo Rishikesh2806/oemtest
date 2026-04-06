@@ -1,0 +1,74 @@
+{
+  "summary": "Tested sawing operation fix in machine_validation.py. All 35 backend tests pass. Key fixes verified: normalize_operation correctly routes 'cut to length' to 'sawing' (not 'laser_cutting'), 'laser cutting' still maps to 'laser_cutting', OPERATION_MACHINE_MAP contains 'sawing' with band saw machines, facing dimension rules include length check, sawing is excluded from strict matching operations in server.py line 7802.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_sawing_operation_fix.py",
+    "/app/test_reports/pytest/sawing_operation_fix_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "normalize_operation correctly checks 'saw/bandsaw/hacksaw' keywords first (line 698-699)",
+    "normalize_operation routes 'cut' + stock/length/size/raw/bar/material/piece/billet keywords to 'sawing' (line 700-701)",
+    "normalize_operation routes 'laser/plasma/waterjet' to 'laser_cutting' (line 703-704)",
+    "normalize_operation routes 'cut' + sheet/plate/profile/contour/pattern/shape to 'laser_cutting' (line 708-709)",
+    "OPERATION_MACHINE_MAP has 'sawing' key with band saw, bandsaw, hacksaw, power saw, cold saw, etc. (line 112-117)",
+    "_PROCESS_ALIASES has sawing aliases: sawing, band saw, bandsaw, hacksaw, stock cutting, cut to length, etc. (line 654-668)",
+    "facing dimension rules include length check with max_length/distance_between_centers (line 157-162)",
+    "sawing dimension rules check cutting_capacity/max_diameter (line 295-303)",
+    "server.py line 7802 correctly filters out sawing from operations list before matching"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_sawing_operation_fix.py"
+  ],
+  "success_rate": {
+    "backend": "100% (35/35 tests passed, 1 skipped)",
+    "frontend": "N/A (backend only testing)"
+  },
+  "test_credentials": {
+    "buyer": "visualbuyer@test.com / buyer123",
+    "admin": "admin@offoadex.com / admin123",
+    "test_rfq_shaft": "rfq_c869ea1d75a1",
+    "test_rfq_old_laser": "rfq_daabfbbd04e7"
+  },
+  "seed_data_creation": "None - used existing test data",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Sawing operation fix tested and working. Key files: /app/backend/app/services/machine_validation.py (normalize_operation at line 671, OPERATION_MACHINE_MAP at line 32, _get_dimension_rules at line 126, _PROCESS_ALIASES at line 604), /app/backend/server.py line 7802 (sawing exclusion filter). Test file: /app/backend/tests/test_sawing_operation_fix.py. All normalize_operation tests pass for sawing vs laser_cutting routing.",
+  "features_tested": {
+    "normalize_operation: 'Cut raw steel stock to length' -> 'sawing'": "PASS",
+    "normalize_operation: 'laser cutting' -> 'laser_cutting'": "PASS",
+    "normalize_operation: 'cut sheet metal profile' -> 'laser_cutting'": "PASS",
+    "normalize_operation: 'band saw cutting' -> 'sawing'": "PASS",
+    "normalize_operation: 'cut to length' -> 'sawing'": "PASS",
+    "normalize_operation: 'bandsaw' -> 'sawing'": "PASS",
+    "normalize_operation: 'hacksaw' -> 'sawing'": "PASS",
+    "normalize_operation: 'stock cutting' -> 'sawing'": "PASS",
+    "normalize_operation: 'cut bar stock' -> 'sawing'": "PASS",
+    "normalize_operation: 'cut raw material' -> 'sawing'": "PASS",
+    "normalize_operation: 'cut billet to size' -> 'sawing'": "PASS",
+    "normalize_operation: 'plasma cutting' -> 'laser_cutting'": "PASS",
+    "normalize_operation: 'waterjet cutting' -> 'laser_cutting'": "PASS",
+    "normalize_operation: 'cut plate contour' -> 'laser_cutting'": "PASS",
+    "normalize_operation: 'cut sheet pattern' -> 'laser_cutting'": "PASS",
+    "OPERATION_MACHINE_MAP contains 'sawing' key": "PASS",
+    "OPERATION_MACHINE_MAP 'sawing' includes band saw machines": "PASS",
+    "_PROCESS_ALIASES contains sawing aliases": "PASS",
+    "facing dimension rules include length check": "PASS",
+    "sawing dimension rules check cutting capacity": "PASS",
+    "server.py sawing exclusion filter (line 7802)": "PASS - verified in code",
+    "/api/rfqs/{id}/match endpoint works": "PASS",
+    "validate_vendor_strict handles sawing operation": "PASS"
+  },
+  "mocked_apis": {
+    "has_mocked_apis": false,
+    "mocked_apis_list": []
+  }
+}
