@@ -16,6 +16,7 @@ import {
   AlertTriangle, Ruler, Scale, MapPin, Truck, Globe, Building2, Clock, Zap, Shield, Camera, Search
 } from "lucide-react";
 import { Switch } from "../components/ui/switch";
+import { ExcludedVendorsSection } from "../components/ExcludedVendorsSection";
 
 const MATERIALS = [
   "Aluminum", "Steel", "Stainless Steel", "Carbon Steel", 
@@ -62,6 +63,7 @@ const CreateRFQ = () => {
   const [partGeometry, setPartGeometry] = useState("rectangular");
   const [imageType, setImageType] = useState(null);
   const [noMatchesFound, setNoMatchesFound] = useState(false);
+  const [matchResult, setMatchResult] = useState(null);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -278,6 +280,7 @@ const CreateRFQ = () => {
   const matchVendors = async () => {
     setMatching(true);
     setNoMatchesFound(false);
+    setMatchResult(null);
     try {
       // Use AI-determined image_type for routing
       const usePortfolioMatch = imageType === "reference_photo";
@@ -288,9 +291,17 @@ const CreateRFQ = () => {
       
       const response = await api.post(endpoint);
       const matchedCount = response.data?.total_matches ?? response.data?.matched_vendors?.length ?? 0;
+      const partialCount = response.data?.partial_vendors?.length ?? 0;
+      const likelyCount = response.data?.likely_vendors?.length ?? 0;
+      
       if (matchedCount === 0) {
         setNoMatchesFound(true);
-        toast.info("No vendors matched yet. Your RFQ is live — vendors can still find and quote on it.");
+        setMatchResult(response.data);
+        if (partialCount > 0 || likelyCount > 0) {
+          toast.info(`No exact matches, but found ${partialCount} partial and ${likelyCount} likely capable vendors.`);
+        } else {
+          toast.info("No vendors matched yet. Your RFQ is live — vendors can still find and quote on it.");
+        }
       } else {
         const matchType = response.data?.match_type === "portfolio" ? "by portfolio similarity" : "";
         toast.success(`${matchedCount} vendor${matchedCount > 1 ? 's' : ''} matched ${matchType}!`);
@@ -1031,29 +1042,71 @@ const CreateRFQ = () => {
                   </>
                 ) : noMatchesFound ? (
                   <>
-                    <div className="w-16 h-16 mx-auto mb-4 bg-amber-50 rounded-full flex items-center justify-center">
-                      <Search className="w-8 h-8 text-amber-500" />
-                    </div>
-                    <p className="text-lg font-medium text-slate-900">No Exact Matches Right Now</p>
-                    <p className="text-slate-500 mt-2 text-sm max-w-md mx-auto">
-                      Don't worry — your RFQ is now live on the marketplace. Vendors can discover it and submit quotes directly. We'll notify you as soon as a vendor responds.
-                    </p>
-                    <div className="mt-4 flex items-center justify-center gap-3">
-                      <Button 
-                        variant="outline"
-                        onClick={() => navigate(`/buyer/rfq/${rfqId}`)}
-                        data-testid="view-rfq-btn"
-                      >
-                        View RFQ Details
-                      </Button>
-                      <Button 
-                        onClick={() => navigate('/buyer/rfqs')}
-                        className="bg-orange-600 hover:bg-orange-700"
-                        data-testid="go-to-rfqs-btn"
-                      >
-                        Go to My RFQs
-                      </Button>
-                    </div>
+                    {/* Check if we have partial/likely vendors to show */}
+                    {(matchResult?.partial_vendors?.length > 0 || matchResult?.likely_vendors?.length > 0) ? (
+                      <div className="text-left" data-testid="partial-match-results">
+                        <div className="text-center mb-4">
+                          <div className="w-16 h-16 mx-auto mb-3 bg-blue-50 rounded-full flex items-center justify-center">
+                            <Search className="w-8 h-8 text-blue-500" />
+                          </div>
+                          <p className="text-lg font-medium text-slate-900">No Exact Matches — But Close Ones Found</p>
+                          <p className="text-slate-500 mt-1 text-sm max-w-md mx-auto">
+                            These vendors can handle some of the required operations. You can send the RFQ to any of them — they may outsource the remaining steps or collaborate with partners.
+                          </p>
+                        </div>
+                        <ExcludedVendorsSection
+                          partialVendors={matchResult.partial_vendors}
+                          likelyVendors={matchResult.likely_vendors}
+                          tooSmallVendors={matchResult.too_small_vendors}
+                          wrongTypeVendors={matchResult.wrong_type_vendors}
+                          requiredOperations={matchResult.required_operations}
+                          rfqId={rfqId}
+                          onVendorSent={() => {}}
+                        />
+                        <div className="mt-4 flex items-center justify-center gap-3">
+                          <Button 
+                            variant="outline"
+                            onClick={() => navigate(`/buyer/rfq/${rfqId}`)}
+                            data-testid="view-rfq-btn"
+                          >
+                            View Full RFQ Details
+                          </Button>
+                          <Button 
+                            onClick={() => navigate('/buyer/rfqs')}
+                            className="bg-orange-600 hover:bg-orange-700"
+                            data-testid="go-to-rfqs-btn"
+                          >
+                            Go to My RFQs
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-16 h-16 mx-auto mb-4 bg-amber-50 rounded-full flex items-center justify-center">
+                          <Search className="w-8 h-8 text-amber-500" />
+                        </div>
+                        <p className="text-lg font-medium text-slate-900">No Exact Matches Right Now</p>
+                        <p className="text-slate-500 mt-2 text-sm max-w-md mx-auto">
+                          Don't worry — your RFQ is now live on the marketplace. Vendors can discover it and submit quotes directly. We'll notify you as soon as a vendor responds.
+                        </p>
+                        <div className="mt-4 flex items-center justify-center gap-3">
+                          <Button 
+                            variant="outline"
+                            onClick={() => navigate(`/buyer/rfq/${rfqId}`)}
+                            data-testid="view-rfq-btn"
+                          >
+                            View RFQ Details
+                          </Button>
+                          <Button 
+                            onClick={() => navigate('/buyer/rfqs')}
+                            className="bg-orange-600 hover:bg-orange-700"
+                            data-testid="go-to-rfqs-btn"
+                          >
+                            Go to My RFQs
+                          </Button>
+                        </div>
+                      </>
+                    )}
                   </>
                 ) : (
                   <>
