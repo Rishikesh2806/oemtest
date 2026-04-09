@@ -34,12 +34,15 @@ Build a full-stack web application for an AI-driven manufacturing marketplace th
 
 ## What's Been Implemented
 
-### Machine Validation Engine v2.0
+### Machine Validation Engine v3.0 (Fabrication Support)
 - Physics-based hard gates (dimension checks, machine type compatibility)
 - 5 vendor categories: confirmed_capable, likely_capable, partial_match, excluded_too_small, excluded_wrong_type
-- Sawing operation support (band saw) - correctly separates from laser_cutting
+- **Fabrication operations**: welding (MIG/TIG/arc/spot/resistance), riveting, surface_treatment, grinding_deburr, shearing, punching
+- **AI prompt enhanced**: Detects weld symbols (z2/z3/fillet/groove/butt), BOM/assembly drawings, rivets, surface treatment notes
+- **Smart operation routing**: "cut to length" → sawing, "laser cut plate" → laser_cutting, "drilling rivet holes" → drilling
+- **Non-gate operations**: sawing, surface_treatment, grinding_deburr excluded from strict matching (every shop can do these)
 - Facing dimension rules with length check (prevents VTL matching for long shafts)
-- Sawing excluded from strict matching (basic prep step, not a differentiator)
+- Geometry types include "fabrication" and "assembly" for welded/riveted assemblies
 
 ### Send RFQ to Partial Vendors
 - POST /api/rfqs/{rfq_id}/send-to-vendor endpoint
@@ -53,6 +56,11 @@ Build a full-stack web application for an AI-driven manufacturing marketplace th
 - "No Exact Matches — But Close Ones Found" with Send RFQ buttons
 - Falls back to generic "No Exact Matches Right Now" when no partial either
 
+### Admin Dashboard
+- Demo Panel tab linking to https://oemlinker.com/demo
+- Chat Analytics tab
+- Removed all "emergent" text from user-visible code
+
 ### Other Completed Features
 - AI Drawing Analysis (GPT-5.2 Vision)
 - Custom Google OAuth
@@ -60,7 +68,6 @@ Build a full-stack web application for an AI-driven manufacturing marketplace th
 - Contact page with Google Maps + Resend emails
 - NDA enforcement on drawings
 - RFQ PDF generation (ReportLab)
-- Admin dashboard with vendor management
 
 ## Pending Issues (Priority Order)
 - P0: RFQ PDF single-page layout (in progress, untested)
@@ -81,3 +88,4 @@ Build a full-stack web application for an AI-driven manufacturing marketplace th
 - Instant AI auto-quote for simple parts
 - API for ERP integration
 - WhatsApp image population fix
+- Local desktop model for IP-safe drawing analysis
