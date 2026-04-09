@@ -6210,7 +6210,7 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             Extract and provide the following information in JSON format:
             {{
                 "image_type": string - "technical_drawing" or "reference_photo",
-                "part_geometry": string - one of: "rectangular", "cylindrical", "circular_flat", "conical", "spherical", "complex", "sheet_metal", "tube_pipe",
+                "part_geometry": string - one of: "rectangular", "cylindrical", "circular_flat", "conical", "spherical", "complex", "sheet_metal", "tube_pipe", "fabrication", "assembly",
                 "overall_dimensions": {{
                     // For RECTANGULAR parts (blocks, brackets, housings):
                     "length": float or null,
@@ -6270,13 +6270,21 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
             1. FIRST decide image_type: Does the image have dimension callouts, measurement lines, tolerances, GD&T symbols, or title blocks? If YES -> "technical_drawing". If it is just a photo of a physical part/product -> "reference_photo"
             2. Read ALL dimension callouts carefully from ALL drawings
             3. Cross-reference dimensions between different views
-            4. Identify the PRIMARY geometry type first
+            4. Identify the PRIMARY geometry type first. Use "fabrication" for multi-component welded/riveted assemblies, "sheet_metal" for bent/formed sheet parts
             5. Only populate dimension fields relevant to that geometry
             6. For cylindrical/turned parts, ALWAYS extract diameter and length
             7. For flat circular parts (flanges, discs), extract diameter and thickness
             8. Look for angles, tapers, and radii - these are critical for machining
             9. Check title block for material specs
-            10. For recommended_processes, list SPECIFIC operations
+            10. For recommended_processes, list SPECIFIC operations including:
+                - WELDING: Look for weld symbols (fillet Z2, groove Z3, butt, plug, seam). If found, specify weld type (e.g., "MIG/TIG fillet welding", "groove welding")
+                - RIVETING: If rivets appear in BOM or drawing, include "riveting"
+                - SURFACE TREATMENT: Look for notes about pickling, passivation, painting, powder coating, anodizing, shot blasting
+                - FABRICATION: If drawing shows multiple components assembled together (BOM with sub-items), include all relevant assembly operations
+                - CUTTING: For sheet/plate parts use "laser cutting" or "plasma cutting". For bar/round stock use "band saw cutting"
+                - BENDING: For sheet metal bends, include "press brake bending"
+                - DRILLING: For holes, include "drilling"
+                - DEBURRING: If notes mention deburring, grinding edges, rounding corners, include "deburring/grinding"
             11. For reference_photo images, still provide your BEST GUESS for geometry and processes but set dimensions to null"""
         ).with_model("openai", "gpt-5.2")
         
@@ -7798,8 +7806,10 @@ async def match_vendors(rfq_id: str, user: dict = Depends(get_current_user)):
     operations = [normalize_operation(p) for p in raw_proc_list if p]
     operations = list(dict.fromkeys(operations))  # dedupe, preserve order
     # Sawing is a basic prep step (band saw) — every workshop has one, 
-    # don't use it as a strict matching gate
-    operations = [op for op in operations if op != "sawing"]
+    # don't use it as a strict matching gate.
+    # Surface treatment & deburring are also widely available and shouldn't exclude vendors.
+    non_gate_ops = {"sawing", "surface_treatment", "grinding_deburr"}
+    operations = [op for op in operations if op not in non_gate_ops]
     if not operations:
         operations = infer_operations_from_geometry(part_geometry, job_req)
     

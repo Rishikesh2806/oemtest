@@ -95,6 +95,31 @@ OPERATION_MACHINE_MAP = {
     "welding": [
         "mig welder", "tig welder", "arc welder", "spot welder",
         "welding machine", "mig/mag", "tig", "arc", "robotic welder",
+        "stud welder", "resistance welder", "orbital welder",
+        "welding positioner", "welding rotator", "submerged arc welder",
+    ],
+    "riveting": [
+        "riveting machine", "rivet gun", "hydraulic riveter", "pneumatic riveter",
+        "orbital riveter", "riveting press", "pop rivet gun",
+    ],
+    "surface_treatment": [
+        "pickling tank", "passivation tank", "phosphating tank",
+        "electroplating machine", "anodizing tank", "paint booth",
+        "powder coating booth", "shot blasting machine", "sand blasting machine",
+        "tumbling machine", "vibratory finishing",
+    ],
+    "grinding_deburr": [
+        "angle grinder", "bench grinder", "pedestal grinder",
+        "deburring machine", "belt grinder", "surface grinder", "cnc surface grinder",
+        "portable grinder", "die grinder",
+    ],
+    "shearing": [
+        "shearing machine", "hydraulic shear", "cnc shear",
+        "guillotine shear", "plate shear", "mechanical shear",
+    ],
+    "punching": [
+        "punch press", "cnc punch", "turret punch", "hydraulic punch",
+        "ironworker", "punching machine",
     ],
     "sheet_metal": [
         "press brake", "cnc press brake", "hydraulic press", "shearing machine",
@@ -394,6 +419,14 @@ def _classify_machine_type(machine_type_lower: str) -> str:
         return "shaping"
     if any(k in machine_type_lower for k in ["saw", "band saw", "bandsaw", "hacksaw", "cold saw"]):
         return "sawing"
+    if any(k in machine_type_lower for k in ["rivet", "riveting"]):
+        return "riveting"
+    if any(k in machine_type_lower for k in ["pickle", "passivat", "anodiz", "electroplat", "paint", "powder coat", "shot blast", "sand blast", "tumbl"]):
+        return "surface_treatment"
+    if any(k in machine_type_lower for k in ["shear", "guillotine"]):
+        return "shearing"
+    if any(k in machine_type_lower for k in ["punch press", "turret punch", "cnc punch", "ironworker"]):
+        return "punching"
     return "other"
 
 
@@ -640,6 +673,38 @@ _PROCESS_ALIASES = {
     "bending": "bending",
     "welding": "welding",
     "fabrication": "welding",
+    "mig welding": "welding",
+    "tig welding": "welding",
+    "arc welding": "welding",
+    "spot welding": "welding",
+    "fillet weld": "welding",
+    "groove weld": "welding",
+    "butt weld": "welding",
+    "plug weld": "welding",
+    "seam welding": "welding",
+    "stud welding": "welding",
+    "resistance welding": "welding",
+    "submerged arc welding": "welding",
+    "riveting": "riveting",
+    "rivet": "riveting",
+    "pop riveting": "riveting",
+    "blind riveting": "riveting",
+    "shoulder rivet": "riveting",
+    "surface treatment": "surface_treatment",
+    "pickling": "surface_treatment",
+    "passivation": "surface_treatment",
+    "electroplating": "surface_treatment",
+    "anodizing": "surface_treatment",
+    "powder coating": "surface_treatment",
+    "painting": "surface_treatment",
+    "shot blasting": "surface_treatment",
+    "sand blasting": "surface_treatment",
+    "deburring": "grinding_deburr",
+    "deburr": "grinding_deburr",
+    "edge grinding": "grinding_deburr",
+    "weld grinding": "grinding_deburr",
+    "shearing": "shearing",
+    "punching": "punching",
     "heat treatment": "heat_treatment",
     "hardening": "heat_treatment",
     "tempering": "heat_treatment",
@@ -675,11 +740,14 @@ def normalize_operation(raw_process: str) -> str:
         return p
     if p in _PROCESS_ALIASES:
         return _PROCESS_ALIASES[p]
-    # Fuzzy match
-    for alias, op in _PROCESS_ALIASES.items():
-        if alias in p or p in alias:
-            return op
-    # Try keyword detection
+
+    # Keyword detection (priority-ordered: compound patterns first)
+    if "deburr" in p or "chamfer" in p:
+        return "grinding_deburr"
+    if "grind" in p and ("weld" in p or "edge" in p or "burr" in p or "burn" in p):
+        return "grinding_deburr"
+    if "weld" in p or "fabricat" in p:
+        return "welding"
     if "turn" in p or "lathe" in p:
         return "turning"
     if "mill" in p:
@@ -690,24 +758,21 @@ def normalize_operation(raw_process: str) -> str:
         return "drilling"
     if "bore" in p or "boring" in p:
         return "boring"
-    if "weld" in p or "fabricat" in p:
-        return "welding"
+    if "rivet" in p:
+        return "riveting"
+    if "pickle" in p or "passivat" in p or "anodiz" in p or "electroplat" in p or "powder coat" in p or "shot blast" in p or "sand blast" in p:
+        return "surface_treatment"
     if "edm" in p:
         return "edm_wire"
-    # Sawing: "cut to length", "cut raw stock", "saw", "band saw" etc.
-    if "saw" in p or "band saw" in p or "bandsaw" in p or "hacksaw" in p:
+    if "saw" in p or "bandsaw" in p or "hacksaw" in p:
         return "sawing"
     if "cut" in p and any(kw in p for kw in ["stock", "length", "size", "raw", "bar", "material", "piece", "end piece", "billet"]):
         return "sawing"
-    # Laser/plasma/waterjet cutting - only explicit laser/plasma/waterjet keywords
     if "laser" in p or "plasma" in p or "waterjet" in p or "water jet" in p:
         return "laser_cutting"
-    # Generic "cut" without stock/length context → check for sheet/profile context
     if "cut" in p:
-        # If it mentions sheet, plate, profile → laser_cutting
         if any(kw in p for kw in ["sheet", "plate", "profile", "contour", "pattern", "shape"]):
             return "laser_cutting"
-        # Default generic cutting to sawing (safer for round/bar stock)
         return "sawing"
     if "sheet" in p or "press" in p or "bend" in p:
         return "sheet_metal"
@@ -723,15 +788,25 @@ def normalize_operation(raw_process: str) -> str:
         return "keyway"
     if "broach" in p:
         return "broaching"
+    if "surface" in p and ("treat" in p or "finish" in p or "coat" in p):
+        return "surface_treatment"
     if "face" in p or "facing" in p:
         return "facing"
-    if "deburr" in p or "chamfer" in p:
-        return "milling"  # Deburring/chamfering = milling operation
+    if "shear" in p or "guillotine" in p:
+        return "shearing"
+    if "punch" in p and "press" not in p:
+        return "punching"
     if "forg" in p:
-        return "milling"  # Forging prep typically needs milling post-process
+        return "milling"
     if "profil" in p:
-        return "milling"  # Profiling = milling operation
-    return p  # Return as-is if no match
+        return "milling"
+
+    # Fuzzy alias match (fallback only)
+    for alias, op in _PROCESS_ALIASES.items():
+        if alias in p or p in alias:
+            return op
+
+    return p
 
 
 # =====================================================================
@@ -746,7 +821,9 @@ def infer_operations_from_geometry(geometry: str, job: dict) -> list:
         "circular_flat": ["turning"],
         "rectangular": ["milling"],
         "complex": ["milling"],
-        "sheet_metal": ["sheet_metal"],
+        "sheet_metal": ["sheet_metal", "laser_cutting", "bending"],
+        "fabrication": ["welding", "laser_cutting", "drilling", "bending"],
+        "assembly": ["welding", "drilling", "riveting"],
         "spherical": ["turning"],
     }
     ops = mapping.get(geometry, ["milling"])
