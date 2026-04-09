@@ -545,7 +545,7 @@ async def get_2fa_status(user: dict = Depends(get_current_user)):
 # ============== SESSION / OAUTH ==============
 @router.post("/session")
 async def exchange_session(request: Request, response: Response):
-    """Exchange Emergent Auth session_id for session data"""
+    """Exchange OAuth session_id for session data"""
     body = await request.json()
     session_id = body.get("session_id")
     

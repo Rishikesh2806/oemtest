@@ -1,5 +1,5 @@
 """
-Emergent Cloud Storage Service
+Cloud Storage Service
 Handles file uploads/downloads for OEMLinker (machine images, drawings)
 """
 import os

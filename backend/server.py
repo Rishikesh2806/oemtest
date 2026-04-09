@@ -1742,7 +1742,7 @@ async def get_current_user(request: Request) -> dict:
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    # Try session token from Emergent Auth first
+    # Try session token from OAuth first
     session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
     if session:
         expires_at = session.get("expires_at")
@@ -2537,7 +2537,7 @@ async def get_2fa_status(user: dict = Depends(get_current_user)):
 
 @api_router.post("/auth/session")
 async def exchange_session(request: Request, response: Response):
-    """Exchange Emergent Auth session_id for session data"""
+    """Exchange OAuth session_id for session data"""
     body = await request.json()
     session_id = body.get("session_id")
     
@@ -3849,7 +3849,7 @@ async def portfolio_match_vendors(rfq_id: str, user: dict = Depends(get_current_
     # AI-powered portfolio matching
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
-        logger.warning("EMERGENT_LLM_KEY not set, falling back to standard match")
+        logger.warning("LLM key not set, falling back to standard match")
         return await match_vendors(rfq_id, user)
     
     match_chat = LlmChat(
@@ -19462,7 +19462,7 @@ async def process_voice_message(audio_url: str, sender: str, vendor: Optional[di
     Process voice message: download audio, convert to supported format, transcribe using Whisper, return text
     """
     if not EMERGENT_LLM_KEY:
-        logger.warning("Emergent LLM key not configured for voice processing")
+        logger.warning("LLM key not configured for voice processing")
         return None
     
     try:
@@ -19579,7 +19579,7 @@ You can also register manually at https://oemlinker.com/register"""
         # Check if we have the API key
         api_key = os.environ.get("EMERGENT_LLM_KEY")
         if not api_key:
-            logger.error("EMERGENT_LLM_KEY not configured for GST extraction")
+            logger.error("LLM_KEY not configured for GST extraction")
             return """⚠️ *Service Unavailable*
 
 AI service is not configured. Please register manually at https://oemlinker.com/register"""
@@ -19863,7 +19863,7 @@ Please try:
         # Check if we have the API key
         api_key = os.environ.get("EMERGENT_LLM_KEY")
         if not api_key:
-            logger.error("EMERGENT_LLM_KEY not configured for GST extraction")
+            logger.error("LLM_KEY not configured for GST extraction")
             return """⚠️ *Service Unavailable*
 
 AI service is not configured. Please register manually at https://oemlinker.com/register"""
@@ -20081,7 +20081,7 @@ You can also add machines manually at https://oemlinker.com/vendor/machines"""
         # Check if we have the API key
         api_key = os.environ.get("EMERGENT_LLM_KEY")
         if not api_key:
-            logger.error("EMERGENT_LLM_KEY not configured for machine identification")
+            logger.error("LLM_KEY not configured for machine identification")
             return """⚠️ *Service Unavailable*
 
 AI service is not configured. Please add machines manually at https://oemlinker.com/vendor/machines"""
