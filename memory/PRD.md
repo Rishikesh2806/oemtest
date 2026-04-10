@@ -12,37 +12,39 @@ Build a full-stack web application for an AI-driven manufacturing marketplace th
 ## Key Credentials
 - Admin: admin@offoadex.com / admin123
 - Vendor: testvendor_nda@test.com / vendor123
-- Buyer: buyer5@oemlinker.com / buyer123
+- Test Buyer: testbuyer_cost@test.com / testpass123
 
 ## What's Been Implemented
 
-### Machine Validation Engine v3.0 (Fabrication + Sawing Support)
-- Physics-based hard gates (dimension checks, machine type compatibility)
-- 5 vendor categories: confirmed_capable, likely_capable, partial_match, excluded_too_small, excluded_wrong_type
-- Fabrication operations: welding, riveting, surface_treatment, grinding_deburr, shearing, punching
-- Sawing operation (band saw) — excluded from strict matching
+### AI Cost Estimation (NEW - Apr 2026)
+- **Admin Cost Config**: GET/PUT `/api/admin/cost-config` — admin-managed rates for materials, machines, finishing, tooling, heat treatment
+- **Default rates**: Carbon Steel ₹55/kg, Forged Steel ₹75/kg (as per user), SS304 ₹210/kg, CNC Turning ₹800/hr, CNC Milling ₹1000/hr, etc.
+- **Cost Estimation Engine**: POST `/api/rfqs/{rfq_id}/estimate-cost` — AI analyzes part + uses admin rates to produce:
+  - Material cost (weight × rate/kg)
+  - Per-operation machining cost breakdown (time × rate/hr)
+  - Setup/tooling costs
+  - Finishing & heat treatment costs
+  - Overhead (15%) + profit margin (20%)
+  - **Quantity pricing** for 1, 10, 50, 100 pieces with volume discounts (5%/10%/15%)
+- **Admin UI**: New "Cost Config" tab in Admin Dashboard with editable rate cards
+- **Buyer UI**: "Get Cost Estimate" button in CreateRFQ Step 4 after AI analysis
 
 ### AI Dimension Estimation for Reference Photos
 - POST /api/rfqs/{rfq_id}/estimate-dimensions endpoint
-- Process-aware schema routing: gear, boring, sheet_metal, **milling (NEW)**, turning, default
-- **Bolt hole support**: boring schema includes bolt_hole_diameter, bolt_circle_diameter, number_of_holes
-- **Slot support (NEW)**: sheet_metal and milling schemas include slot_length, slot_width, number_of_slots
-- **Milling schema (NEW)**: Handles parts with slots, pockets — includes slot_depth, pocket_length/width/depth
-- **Improved schema detection priority**: sheet_metal (bend/bracket) checked before boring/drill to avoid misrouting bent parts
-- **User dimension preservation**: User-provided dimensions always preserved even if AI schema doesn't include them
-- Keyword triggers: "drill/bolt hole/flange" → boring; "slot/pocket/mill" → milling; "sheet/bend/bracket" → sheet_metal
+- Process-aware schema routing: gear, boring, sheet_metal, milling, turning, default
+- Bolt hole support: boring schema includes bolt_hole_diameter, bolt_circle_diameter, number_of_holes
+- Slot support: sheet_metal and milling schemas include slot_length, slot_width, number_of_slots
+- Milling schema: Handles parts with slots, pockets
+- User dimension preservation: always preserved even if AI schema doesn't include them
 
-### Send RFQ to Partial Vendors
-- POST /api/rfqs/{rfq_id}/send-to-vendor endpoint
-- Frontend Send RFQ button on partial/likely vendor rows
+### Machine Validation Engine v3.0
+- Physics-based hard gates (dimension checks, machine type compatibility)
+- 5 vendor categories: confirmed_capable, likely_capable, partial_match, excluded_too_small, excluded_wrong_type
+- Fabrication operations: welding, riveting, surface_treatment, grinding_deburr, shearing, punching
 
 ### Google OAuth Custom Role Fix
 - Email case normalization (.lower()) in google_auth.py
 - Custom role users bypass /select-role
-
-### Admin Dashboard
-- Demo Panel tab
-- Removed all "emergent" text from user-visible code
 
 ### Performance
 - Fixed duplicate NotificationBell polling
