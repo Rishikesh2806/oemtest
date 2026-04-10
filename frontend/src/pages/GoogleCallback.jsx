@@ -42,16 +42,25 @@ const GoogleCallback = () => {
           // Use full page redirect to ensure clean auth state
           // This forces checkAuth to run on fresh mount with the stored token
           let redirectPath = "/buyer/dashboard";
-          if (!data.user.role) {
-            redirectPath = "/select-role";
-          } else if (data.user.role === "vendor") {
+          const userRole = data.user.role;
+          const customRole = data.user.custom_role;
+          
+          if (userRole === "vendor") {
             redirectPath = "/vendor/dashboard";
-          } else if (data.user.role === "admin") {
+          } else if (userRole === "admin") {
             redirectPath = "/admin/dashboard";
-          } else if (data.user.role === "staff") {
-            redirectPath = "/staff/dashboard";
-          } else if (data.user.role === "inspector") {
+          } else if (userRole === "buyer") {
+            redirectPath = "/buyer/dashboard";
+          } else if (userRole === "staff" || customRole) {
+            if (customRole?.toLowerCase().includes("inspector")) {
+              redirectPath = "/inspector/dashboard";
+            } else {
+              redirectPath = "/staff/dashboard";
+            }
+          } else if (userRole === "inspector") {
             redirectPath = "/inspector/dashboard";
+          } else if (!userRole && !customRole) {
+            redirectPath = "/select-role";
           }
           
           window.location.href = redirectPath;

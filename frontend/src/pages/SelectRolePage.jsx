@@ -1,10 +1,30 @@
-import { useState } from "react";
-import { api } from "../App";
+import { useState, useEffect } from "react";
+import { api, useAuth } from "../App";
 import { toast } from "sonner";
 import { Building2, ShoppingCart, Loader2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const SelectRolePage = () => {
   const [selecting, setSelecting] = useState(false);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // If user already has a role or custom_role, redirect to their dashboard
+  useEffect(() => {
+    if (!user) return;
+    const role = user.role;
+    const customRole = user.custom_role;
+    if (role === "buyer") navigate("/buyer/dashboard", { replace: true });
+    else if (role === "vendor") navigate("/vendor/dashboard", { replace: true });
+    else if (role === "admin") navigate("/admin/dashboard", { replace: true });
+    else if (role === "staff" || customRole) {
+      if (customRole?.toLowerCase().includes("inspector") || user.secondary_roles?.some(r => r.toLowerCase().includes("inspector"))) {
+        navigate("/inspector/dashboard", { replace: true });
+      } else {
+        navigate("/staff/dashboard", { replace: true });
+      }
+    }
+  }, [user, navigate]);
 
   const handleSelectRole = async (role) => {
     setSelecting(true);

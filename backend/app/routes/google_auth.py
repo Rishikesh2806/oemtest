@@ -157,20 +157,25 @@ async def google_callback(token_request: GoogleTokenRequest):
         # Create JWT token
         jwt_token = create_jwt_token(user["user_id"], user["email"], user.get("role", ""))
         
-        # Determine redirect based on base role only
+        # Determine redirect based on role or custom_role
         role = user.get("role", "")
-        if not role:
-            redirect_path = "/select-role"
-        elif role == "buyer":
+        custom_role = user.get("custom_role", "")
+        is_inspector = (custom_role and "inspector" in custom_role.lower()) or \
+                       any("inspector" in r.lower() for r in user.get("secondary_roles", []))
+        
+        if role == "buyer":
             redirect_path = "/buyer/dashboard"
         elif role == "vendor":
             redirect_path = "/vendor/dashboard"
-        elif role == "staff":
-            redirect_path = "/staff/dashboard"
         elif role == "admin":
             redirect_path = "/admin/dashboard"
+        elif role == "staff" or custom_role:
+            if is_inspector:
+                redirect_path = "/inspector/dashboard"
+            else:
+                redirect_path = "/staff/dashboard"
         else:
-            redirect_path = "/dashboard"
+            redirect_path = "/select-role"
         
         return {
             "success": True,
@@ -181,6 +186,7 @@ async def google_callback(token_request: GoogleTokenRequest):
                 "email": user["email"],
                 "name": user.get("name"),
                 "role": user.get("role", ""),
+                "custom_role": user.get("custom_role", ""),
                 "secondary_roles": user.get("secondary_roles", []),
                 "picture": user.get("picture"),
                 "email_verified": True,
