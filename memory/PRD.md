@@ -12,7 +12,7 @@ Build a full-stack web application for an AI-driven manufacturing marketplace th
 ## Key Credentials
 - Admin: admin@offoadex.com / admin123
 - Vendor: testvendor_nda@test.com / vendor123
-- Buyer: visualbuyer@test.com / buyer123
+- Buyer: buyer5@oemlinker.com / buyer123
 
 ## What's Been Implemented
 
@@ -32,6 +32,9 @@ Build a full-stack web application for an AI-driven manufacturing marketplace th
 - All dimensions shown in editable form for buyer confirmation
 - Match button disabled until dimensions confirmed
 - Geometry-specific field mapping (cylindrical→diameter+length, sheet_metal→L+W, etc.)
+- **Bolt hole support**: boring schema includes bolt_hole_diameter, bolt_circle_diameter, number_of_holes
+- **Drill keyword trigger**: "drill", "bolt hole", "flange" keywords now trigger boring schema
+- **User dimension preservation**: User-provided dimensions always preserved even if AI schema doesn't include them
 
 ### Send RFQ to Partial Vendors
 - POST /api/rfqs/{rfq_id}/send-to-vendor endpoint
@@ -52,7 +55,7 @@ Build a full-stack web application for an AI-driven manufacturing marketplace th
 - Polling intervals increased from 30s to 60s
 
 ## Pending Issues (Priority Order)
-- P0: RFQ PDF single-page layout (in progress, untested)
+- P0: RFQ PDF single-page layout (recurring, untested for 2+ sessions)
 - P1: 2.5% commission UI in BuyerQuotes (recurring, missed twice)
 - P2: Few-shot prompt training for drawing analysis
 

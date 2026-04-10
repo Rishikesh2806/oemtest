@@ -6800,7 +6800,7 @@ async def estimate_dimensions(rfq_id: str, request: Request, user: dict = Depend
     procs_lower = " ".join(ai_procs).lower()
     if any(k in procs_lower for k in ["gear", "hobbing", "spline", "teeth"]):
         schema_key = "gear"
-    elif any(k in procs_lower for k in ["boring", "bore"]):
+    elif any(k in procs_lower for k in ["boring", "bore", "drill", "bolt hole", "flange"]):
         schema_key = "boring"
     elif any(k in procs_lower for k in ["sheet", "bend", "press brake", "laser cut"]):
         schema_key = "sheet_metal"
@@ -6890,6 +6890,11 @@ RULES:
                     final_dimensions[field] = float(val)
                 except (ValueError, TypeError):
                     final_dimensions[field] = val  # Keep string values (e.g., thread_size "M20x2.5")
+        
+        # Always include user-provided dimensions even if AI schema didn't return them
+        for field, val in user_dimensions.items():
+            if field not in final_dimensions and val is not None and val != "" and val != 0:
+                final_dimensions[field] = val if isinstance(val, str) else float(val)
         
         final_dimensions["unit"] = "mm"
         
