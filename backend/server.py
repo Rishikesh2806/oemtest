@@ -7355,7 +7355,7 @@ RULES:
             "quantity_pricing": quantity_pricing,
             "currency": "INR",
             "method": "ai_estimation",
-            "disclaimer": "This is an indicative estimate. Actual vendor quotes may differ based on their specific capabilities, capacity, and overhead."
+            "disclaimer": "AI Cost Estimation is in beta and still learning. These are indicative estimates only — do not rely on them for final pricing. Actual vendor quotes may differ significantly based on their capabilities, capacity, and overhead."
         }
         
     except Exception as e:

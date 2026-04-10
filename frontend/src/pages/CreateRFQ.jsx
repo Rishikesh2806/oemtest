@@ -1285,7 +1285,7 @@ const CreateRFQ = () => {
                     <div className="flex items-center gap-2">
                       <DollarSign className="w-5 h-5 text-amber-600" />
                       <h3 className="font-semibold text-slate-900">Cost Estimate</h3>
-                      <span className="text-[10px] text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full font-medium">INDICATIVE</span>
+                      <span className="text-[10px] text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full font-medium">BETA</span>
                     </div>
                     {!costEstimate && (
                       <Button
