@@ -64,6 +64,13 @@ const CreateRFQ = () => {
   const [imageType, setImageType] = useState(null);
   const [noMatchesFound, setNoMatchesFound] = useState(false);
   const [matchResult, setMatchResult] = useState(null);
+  
+  // Dimension estimation for reference photos
+  const [showDimForm, setShowDimForm] = useState(false);
+  const [userDimensions, setUserDimensions] = useState({});
+  const [estimatedDimensions, setEstimatedDimensions] = useState(null);
+  const [estimating, setEstimating] = useState(false);
+  const [dimConfirmed, setDimConfirmed] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -274,6 +281,77 @@ const CreateRFQ = () => {
       setStep(4);
     } finally {
       setAnalyzing(false);
+    }
+  };
+
+  // Geometry → key dimensions mapping
+  const GEOMETRY_DIM_FIELDS = {
+    cylindrical: [
+      { key: "diameter", label: "Diameter (mm)", required: true },
+      { key: "length", label: "Length (mm)", required: true },
+    ],
+    conical: [
+      { key: "large_diameter", label: "Large Diameter (mm)", required: true },
+      { key: "length", label: "Length (mm)", required: true },
+    ],
+    circular_flat: [
+      { key: "diameter", label: "Diameter (mm)", required: true },
+      { key: "thickness", label: "Thickness (mm)", required: false },
+    ],
+    tube_pipe: [
+      { key: "outer_diameter", label: "Outer Diameter (mm)", required: true },
+      { key: "length", label: "Length (mm)", required: true },
+    ],
+    rectangular: [
+      { key: "length", label: "Length (mm)", required: true },
+      { key: "width", label: "Width (mm)", required: true },
+    ],
+    sheet_metal: [
+      { key: "length", label: "Length (mm)", required: true },
+      { key: "width", label: "Width (mm)", required: true },
+    ],
+    fabrication: [
+      { key: "length", label: "Overall Length (mm)", required: true },
+      { key: "width", label: "Overall Width (mm)", required: true },
+    ],
+    complex: [
+      { key: "length", label: "Max Length (mm)", required: true },
+      { key: "width", label: "Max Width (mm)", required: true },
+    ],
+  };
+
+  const getDimFields = () => GEOMETRY_DIM_FIELDS[partGeometry] || GEOMETRY_DIM_FIELDS.rectangular;
+
+  const estimateDimensions = async () => {
+    const fields = getDimFields();
+    const requiredFilled = fields.filter(f => f.required).every(f => userDimensions[f.key]);
+    if (!requiredFilled) {
+      toast.error("Please enter the required dimensions");
+      return;
+    }
+    setEstimating(true);
+    try {
+      const res = await api.post(`/rfqs/${rfqId}/estimate-dimensions`, { dimensions: userDimensions });
+      setEstimatedDimensions(res.data.estimated_dimensions);
+      toast.success(`Dimensions estimated (${res.data.confidence} confidence)`);
+    } catch (err) {
+      toast.error("Estimation failed — please enter dimensions manually");
+      setEstimatedDimensions({ ...userDimensions, unit: "mm" });
+    } finally {
+      setEstimating(false);
+    }
+  };
+
+  const confirmDimensions = async () => {
+    try {
+      await api.put(`/rfqs/${rfqId}/dimensions`, {
+        ...estimatedDimensions,
+        part_geometry: partGeometry,
+      });
+      setDimConfirmed(true);
+      toast.success("Dimensions confirmed — ready to match vendors");
+    } catch (err) {
+      toast.error("Failed to save dimensions");
     }
   };
 
@@ -1024,6 +1102,113 @@ const CreateRFQ = () => {
                 </div>
               )}
 
+              {/* Dimension Input for Reference Photos */}
+              {imageType === "reference_photo" && !dimConfirmed && (
+                <div className="p-4 rounded-lg border border-purple-200 bg-purple-50" data-testid="dim-estimation-form">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Ruler className="w-5 h-5 text-purple-600" />
+                    <h3 className="font-semibold text-slate-900">Enter Key Dimensions</h3>
+                    <span className="text-xs text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full">Reference Photo</span>
+                  </div>
+                  <p className="text-sm text-slate-600 mb-4">
+                    Since this is a photo (not a technical drawing), provide 1-2 key measurements. AI will estimate the remaining dimensions.
+                  </p>
+                  
+                  {!estimatedDimensions ? (
+                    <>
+                      {/* Key dimension inputs based on geometry */}
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        {getDimFields().map(field => (
+                          <div key={field.key}>
+                            <label className="block text-xs font-medium text-slate-700 mb-1">
+                              {field.label} {field.required && <span className="text-red-500">*</span>}
+                            </label>
+                            <Input
+                              type="number"
+                              placeholder={field.label.replace(" (mm)", "")}
+                              value={userDimensions[field.key] || ""}
+                              onChange={e => setUserDimensions(prev => ({ ...prev, [field.key]: e.target.value ? parseFloat(e.target.value) : "" }))}
+                              className="bg-white"
+                              data-testid={`dim-input-${field.key}`}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <Button
+                        onClick={estimateDimensions}
+                        disabled={estimating}
+                        className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                        data-testid="estimate-btn"
+                      >
+                        {estimating ? (
+                          <><Loader2 className="w-4 h-4 animate-spin mr-2" /> AI Estimating...</>
+                        ) : (
+                          <><Cpu className="w-4 h-4 mr-2" /> Estimate Remaining Dimensions</>
+                        )}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      {/* Editable estimated dimensions */}
+                      <p className="text-xs text-slate-500 mb-2">Review and edit if needed. All values in mm.</p>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                        {Object.entries(estimatedDimensions)
+                          .filter(([k, v]) => v && k !== "unit")
+                          .map(([key, value]) => (
+                            <div key={key}>
+                              <label className="block text-xs font-medium text-slate-700 mb-1 capitalize">
+                                {key.replace(/_/g, " ")}
+                                {userDimensions[key] && (
+                                  <span className="ml-1 text-green-600 text-[10px]">(your input)</span>
+                                )}
+                              </label>
+                              <Input
+                                type="number"
+                                value={estimatedDimensions[key] || ""}
+                                onChange={e => setEstimatedDimensions(prev => ({
+                                  ...prev,
+                                  [key]: e.target.value ? parseFloat(e.target.value) : ""
+                                }))}
+                                className={`bg-white ${userDimensions[key] ? "border-green-300" : "border-blue-300"}`}
+                                data-testid={`est-dim-${key}`}
+                              />
+                            </div>
+                          ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => { setEstimatedDimensions(null); }}
+                          className="flex-1"
+                        >
+                          Re-enter
+                        </Button>
+                        <Button
+                          onClick={confirmDimensions}
+                          className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                          data-testid="confirm-dims-btn"
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-2" /> Confirm Dimensions
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {imageType === "reference_photo" && dimConfirmed && (
+                <div className="p-3 rounded-lg border border-green-200 bg-green-50 flex items-center gap-2" data-testid="dim-confirmed-badge">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  <span className="text-sm font-medium text-green-700">Dimensions confirmed</span>
+                  <button 
+                    onClick={() => { setDimConfirmed(false); setEstimatedDimensions(null); }} 
+                    className="ml-auto text-xs text-green-600 hover:underline"
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
+
               {/* Matching Status */}
               <div className="text-center py-4">
                 {matching ? (
@@ -1111,10 +1296,16 @@ const CreateRFQ = () => {
                 ) : (
                   <>
                     <CheckCircle2 className="w-12 h-12 text-green-500 mx-auto mb-3" />
-                    <p className="text-lg font-medium text-slate-900">Ready to Match!</p>
+                    <p className="text-lg font-medium text-slate-900">
+                      {imageType === "reference_photo" && !dimConfirmed
+                        ? "Enter Dimensions to Match"
+                        : "Ready to Match!"}
+                    </p>
                     <p className="text-slate-500 mt-1 text-sm">
                       {imageType === "reference_photo"
-                        ? "We'll match your part photos against vendor portfolios to find the best manufacturers"
+                        ? dimConfirmed 
+                          ? "Dimensions confirmed — proceed to find matching vendors" 
+                          : "Provide key dimensions above, then we'll match vendors by machine capability"
                         : "All specifications confirmed — proceed to find matching vendors"}
                     </p>
                   </>
@@ -1128,7 +1319,7 @@ const CreateRFQ = () => {
                   </Button>
                   <Button 
                     onClick={matchVendors} 
-                    disabled={matching}
+                    disabled={matching || (imageType === "reference_photo" && !dimConfirmed)}
                     className="bg-orange-600 hover:bg-orange-700 px-8"
                     data-testid="match-btn"
                   >

@@ -6676,6 +6676,162 @@ async def update_rfq_dimensions(
     }
 
 
+@api_router.post("/rfqs/{rfq_id}/estimate-dimensions")
+async def estimate_dimensions(rfq_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """
+    For reference photos: buyer provides 1-2 key dimensions,
+    AI estimates the rest using photo context + engineering heuristics.
+    """
+    # Allow both buyer (owner) and admin
+    query = {"rfq_id": rfq_id}
+    if user.get("role") != "admin":
+        query["buyer_id"] = user["user_id"]
+    rfq = await db.rfqs.find_one(query, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    body = await request.json()
+    user_dimensions = body.get("dimensions", {})
+    
+    ai_analysis = rfq.get("ai_analysis") or {}
+    part_geometry = ai_analysis.get("part_geometry", "rectangular")
+    
+    # Get the drawing file URL for AI context
+    drawing_ids = rfq.get("drawing_ids", [])
+    image_url = None
+    if drawing_ids:
+        drawing = await db.drawings.find_one({"drawing_id": drawing_ids[0]}, {"_id": 0})
+        if drawing:
+            image_url = drawing.get("preview_url") or drawing.get("file_url")
+    
+    # Build prompt for GPT to estimate remaining dimensions
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        # Fallback: just return user dimensions as-is
+        return {
+            "estimated_dimensions": user_dimensions,
+            "part_geometry": part_geometry,
+            "confidence": "low",
+            "method": "user_input_only"
+        }
+    
+    user_dim_str = ", ".join([f"{k}: {v}mm" for k, v in user_dimensions.items() if v])
+    
+    estimation_prompt = f"""You are an expert manufacturing engineer. A buyer uploaded a reference photo of a part and provided these key dimensions:
+{user_dim_str}
+
+The part geometry is: {part_geometry}
+Part title: {rfq.get('title', 'Unknown')}
+Material: {rfq.get('material_type', 'Unknown')}
+
+Based on the photo and the provided dimensions, estimate ALL remaining dimensions needed for manufacturing.
+
+Return ONLY a JSON object with these fields (use null for dimensions that don't apply to this geometry):
+{{
+    "part_geometry": "{part_geometry}",
+    "length": <number or null>,
+    "width": <number or null>,
+    "height": <number or null>,
+    "diameter": <number or null>,
+    "outer_diameter": <number or null>,
+    "inner_diameter": <number or null>,
+    "thickness": <number or null>,
+    "large_diameter": <number or null>,
+    "small_diameter": <number or null>,
+    "taper_angle": <number or null>,
+    "bend_radius": <number or null>,
+    "bend_angle": <number or null>,
+    "weight_kg": <estimated weight or null>,
+    "confidence": "high" | "medium" | "low",
+    "reasoning": "<brief explanation of how you estimated>"
+}}
+
+RULES:
+- Keep user-provided dimensions EXACTLY as given: {user_dim_str}
+- For cylindrical parts: if diameter given, estimate length from proportions in the photo
+- For rectangular parts: if length given, estimate width/height from aspect ratios
+- For sheet metal: estimate thickness from material type (e.g., 3mm for SS sheet)
+- All dimensions in mm
+- Be conservative — round to standard stock sizes"""
+
+    try:
+        user_msg = UserMessage(text=estimation_prompt)
+        
+        # Add image as base64 if available
+        if image_url:
+            try:
+                import httpx
+                async with httpx.AsyncClient() as client:
+                    img_resp = await client.get(image_url, timeout=15)
+                    if img_resp.status_code == 200:
+                        image_b64 = base64.b64encode(img_resp.content).decode("utf-8")
+                        user_msg = UserMessage(
+                            text=estimation_prompt,
+                            file_contents=[ImageContent(image_base64=image_b64)]
+                        )
+            except Exception as img_err:
+                logger.warning(f"Could not fetch image for estimation: {img_err}")
+        
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"dim_estimate_{rfq_id}",
+            system_message="You are a manufacturing dimension estimation expert. Return ONLY valid JSON."
+        )
+        
+        response = await chat.send_message(user_msg)
+        response_text = response.strip() if isinstance(response, str) else str(response)
+        
+        # Parse JSON from response
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].split("```")[0].strip()
+        
+        estimated = json.loads(response_text)
+        
+        # Merge: user dimensions override AI estimates
+        final_dimensions = {}
+        all_dim_fields = [
+            "length", "width", "height", "diameter", "outer_diameter", 
+            "inner_diameter", "thickness", "large_diameter", "small_diameter",
+            "taper_angle", "bend_radius", "bend_angle"
+        ]
+        
+        for field in all_dim_fields:
+            user_val = user_dimensions.get(field)
+            ai_val = estimated.get(field)
+            if user_val is not None and user_val != "" and user_val != 0:
+                final_dimensions[field] = float(user_val)
+            elif ai_val is not None and ai_val != 0:
+                final_dimensions[field] = float(ai_val)
+        
+        final_dimensions["unit"] = "mm"
+        
+        return {
+            "estimated_dimensions": final_dimensions,
+            "part_geometry": estimated.get("part_geometry", part_geometry),
+            "weight_kg": estimated.get("weight_kg"),
+            "confidence": estimated.get("confidence", "medium"),
+            "reasoning": estimated.get("reasoning", ""),
+            "method": "ai_estimation",
+            "user_provided": list(user_dimensions.keys()),
+            "ai_estimated": [f for f in all_dim_fields if f not in user_dimensions and final_dimensions.get(f)]
+        }
+        
+    except Exception as e:
+        logger.error(f"Dimension estimation failed: {e}")
+        # Fallback: return user dimensions + basic heuristics
+        fallback = dict(user_dimensions)
+        fallback["unit"] = "mm"
+        return {
+            "estimated_dimensions": fallback,
+            "part_geometry": part_geometry,
+            "confidence": "low",
+            "method": "user_input_only",
+            "error": str(e)
+        }
+
+
 # ============== HELPER: Send RFQ Drawings to Vendor ==============
 
 async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list, rfq_title: str):
