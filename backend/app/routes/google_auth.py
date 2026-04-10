@@ -104,7 +104,7 @@ async def google_callback(token_request: GoogleTokenRequest):
         
         # Extract user info
         google_id = google_user.get("id")
-        email = google_user.get("email")
+        email = (google_user.get("email") or "").lower().strip()
         name = google_user.get("name")
         picture = google_user.get("picture")
         
