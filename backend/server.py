@@ -6263,6 +6263,7 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
                 "special_requirements": [string],
                 "max_dimension_mm": float - the largest dimension for machine envelope matching,
                 "max_diameter_mm": float or null - for rotational parts,
+                "weight_kg": float or null - check drawing title block for weight; if not shown, estimate from volume × material density,
                 "drawings_analyzed": int - number of drawings you analyzed
             }}
             
@@ -6285,7 +6286,8 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
                 - BENDING: For sheet metal bends, include "press brake bending"
                 - DRILLING: For holes, include "drilling"
                 - DEBURRING: If notes mention deburring, grinding edges, rounding corners, include "deburring/grinding"
-            11. For reference_photo images, still provide your BEST GUESS for geometry and processes but set dimensions to null"""
+            11. For reference_photo images, still provide your BEST GUESS for geometry and processes but set dimensions to null
+            12. ALWAYS check the title block for WEIGHT (usually in kg). If stated, include it in weight_kg. For large parts (axles, shafts, housings), weight from drawing is critical for cost estimation."""
         ).with_model("openai", "gpt-5.2")
         
         # Get RFQ description for additional context
@@ -7093,10 +7095,26 @@ async def estimate_cost(rfq_id: str, request: Request, user: dict = Depends(get_
     ai_analysis = rfq.get("ai_analysis") or {}
     part_geometry = ai_analysis.get("part_geometry", "rectangular")
     processes = ai_analysis.get("recommended_processes", [])
-    dims = rfq.get("part_geometry", {})
     material = rfq.get("material_type", "Mild Steel")
     surface_finish = rfq.get("surface_finish", "As Machined")
     quantity = rfq.get("quantity", 1)
+    
+    # Collect ALL available dimensions from multiple sources
+    # 1. From part_geometry (buyer-confirmed dimensions)
+    buyer_dims = rfq.get("part_geometry", {})
+    # 2. From AI analysis overall_dimensions (extracted from drawing)
+    ai_dims = ai_analysis.get("overall_dimensions", {})
+    # 3. AI-detected weight from drawing
+    ai_weight = ai_analysis.get("weight") or ai_analysis.get("weight_kg")
+    # 4. AI-detected tolerances
+    ai_tolerances = ai_analysis.get("critical_tolerances", [])
+    
+    # Merge: buyer-confirmed dims take priority, then AI-extracted dims
+    all_dims = {}
+    if ai_dims:
+        all_dims.update({k: v for k, v in ai_dims.items() if v})
+    if buyer_dims:
+        all_dims.update({k: v for k, v in buyer_dims.items() if v and k != "unit"})
     
     # Get image for AI context
     drawing_ids = rfq.get("drawing_ids", [])
@@ -7104,16 +7122,41 @@ async def estimate_cost(rfq_id: str, request: Request, user: dict = Depends(get_
     if drawing_ids:
         drawing = await db.drawings.find_one({"drawing_id": drawing_ids[0]}, {"_id": 0})
         if drawing:
-            img_url = drawing.get("preview_url") or drawing.get("file_url")
-            if img_url:
-                try:
-                    import httpx
-                    async with httpx.AsyncClient() as client:
-                        img_resp = await client.get(img_url, timeout=15)
-                        if img_resp.status_code == 200:
-                            image_b64 = base64.b64encode(img_resp.content).decode("utf-8")
-                except Exception:
-                    pass
+            raw_data = None
+            file_type = drawing.get("file_type", "")
+            
+            # First try: use file_data stored directly in MongoDB
+            if drawing.get("file_data"):
+                raw_b64 = drawing["file_data"] if isinstance(drawing["file_data"], str) else base64.b64encode(drawing["file_data"]).decode("utf-8")
+                raw_data = base64.b64decode(raw_b64)
+            else:
+                # Fallback: fetch from URL
+                img_url = drawing.get("preview_url") or drawing.get("file_url")
+                if img_url:
+                    try:
+                        import httpx
+                        async with httpx.AsyncClient() as client:
+                            img_resp = await client.get(img_url, timeout=15)
+                            if img_resp.status_code == 200:
+                                raw_data = img_resp.content
+                    except Exception:
+                        pass
+            
+            if raw_data:
+                # Convert PDF to image if needed
+                if "pdf" in file_type.lower() or (raw_data[:5] == b'%PDF-'):
+                    try:
+                        from pdf2image import convert_from_bytes
+                        import io
+                        pages = convert_from_bytes(raw_data, first_page=1, last_page=1, dpi=200)
+                        if pages:
+                            buf = io.BytesIO()
+                            pages[0].save(buf, format='JPEG', quality=85)
+                            image_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+                    except Exception as e:
+                        logger.warning(f"PDF to image conversion failed: {e}")
+                else:
+                    image_b64 = base64.b64encode(raw_data).decode("utf-8")
     
     # Build cost config summary for AI
     machine_rates_str = "\n".join([
@@ -7126,8 +7169,37 @@ async def estimate_cost(rfq_id: str, request: Request, user: dict = Depends(get_
         for v in config.get("material_rates", {}).values()
     ])
     
-    dims_str = ", ".join([f"{k}: {v}" for k, v in dims.items() if v and k != "unit"]) if dims else "Not specified"
+    dims_str = ", ".join([f"{k}: {v}" for k, v in all_dims.items() if v and k != "unit"]) if all_dims else "Not specified"
     procs_str = ", ".join(processes[:10]) if processes else "Not detected"
+    tolerances_str = ", ".join([f"{t.get('feature','')}: ±{t.get('tolerance','')}{t.get('unit','mm')}" for t in ai_tolerances[:5]]) if ai_tolerances else "Not specified"
+    weight_str = f"{ai_weight} kg" if ai_weight else "Not specified — estimate from dimensions"
+    
+    # Include rich AI analysis data for better estimation
+    material_specs = ai_analysis.get("material_specs", "")
+    special_reqs = ai_analysis.get("special_requirements", [])
+    ai_machining_hours = ai_analysis.get("estimated_machining_time_hours")
+    max_dim = ai_analysis.get("max_dimension_mm")
+    holes = ai_analysis.get("holes", [])
+    
+    # Build rich context string
+    extra_context_parts = []
+    if material_specs:
+        extra_context_parts.append(f"Material specs from drawing: {material_specs}")
+    if ai_machining_hours:
+        extra_context_parts.append(f"AI-estimated machining time: {ai_machining_hours} hours")
+    if max_dim:
+        extra_context_parts.append(f"Max dimension: {max_dim}mm")
+    if holes:
+        extra_context_parts.append(f"Holes: {json.dumps(holes)}")
+    if special_reqs:
+        extra_context_parts.append(f"Special requirements: {'; '.join(special_reqs[:5])}")
+    # Include tolerance features for stepped dimensions
+    if ai_tolerances:
+        tol_features = [f"{t.get('feature','')}" for t in ai_tolerances if t.get('feature')]
+        if tol_features:
+            extra_context_parts.append(f"Dimensioned features: {', '.join(tol_features)}")
+    
+    extra_context = "\n".join(extra_context_parts) if extra_context_parts else ""
     
     api_key = os.environ.get("EMERGENT_LLM_KEY")
     if not api_key:
@@ -7140,9 +7212,19 @@ PART DETAILS:
 - Material: {material}
 - Surface Finish: {surface_finish}
 - Geometry: {part_geometry}
-- Dimensions: {dims_str}
+- Dimensions (from drawing): {dims_str}
+- Weight (from drawing): {weight_str}
 - AI-detected processes: {procs_str}
+- Tolerances: {tolerances_str}
 - Complexity: {ai_analysis.get('complexity_score', 'Unknown')}/10
+{f"- Additional drawing data: " + extra_context if extra_context else ""}
+
+CRITICAL RULE FOR WEIGHT:
+- If "Weight (from drawing)" is specified (e.g. "463.53 kg"), use EXACTLY that value as estimated_weight_kg. Do NOT recalculate.
+- If the drawing image is provided, CHECK THE TITLE BLOCK for weight — it's usually in the bottom-right corner (e.g. "WEIGHT: 463.53").
+- Only estimate weight from dimensions if no weight is found anywhere.
+- For complex stepped shafts/axles: calculate volume of each stepped section using π/4 × d² × L, then sum and multiply by density (steel ≈ 7.85 kg/dm³).
+- raw_material_weight_kg = estimated_weight_kg × 1.15 to 1.30 (15-30% machining allowance for forged/cast stock)
 
 ADMIN-CONFIGURED MACHINE RATES:
 {machine_rates_str}
