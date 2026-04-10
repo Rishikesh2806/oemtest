@@ -21,37 +21,31 @@ Build a full-stack web application for an AI-driven manufacturing marketplace th
 - 5 vendor categories: confirmed_capable, likely_capable, partial_match, excluded_too_small, excluded_wrong_type
 - Fabrication operations: welding, riveting, surface_treatment, grinding_deburr, shearing, punching
 - Sawing operation (band saw) — excluded from strict matching
-- AI prompt detects weld symbols, BOM/assembly, fabrication processes
-- Facing dimension rules with length check
 
 ### AI Dimension Estimation for Reference Photos
 - POST /api/rfqs/{rfq_id}/estimate-dimensions endpoint
-- Buyer uploads reference photo → AI detects geometry type
-- Inline form in CreateRFQ Step 4 asks for 1-2 key dimensions based on geometry
-- GPT-5.2 estimates remaining dimensions using photo + user input
-- All dimensions shown in editable form for buyer confirmation
-- Match button disabled until dimensions confirmed
-- Geometry-specific field mapping (cylindrical→diameter+length, sheet_metal→L+W, etc.)
+- Process-aware schema routing: gear, boring, sheet_metal, **milling (NEW)**, turning, default
 - **Bolt hole support**: boring schema includes bolt_hole_diameter, bolt_circle_diameter, number_of_holes
-- **Drill keyword trigger**: "drill", "bolt hole", "flange" keywords now trigger boring schema
+- **Slot support (NEW)**: sheet_metal and milling schemas include slot_length, slot_width, number_of_slots
+- **Milling schema (NEW)**: Handles parts with slots, pockets — includes slot_depth, pocket_length/width/depth
+- **Improved schema detection priority**: sheet_metal (bend/bracket) checked before boring/drill to avoid misrouting bent parts
 - **User dimension preservation**: User-provided dimensions always preserved even if AI schema doesn't include them
+- Keyword triggers: "drill/bolt hole/flange" → boring; "slot/pocket/mill" → milling; "sheet/bend/bracket" → sheet_metal
 
 ### Send RFQ to Partial Vendors
 - POST /api/rfqs/{rfq_id}/send-to-vendor endpoint
 - Frontend Send RFQ button on partial/likely vendor rows
-- Inline partial results in CreateRFQ flow
 
 ### Google OAuth Custom Role Fix
 - Email case normalization (.lower()) in google_auth.py
-- Custom role users (inspector, supervisor, sales_manager) bypass /select-role
-- Auto-redirect from SelectRolePage if role exists
+- Custom role users bypass /select-role
 
 ### Admin Dashboard
-- Demo Panel tab → https://oemlinker.com/demo
+- Demo Panel tab
 - Removed all "emergent" text from user-visible code
 
 ### Performance
-- Fixed duplicate NotificationBell polling (removed duplicate component)
+- Fixed duplicate NotificationBell polling
 - Polling intervals increased from 30s to 60s
 
 ## Pending Issues (Priority Order)

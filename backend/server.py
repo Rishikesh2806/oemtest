@@ -6770,17 +6770,40 @@ async def estimate_dimensions(rfq_id: str, request: Request, user: dict = Depend
 }""",
         "sheet_metal": """{
     "part_geometry": "sheet_metal",
-    "length": <overall length in mm>,
+    "length": <overall flat/unfolded length in mm>,
     "width": <overall width in mm>,
     "thickness": <sheet thickness in mm>,
     "bend_radius": <inside bend radius in mm or null>,
     "bend_angle": <bend angle in degrees or null>,
     "number_of_bends": <integer or null>,
-    "hole_diameter": <largest hole diameter in mm or null>,
+    "hole_diameter": <round hole diameter in mm or null>,
+    "number_of_holes": <integer count of round holes or null>,
+    "slot_length": <slot/elongated hole length in mm or null>,
+    "slot_width": <slot/elongated hole width in mm or null>,
+    "number_of_slots": <integer count of slots or null>,
     "weight_kg": <estimated weight>,
     "confidence": "high" | "medium" | "low",
     "reasoning": "<brief explanation>"
 }""",
+        "milling": """{
+    "part_geometry": "%s",
+    "length": <overall length in mm>,
+    "width": <overall width in mm>,
+    "height": <overall height in mm>,
+    "thickness": <wall/base thickness in mm or null>,
+    "hole_diameter": <round hole diameter in mm or null>,
+    "number_of_holes": <integer count of round holes or null>,
+    "slot_length": <slot length in mm or null>,
+    "slot_width": <slot width in mm or null>,
+    "slot_depth": <slot depth in mm or null>,
+    "number_of_slots": <integer count of slots or null>,
+    "pocket_length": <pocket length in mm or null>,
+    "pocket_width": <pocket width in mm or null>,
+    "pocket_depth": <pocket depth in mm or null>,
+    "weight_kg": <estimated weight>,
+    "confidence": "high" | "medium" | "low",
+    "reasoning": "<brief explanation>"
+}""" % part_geometry,
         "default": """{
     "part_geometry": "%s",
     "length": <number or null>,
@@ -6800,10 +6823,14 @@ async def estimate_dimensions(rfq_id: str, request: Request, user: dict = Depend
     procs_lower = " ".join(ai_procs).lower()
     if any(k in procs_lower for k in ["gear", "hobbing", "spline", "teeth"]):
         schema_key = "gear"
-    elif any(k in procs_lower for k in ["boring", "bore", "drill", "bolt hole", "flange"]):
-        schema_key = "boring"
-    elif any(k in procs_lower for k in ["sheet", "bend", "press brake", "laser cut"]):
+    elif any(k in procs_lower for k in ["sheet", "bend", "press brake", "bracket", "angle"]):
         schema_key = "sheet_metal"
+    elif any(k in procs_lower for k in ["boring", "bore", "bolt hole", "flange"]):
+        schema_key = "boring"
+    elif any(k in procs_lower for k in ["slot", "pocket", "mill"]) and not any(k in procs_lower for k in ["turn", "lathe"]):
+        schema_key = "milling"
+    elif any(k in procs_lower for k in ["drill"]) and not any(k in procs_lower for k in ["turn", "lathe", "bend"]):
+        schema_key = "boring"
     elif any(k in procs_lower for k in ["turn", "lathe"]):
         schema_key = "turning"
     else:
@@ -6825,8 +6852,11 @@ Part info:
 TASK: Carefully analyze the photo. Using the provided dimensions as reference scale, estimate ALL remaining manufacturing dimensions. Use standard engineering relationships:
 - For GEARS: Calculate module from OD and tooth count visible in photo, derive PCD = module × teeth, root dia = PCD - 2.5×module
 - For SHAFTS: Estimate stepped diameters from proportions, thread sizes from standard series
-- For SHEET METAL: Estimate bend K-factor, developed length
+- For SHEET METAL: Estimate bend K-factor, developed length. Look carefully for SLOTS (elongated/oval holes) vs round HOLES — they have different dimensions
 - For BORES: Estimate wall thickness from OD-ID relationship
+- For MILLED PARTS: Identify slots (elongated cuts), pockets (recessed areas), and through-holes separately
+
+IMPORTANT: Distinguish between ROUND HOLES (measure diameter) and SLOTS/ELONGATED HOLES (measure length and width separately). Count each type independently.
 
 Return ONLY a JSON object in this exact format:
 {dim_schema}
