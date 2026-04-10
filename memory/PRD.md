@@ -9,24 +9,6 @@ Build a full-stack web application for an AI-driven manufacturing marketplace th
 - **Database**: MongoDB
 - **Integrations**: AWS S3, OpenAI GPT-5.2 Vision (Emergent LLM Key), Resend, Google OAuth, Razorpay, Gupshup WhatsApp
 
-## Core Architecture
-```
-/app/
-├── backend/
-│   ├── app/
-│   │   ├── routes/ (auth, chatbot, google_auth, orders, vendor)
-│   │   ├── services/
-│   │   │   └── machine_validation.py  # Strict physics-based engine
-│   ├── server.py                      # Monolith (needs continued refactoring)
-└── frontend/
-    └── src/
-        ├── components/
-        │   └── ExcludedVendorsSection.jsx  # Partial/Likely vendor display + Send RFQ
-        ├── pages/
-        │   ├── CreateRFQ.jsx               # RFQ creation flow with inline partial results
-        │   └── RFQDetail.jsx               # RFQ detail with vendor categories
-```
-
 ## Key Credentials
 - Admin: admin@offoadex.com / admin123
 - Vendor: testvendor_nda@test.com / vendor123
@@ -34,40 +16,40 @@ Build a full-stack web application for an AI-driven manufacturing marketplace th
 
 ## What's Been Implemented
 
-### Machine Validation Engine v3.0 (Fabrication Support)
+### Machine Validation Engine v3.0 (Fabrication + Sawing Support)
 - Physics-based hard gates (dimension checks, machine type compatibility)
 - 5 vendor categories: confirmed_capable, likely_capable, partial_match, excluded_too_small, excluded_wrong_type
-- **Fabrication operations**: welding (MIG/TIG/arc/spot/resistance), riveting, surface_treatment, grinding_deburr, shearing, punching
-- **AI prompt enhanced**: Detects weld symbols (z2/z3/fillet/groove/butt), BOM/assembly drawings, rivets, surface treatment notes
-- **Smart operation routing**: "cut to length" → sawing, "laser cut plate" → laser_cutting, "drilling rivet holes" → drilling
-- **Non-gate operations**: sawing, surface_treatment, grinding_deburr excluded from strict matching (every shop can do these)
-- Facing dimension rules with length check (prevents VTL matching for long shafts)
-- Geometry types include "fabrication" and "assembly" for welded/riveted assemblies
+- Fabrication operations: welding, riveting, surface_treatment, grinding_deburr, shearing, punching
+- Sawing operation (band saw) — excluded from strict matching
+- AI prompt detects weld symbols, BOM/assembly, fabrication processes
+- Facing dimension rules with length check
+
+### AI Dimension Estimation for Reference Photos
+- POST /api/rfqs/{rfq_id}/estimate-dimensions endpoint
+- Buyer uploads reference photo → AI detects geometry type
+- Inline form in CreateRFQ Step 4 asks for 1-2 key dimensions based on geometry
+- GPT-5.2 estimates remaining dimensions using photo + user input
+- All dimensions shown in editable form for buyer confirmation
+- Match button disabled until dimensions confirmed
+- Geometry-specific field mapping (cylindrical→diameter+length, sheet_metal→L+W, etc.)
 
 ### Send RFQ to Partial Vendors
 - POST /api/rfqs/{rfq_id}/send-to-vendor endpoint
-- Moves vendor from partial/likely lists to matched_vendors
-- Sends email + WhatsApp + in-app notifications
-- Frontend: Send RFQ button on each partial/likely vendor row
-- Auto-opens Partial Match section in ExcludedVendorsSection
+- Frontend Send RFQ button on partial/likely vendor rows
+- Inline partial results in CreateRFQ flow
 
-### RFQ Creation Flow - Inline Partial Results
-- When no confirmed vendors match, shows partial/likely results inline
-- "No Exact Matches — But Close Ones Found" with Send RFQ buttons
-- Falls back to generic "No Exact Matches Right Now" when no partial either
+### Google OAuth Custom Role Fix
+- Email case normalization (.lower()) in google_auth.py
+- Custom role users (inspector, supervisor, sales_manager) bypass /select-role
+- Auto-redirect from SelectRolePage if role exists
 
 ### Admin Dashboard
-- Demo Panel tab linking to https://oemlinker.com/demo
-- Chat Analytics tab
+- Demo Panel tab → https://oemlinker.com/demo
 - Removed all "emergent" text from user-visible code
 
-### Other Completed Features
-- AI Drawing Analysis (GPT-5.2 Vision)
-- Custom Google OAuth
-- AI Chatbot (Gemini 3 Flash) with feedback + analytics
-- Contact page with Google Maps + Resend emails
-- NDA enforcement on drawings
-- RFQ PDF generation (ReportLab)
+### Performance
+- Fixed duplicate NotificationBell polling (removed duplicate component)
+- Polling intervals increased from 30s to 60s
 
 ## Pending Issues (Priority Order)
 - P0: RFQ PDF single-page layout (in progress, untested)
