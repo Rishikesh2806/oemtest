@@ -7099,6 +7099,13 @@ async def estimate_cost(rfq_id: str, request: Request, user: dict = Depends(get_
     surface_finish = rfq.get("surface_finish", "As Machined")
     quantity = rfq.get("quantity", 1)
     
+    # Check if buyer provides material
+    buyer_provides_material = (
+        rfq.get("material_provided_by_buyer", False) or
+        rfq.get("raw_material_provided", False) or
+        rfq.get("supply_type", "vendor_material") == "buyer_material"
+    )
+    
     # Collect ALL available dimensions from multiple sources
     # 1. From part_geometry (buyer-confirmed dimensions)
     buyer_dims = rfq.get("part_geometry", {})
@@ -7217,6 +7224,7 @@ PART DETAILS:
 - AI-detected processes: {procs_str}
 - Tolerances: {tolerances_str}
 - Complexity: {ai_analysis.get('complexity_score', 'Unknown')}/10
+- Material supplied by: {"BUYER (exclude material cost)" if buyer_provides_material else "VENDOR (include material cost)"}
 {f"- Additional drawing data: " + extra_context if extra_context else ""}
 
 CRITICAL RULE FOR WEIGHT:
@@ -7225,6 +7233,10 @@ CRITICAL RULE FOR WEIGHT:
 - Only estimate weight from dimensions if no weight is found anywhere.
 - For complex stepped shafts/axles: calculate volume of each stepped section using π/4 × d² × L, then sum and multiply by density (steel ≈ 7.85 kg/dm³).
 - raw_material_weight_kg = estimated_weight_kg × 1.15 to 1.30 (15-30% machining allowance for forged/cast stock)
+{"" if not buyer_provides_material else '''
+MATERIAL COST RULE:
+- Buyer is providing the raw material. Set material_cost.total = 0 and material_cost.rate_per_kg = 0.
+- Still estimate the weight for reference, but do NOT include material in the subtotal.'''}
 
 ADMIN-CONFIGURED MACHINE RATES:
 {machine_rates_str}
@@ -7318,6 +7330,21 @@ RULES:
         
         cost_data = json.loads(response_text)
         
+        # If buyer provides material, force material cost to zero
+        if buyer_provides_material and "material_cost" in cost_data:
+            material_total = cost_data["material_cost"].get("total", 0)
+            cost_data["material_cost"]["total"] = 0
+            cost_data["material_cost"]["rate_per_kg"] = 0
+            cost_data["material_cost"]["buyer_provided"] = True
+            # Recalculate subtotal and total without material
+            subtotal = cost_data.get("subtotal_per_piece", 0) - material_total
+            cost_data["subtotal_per_piece"] = max(subtotal, 0)
+            overhead = subtotal * (cost_data.get("overhead_percentage", 15) / 100)
+            cost_data["overhead_cost"] = round(overhead, 2)
+            profit = (subtotal + overhead) * (cost_data.get("profit_margin_percentage", 20) / 100)
+            cost_data["profit_margin"] = round(profit, 2)
+            cost_data["total_per_piece"] = round(subtotal + overhead + profit, 2)
+        
         # Calculate quantity-based pricing
         base_total = cost_data.get("total_per_piece", 0)
         setup_total = cost_data.get("setup_cost", {}).get("total", 0)
@@ -7355,6 +7382,7 @@ RULES:
             "quantity_pricing": quantity_pricing,
             "currency": "INR",
             "method": "ai_estimation",
+            "buyer_provides_material": buyer_provides_material,
             "disclaimer": "AI Cost Estimation is in beta and still learning. These are indicative estimates only — do not rely on them for final pricing. Actual vendor quotes may differ significantly based on their capabilities, capacity, and overhead."
         }
         

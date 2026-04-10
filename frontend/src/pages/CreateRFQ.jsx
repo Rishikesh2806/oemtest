@@ -1337,12 +1337,23 @@ const CreateRFQ = () => {
                         {costEstimate.cost_breakdown.material_cost && (
                           <div className="p-2 bg-white rounded border">
                             <p className="text-[10px] text-slate-400 uppercase font-medium">Material</p>
-                            <p className="text-sm font-semibold text-slate-800">
-                              ₹{Math.round(costEstimate.cost_breakdown.material_cost.total || 0).toLocaleString('en-IN')}
-                            </p>
-                            <p className="text-[10px] text-slate-400">
-                              {costEstimate.cost_breakdown.material_cost.estimated_weight_kg}kg @ ₹{costEstimate.cost_breakdown.material_cost.rate_per_kg}/kg
-                            </p>
+                            {costEstimate.buyer_provides_material ? (
+                              <>
+                                <p className="text-sm font-semibold text-green-600">Buyer Provided</p>
+                                <p className="text-[10px] text-slate-400">
+                                  ~{costEstimate.cost_breakdown.material_cost.estimated_weight_kg}kg (ref only)
+                                </p>
+                              </>
+                            ) : (
+                              <>
+                                <p className="text-sm font-semibold text-slate-800">
+                                  ₹{Math.round(costEstimate.cost_breakdown.material_cost.total || 0).toLocaleString('en-IN')}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  {costEstimate.cost_breakdown.material_cost.estimated_weight_kg}kg @ ₹{costEstimate.cost_breakdown.material_cost.rate_per_kg}/kg
+                                </p>
+                              </>
+                            )}
                           </div>
                         )}
                         {costEstimate.cost_breakdown.operations?.length > 0 && (
