@@ -1188,30 +1188,37 @@ const CreateRFQ = () => {
                   ) : (
                     <>
                       {/* Editable estimated dimensions */}
-                      <p className="text-xs text-slate-500 mb-2">Review and edit if needed. All values in mm.</p>
+                      <p className="text-xs text-slate-500 mb-2">Review and edit if needed. Dimensions in mm, angles in degrees.</p>
                       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
                         {Object.entries(estimatedDimensions)
-                          .filter(([k, v]) => v && k !== "unit")
-                          .map(([key, value]) => (
-                            <div key={key}>
-                              <label className="block text-xs font-medium text-slate-700 mb-1 capitalize">
-                                {key.replace(/_/g, " ")}
-                                {userDimensions[key] && (
-                                  <span className="ml-1 text-green-600 text-[10px]">(your input)</span>
-                                )}
-                              </label>
-                              <Input
-                                type="number"
-                                value={estimatedDimensions[key] || ""}
-                                onChange={e => setEstimatedDimensions(prev => ({
-                                  ...prev,
-                                  [key]: e.target.value ? parseFloat(e.target.value) : ""
-                                }))}
-                                className={`bg-white ${userDimensions[key] ? "border-green-300" : "border-blue-300"}`}
-                                data-testid={`est-dim-${key}`}
-                              />
-                            </div>
-                          ))}
+                          .filter(([k, v]) => v !== null && v !== undefined && v !== "" && k !== "unit")
+                          .map(([key, value]) => {
+                            const isAngle = key.includes("angle");
+                            const isCount = key.includes("number_of") || key === "number_of_teeth";
+                            const isText = typeof value === "string" && isNaN(value);
+                            const unitLabel = isAngle ? "deg" : isCount ? "" : "mm";
+                            return (
+                              <div key={key}>
+                                <label className="block text-xs font-medium text-slate-700 mb-1">
+                                  {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                                  {unitLabel && <span className="text-slate-400 ml-1">({unitLabel})</span>}
+                                  {userDimensions[key] && (
+                                    <span className="ml-1 text-green-600 text-[10px]">(your input)</span>
+                                  )}
+                                </label>
+                                <Input
+                                  type={isText ? "text" : "number"}
+                                  value={estimatedDimensions[key] ?? ""}
+                                  onChange={e => setEstimatedDimensions(prev => ({
+                                    ...prev,
+                                    [key]: isText ? e.target.value : (e.target.value ? parseFloat(e.target.value) : "")
+                                  }))}
+                                  className={`bg-white ${userDimensions[key] ? "border-green-300" : "border-blue-300"}`}
+                                  data-testid={`est-dim-${key}`}
+                                />
+                              </div>
+                            );
+                          })}
                       </div>
                       <div className="flex gap-2">
                         <Button

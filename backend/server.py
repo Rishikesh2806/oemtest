@@ -6717,18 +6717,68 @@ async def estimate_dimensions(rfq_id: str, request: Request, user: dict = Depend
     
     user_dim_str = ", ".join([f"{k}: {v}mm" for k, v in user_dimensions.items() if v])
     
-    estimation_prompt = f"""You are an expert manufacturing engineer. A buyer uploaded a reference photo of a part and provided these key dimensions:
-{user_dim_str}
-
-The part geometry is: {part_geometry}
-Part title: {rfq.get('title', 'Unknown')}
-Material: {rfq.get('material_type', 'Unknown')}
-
-Based on the photo and the provided dimensions, estimate ALL remaining dimensions needed for manufacturing.
-
-Return ONLY a JSON object with these fields (use null for dimensions that don't apply to this geometry):
-{{
-    "part_geometry": "{part_geometry}",
+    # Get AI-detected processes for context
+    ai_procs = ai_analysis.get("recommended_processes", [])
+    procs_str = ", ".join(ai_procs[:8]) if ai_procs else "Not detected"
+    
+    # Process-specific dimension schemas
+    process_dim_schemas = {
+        "gear": """{
+    "part_geometry": "circular_flat",
+    "outer_diameter": <tip/addendum circle diameter in mm>,
+    "pitch_circle_diameter": <PCD in mm>,
+    "root_diameter": <root circle diameter in mm>,
+    "bore_diameter": <center hole diameter in mm>,
+    "face_width": <gear thickness/face width in mm>,
+    "module": <tooth module in mm>,
+    "number_of_teeth": <integer>,
+    "pressure_angle": <degrees, typically 20>,
+    "keyway_width": <keyway width in mm or null>,
+    "keyway_depth": <keyway depth in mm or null>,
+    "hub_diameter": <hub OD in mm or null>,
+    "hub_length": <hub projection in mm or null>,
+    "weight_kg": <estimated weight>,
+    "confidence": "high" | "medium" | "low",
+    "reasoning": "<brief explanation>"
+}""",
+        "turning": """{
+    "part_geometry": "cylindrical",
+    "diameter": <max outer diameter in mm>,
+    "length": <overall length in mm>,
+    "inner_diameter": <bore/ID in mm or null>,
+    "min_diameter": <smallest stepped diameter in mm or null>,
+    "thread_size": "<thread spec e.g. M20x2.5 or null>",
+    "keyway_width": <keyway width in mm or null>,
+    "weight_kg": <estimated weight>,
+    "confidence": "high" | "medium" | "low",
+    "reasoning": "<brief explanation>"
+}""",
+        "boring": """{
+    "part_geometry": "cylindrical",
+    "outer_diameter": <OD in mm>,
+    "inner_diameter": <bore ID in mm>,
+    "length": <overall length in mm>,
+    "wall_thickness": <wall thickness in mm>,
+    "flange_diameter": <flange OD in mm or null>,
+    "weight_kg": <estimated weight>,
+    "confidence": "high" | "medium" | "low",
+    "reasoning": "<brief explanation>"
+}""",
+        "sheet_metal": """{
+    "part_geometry": "sheet_metal",
+    "length": <overall length in mm>,
+    "width": <overall width in mm>,
+    "thickness": <sheet thickness in mm>,
+    "bend_radius": <inside bend radius in mm or null>,
+    "bend_angle": <bend angle in degrees or null>,
+    "number_of_bends": <integer or null>,
+    "hole_diameter": <largest hole diameter in mm or null>,
+    "weight_kg": <estimated weight>,
+    "confidence": "high" | "medium" | "low",
+    "reasoning": "<brief explanation>"
+}""",
+        "default": """{
+    "part_geometry": "%s",
     "length": <number or null>,
     "width": <number or null>,
     "height": <number or null>,
@@ -6736,23 +6786,54 @@ Return ONLY a JSON object with these fields (use null for dimensions that don't 
     "outer_diameter": <number or null>,
     "inner_diameter": <number or null>,
     "thickness": <number or null>,
-    "large_diameter": <number or null>,
-    "small_diameter": <number or null>,
-    "taper_angle": <number or null>,
-    "bend_radius": <number or null>,
-    "bend_angle": <number or null>,
     "weight_kg": <estimated weight or null>,
     "confidence": "high" | "medium" | "low",
-    "reasoning": "<brief explanation of how you estimated>"
-}}
+    "reasoning": "<brief explanation>"
+}""" % part_geometry
+    }
+    
+    # Detect which schema to use based on processes
+    procs_lower = " ".join(ai_procs).lower()
+    if any(k in procs_lower for k in ["gear", "hobbing", "spline", "teeth"]):
+        schema_key = "gear"
+    elif any(k in procs_lower for k in ["boring", "bore"]):
+        schema_key = "boring"
+    elif any(k in procs_lower for k in ["sheet", "bend", "press brake", "laser cut"]):
+        schema_key = "sheet_metal"
+    elif any(k in procs_lower for k in ["turn", "lathe"]):
+        schema_key = "turning"
+    else:
+        schema_key = "default"
+    
+    dim_schema = process_dim_schemas[schema_key]
+    
+    estimation_prompt = f"""You are an expert manufacturing engineer with deep knowledge of part dimensioning.
+
+A buyer uploaded a reference photo of a part and provided these key dimensions:
+{user_dim_str}
+
+Part info:
+- Geometry: {part_geometry}
+- Title: {rfq.get('title', 'Unknown')}
+- Material: {rfq.get('material_type', 'Unknown')}
+- AI-detected processes: {procs_str}
+
+TASK: Carefully analyze the photo. Using the provided dimensions as reference scale, estimate ALL remaining manufacturing dimensions. Use standard engineering relationships:
+- For GEARS: Calculate module from OD and tooth count visible in photo, derive PCD = module × teeth, root dia = PCD - 2.5×module
+- For SHAFTS: Estimate stepped diameters from proportions, thread sizes from standard series
+- For SHEET METAL: Estimate bend K-factor, developed length
+- For BORES: Estimate wall thickness from OD-ID relationship
+
+Return ONLY a JSON object in this exact format:
+{dim_schema}
 
 RULES:
 - Keep user-provided dimensions EXACTLY as given: {user_dim_str}
-- For cylindrical parts: if diameter given, estimate length from proportions in the photo
-- For rectangular parts: if length given, estimate width/height from aspect ratios
-- For sheet metal: estimate thickness from material type (e.g., 3mm for SS sheet)
-- All dimensions in mm
-- Be conservative — round to standard stock sizes"""
+- Count teeth visible in the photo if it's a gear
+- Estimate dimensions from photo proportions using the user-provided dimension as scale reference
+- Use standard manufacturing sizes (ISO preferred numbers, standard modules, standard bore sizes)
+- All linear dimensions in mm, angles in degrees
+- Be as specific as possible — these dimensions will be used for machine matching"""
 
     try:
         user_msg = UserMessage(text=estimation_prompt)
@@ -6789,23 +6870,26 @@ RULES:
         
         estimated = json.loads(response_text)
         
-        # Merge: user dimensions override AI estimates
+        # Merge: user dimensions override AI estimates, accept ALL dimension fields from AI
         final_dimensions = {}
-        all_dim_fields = [
-            "length", "width", "height", "diameter", "outer_diameter", 
-            "inner_diameter", "thickness", "large_diameter", "small_diameter",
-            "taper_angle", "bend_radius", "bend_angle"
-        ]
+        # Standard fields + process-specific fields from AI response
+        skip_fields = {"confidence", "reasoning", "part_geometry", "unit"}
         
-        for field in all_dim_fields:
+        for field, val in estimated.items():
+            if field in skip_fields:
+                continue
             user_val = user_dimensions.get(field)
-            ai_val = estimated.get(field)
             if user_val is not None and user_val != "" and user_val != 0:
-                final_dimensions[field] = float(user_val)
-            elif ai_val is not None and ai_val != 0:
-                final_dimensions[field] = float(ai_val)
+                final_dimensions[field] = user_val if isinstance(user_val, str) else float(user_val)
+            elif val is not None and val != 0 and val != "null":
+                try:
+                    final_dimensions[field] = float(val)
+                except (ValueError, TypeError):
+                    final_dimensions[field] = val  # Keep string values (e.g., thread_size "M20x2.5")
         
         final_dimensions["unit"] = "mm"
+        
+        all_dim_keys = [k for k in final_dimensions.keys() if k != "unit"]
         
         return {
             "estimated_dimensions": final_dimensions,
@@ -6814,8 +6898,9 @@ RULES:
             "confidence": estimated.get("confidence", "medium"),
             "reasoning": estimated.get("reasoning", ""),
             "method": "ai_estimation",
+            "schema_used": schema_key,
             "user_provided": list(user_dimensions.keys()),
-            "ai_estimated": [f for f in all_dim_fields if f not in user_dimensions and final_dimensions.get(f)]
+            "ai_estimated": [f for f in all_dim_keys if f not in user_dimensions]
         }
         
     except Exception as e:
