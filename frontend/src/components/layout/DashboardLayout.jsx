@@ -76,7 +76,7 @@ const DashboardLayout = ({ children }) => {
 
   useEffect(() => {
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000); // Poll every 30s
+    const interval = setInterval(fetchUnreadCount, 60000); // Poll every 60s
     return () => clearInterval(interval);
   }, []);
 
@@ -198,8 +198,6 @@ const DashboardLayout = ({ children }) => {
           <Link to="/" className="flex items-center gap-2">
             <img src="/logo.png" alt="OEMLinker" style={{ width: '180px', height: '56px' }} className="object-contain" />
           </Link>
-
-          <NotificationBell />
         </div>
       </header>
 
