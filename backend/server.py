@@ -6956,6 +6956,337 @@ RULES:
         }
 
 
+# ============== COST CONFIG MANAGEMENT (Admin) ==============
+
+DEFAULT_COST_CONFIG = {
+    "material_rates": {
+        "carbon_steel": {"name": "Carbon Steel", "rate_per_kg": 55, "unit": "INR/kg"},
+        "forged_steel": {"name": "Forged Steel", "rate_per_kg": 75, "unit": "INR/kg", "note": "Range 65-85"},
+        "mild_steel": {"name": "Mild Steel (MS)", "rate_per_kg": 58, "unit": "INR/kg"},
+        "stainless_steel_304": {"name": "SS 304", "rate_per_kg": 210, "unit": "INR/kg"},
+        "stainless_steel_316": {"name": "SS 316", "rate_per_kg": 310, "unit": "INR/kg"},
+        "aluminum_6061": {"name": "Aluminum 6061", "rate_per_kg": 280, "unit": "INR/kg"},
+        "aluminum_7075": {"name": "Aluminum 7075", "rate_per_kg": 450, "unit": "INR/kg"},
+        "brass": {"name": "Brass", "rate_per_kg": 520, "unit": "INR/kg"},
+        "copper": {"name": "Copper", "rate_per_kg": 750, "unit": "INR/kg"},
+        "titanium": {"name": "Titanium (Ti-6Al-4V)", "rate_per_kg": 3200, "unit": "INR/kg"},
+        "nylon": {"name": "Nylon / Plastic", "rate_per_kg": 350, "unit": "INR/kg"},
+    },
+    "machine_hourly_rates": {
+        "cnc_turning": {"name": "CNC Turning", "rate_per_hour": 800, "unit": "INR/hr"},
+        "cnc_milling": {"name": "CNC Milling (3-axis)", "rate_per_hour": 1000, "unit": "INR/hr"},
+        "cnc_milling_5axis": {"name": "CNC Milling (5-axis)", "rate_per_hour": 1800, "unit": "INR/hr"},
+        "drilling": {"name": "Drilling", "rate_per_hour": 400, "unit": "INR/hr"},
+        "grinding": {"name": "Grinding (Surface/Cylindrical)", "rate_per_hour": 600, "unit": "INR/hr"},
+        "edm_wire": {"name": "Wire EDM", "rate_per_hour": 1200, "unit": "INR/hr"},
+        "edm_sinker": {"name": "Sinker EDM", "rate_per_hour": 1000, "unit": "INR/hr"},
+        "laser_cutting": {"name": "Laser Cutting", "rate_per_hour": 1500, "unit": "INR/hr"},
+        "waterjet": {"name": "Waterjet Cutting", "rate_per_hour": 1800, "unit": "INR/hr"},
+        "press_brake": {"name": "Press Brake / Bending", "rate_per_hour": 500, "unit": "INR/hr"},
+        "welding": {"name": "Welding (MIG/TIG)", "rate_per_hour": 600, "unit": "INR/hr"},
+        "boring": {"name": "Boring", "rate_per_hour": 700, "unit": "INR/hr"},
+        "hobbing": {"name": "Gear Hobbing", "rate_per_hour": 900, "unit": "INR/hr"},
+        "sawing": {"name": "Band Saw", "rate_per_hour": 300, "unit": "INR/hr"},
+    },
+    "finishing_rates": {
+        "anodizing": {"name": "Anodizing", "rate_per_sq_dm": 15, "unit": "INR/sq dm"},
+        "chrome_plating": {"name": "Chrome Plating", "rate_per_sq_dm": 45, "unit": "INR/sq dm"},
+        "zinc_plating": {"name": "Zinc Plating", "rate_per_sq_dm": 12, "unit": "INR/sq dm"},
+        "nickel_plating": {"name": "Nickel Plating", "rate_per_sq_dm": 35, "unit": "INR/sq dm"},
+        "powder_coating": {"name": "Powder Coating", "rate_per_sq_dm": 10, "unit": "INR/sq dm"},
+        "painting": {"name": "Painting", "rate_per_sq_dm": 8, "unit": "INR/sq dm"},
+        "polishing": {"name": "Polishing (Mirror)", "rate_per_sq_dm": 25, "unit": "INR/sq dm"},
+        "black_oxide": {"name": "Black Oxide", "rate_per_sq_dm": 8, "unit": "INR/sq dm"},
+        "passivation": {"name": "Passivation", "rate_per_sq_dm": 10, "unit": "INR/sq dm"},
+    },
+    "tooling_rates": {
+        "setup_charge_per_operation": {"name": "Setup Charge (per operation)", "rate": 500, "unit": "INR/setup"},
+        "fixture_charge": {"name": "Fixture/Jig Charge", "rate": 2000, "unit": "INR/part (amortized)"},
+        "tool_wear_per_hour": {"name": "Tool Wear Cost", "rate": 150, "unit": "INR/hr machining"},
+    },
+    "heat_treatment_rates": {
+        "hardening": {"name": "Hardening", "rate_per_kg": 40, "unit": "INR/kg"},
+        "tempering": {"name": "Tempering", "rate_per_kg": 30, "unit": "INR/kg"},
+        "case_hardening": {"name": "Case Hardening", "rate_per_kg": 55, "unit": "INR/kg"},
+        "nitriding": {"name": "Nitriding", "rate_per_kg": 80, "unit": "INR/kg"},
+        "annealing": {"name": "Annealing", "rate_per_kg": 25, "unit": "INR/kg"},
+        "stress_relieving": {"name": "Stress Relieving", "rate_per_kg": 20, "unit": "INR/kg"},
+        "solution_aging": {"name": "Solution + Aging (Titanium/Al)", "rate_per_kg": 120, "unit": "INR/kg"},
+    },
+}
+
+
+@api_router.get("/admin/cost-config")
+async def get_cost_config(user: dict = Depends(get_current_user)):
+    """Get cost configuration (admin only)"""
+    if not has_admin_access(user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    config = await db.cost_config.find_one({"config_id": "global"}, {"_id": 0})
+    if not config:
+        # Initialize with defaults
+        config = {
+            "config_id": "global",
+            **DEFAULT_COST_CONFIG,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": user["user_id"]
+        }
+        await db.cost_config.insert_one(config)
+        config.pop("_id", None)
+    
+    return config
+
+
+@api_router.put("/admin/cost-config")
+async def update_cost_config(request: Request, user: dict = Depends(get_current_user)):
+    """Update cost configuration (admin only)"""
+    if not has_admin_access(user):
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    body = await request.json()
+    
+    update_data = {
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_by": user["user_id"]
+    }
+    
+    # Update only provided sections
+    for section in ["material_rates", "machine_hourly_rates", "finishing_rates", "tooling_rates", "heat_treatment_rates"]:
+        if section in body:
+            update_data[section] = body[section]
+    
+    await db.cost_config.update_one(
+        {"config_id": "global"},
+        {"$set": update_data},
+        upsert=True
+    )
+    
+    return {"status": "updated", "sections_updated": [s for s in update_data if s not in ("updated_at", "updated_by")]}
+
+
+# ============== COST ESTIMATION ENGINE ==============
+
+@api_router.post("/rfqs/{rfq_id}/estimate-cost")
+async def estimate_cost(rfq_id: str, request: Request, user: dict = Depends(get_current_user)):
+    """
+    AI-powered cost estimation for an RFQ.
+    Uses admin-configured rates + AI time estimation to produce a detailed breakdown.
+    """
+    query = {"rfq_id": rfq_id}
+    if user.get("role") != "admin":
+        query["buyer_id"] = user["user_id"]
+    
+    rfq = await db.rfqs.find_one(query, {"_id": 0})
+    if not rfq:
+        raise HTTPException(status_code=404, detail="RFQ not found")
+    
+    body = await request.json()
+    quantity_options = body.get("quantities", [1, 10, 50, 100])
+    
+    # Get cost config
+    config = await db.cost_config.find_one({"config_id": "global"}, {"_id": 0})
+    if not config:
+        config = {"config_id": "global", **DEFAULT_COST_CONFIG}
+        await db.cost_config.insert_one(config)
+    
+    # Gather RFQ data
+    ai_analysis = rfq.get("ai_analysis") or {}
+    part_geometry = ai_analysis.get("part_geometry", "rectangular")
+    processes = ai_analysis.get("recommended_processes", [])
+    dims = rfq.get("part_geometry", {})
+    material = rfq.get("material_type", "Mild Steel")
+    surface_finish = rfq.get("surface_finish", "As Machined")
+    quantity = rfq.get("quantity", 1)
+    
+    # Get image for AI context
+    drawing_ids = rfq.get("drawing_ids", [])
+    image_b64 = None
+    if drawing_ids:
+        drawing = await db.drawings.find_one({"drawing_id": drawing_ids[0]}, {"_id": 0})
+        if drawing:
+            img_url = drawing.get("preview_url") or drawing.get("file_url")
+            if img_url:
+                try:
+                    import httpx
+                    async with httpx.AsyncClient() as client:
+                        img_resp = await client.get(img_url, timeout=15)
+                        if img_resp.status_code == 200:
+                            image_b64 = base64.b64encode(img_resp.content).decode("utf-8")
+                except Exception:
+                    pass
+    
+    # Build cost config summary for AI
+    machine_rates_str = "\n".join([
+        f"- {v['name']}: ₹{v['rate_per_hour']}/hr" 
+        for v in config.get("machine_hourly_rates", {}).values()
+    ])
+    
+    material_rates_str = "\n".join([
+        f"- {v['name']}: ₹{v['rate_per_kg']}/kg" 
+        for v in config.get("material_rates", {}).values()
+    ])
+    
+    dims_str = ", ".join([f"{k}: {v}" for k, v in dims.items() if v and k != "unit"]) if dims else "Not specified"
+    procs_str = ", ".join(processes[:10]) if processes else "Not detected"
+    
+    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not api_key:
+        return {"error": "AI estimation not available", "method": "unavailable"}
+    
+    cost_prompt = f"""You are an expert manufacturing cost engineer in India. Analyze this part and provide a detailed cost breakdown.
+
+PART DETAILS:
+- Title: {rfq.get('title', 'Unknown')}
+- Material: {material}
+- Surface Finish: {surface_finish}
+- Geometry: {part_geometry}
+- Dimensions: {dims_str}
+- AI-detected processes: {procs_str}
+- Complexity: {ai_analysis.get('complexity_score', 'Unknown')}/10
+
+ADMIN-CONFIGURED MACHINE RATES:
+{machine_rates_str}
+
+ADMIN-CONFIGURED MATERIAL RATES:
+{material_rates_str}
+
+TASK: Estimate the manufacturing cost for 1 piece. Return ONLY a JSON object:
+{{
+    "material_cost": {{
+        "material_type": "<matched material from rates>",
+        "estimated_weight_kg": <number>,
+        "raw_material_weight_kg": <weight including machining allowance>,
+        "rate_per_kg": <from admin rates>,
+        "total": <raw_material_weight × rate>
+    }},
+    "operations": [
+        {{
+            "process": "<operation name>",
+            "machine_type": "<matched machine from rates>",
+            "estimated_time_minutes": <number>,
+            "rate_per_hour": <from admin rates>,
+            "cost": <time_hours × rate>
+        }}
+    ],
+    "setup_cost": {{
+        "num_operations": <integer>,
+        "cost_per_setup": 500,
+        "total": <num × cost>
+    }},
+    "tooling_cost": {{
+        "tool_wear_hours": <total machining hours>,
+        "rate_per_hour": 150,
+        "total": <hours × rate>
+    }},
+    "finishing_cost": {{
+        "finish_type": "<surface finish>",
+        "estimated_surface_area_sq_dm": <number or null>,
+        "rate_per_sq_dm": <from rates or null>,
+        "total": <number or 0>
+    }},
+    "heat_treatment_cost": {{
+        "treatment_type": "<if applicable, else null>",
+        "weight_kg": <number or null>,
+        "rate_per_kg": <from rates or null>,
+        "total": <number or 0>
+    }},
+    "subtotal_per_piece": <sum of all above>,
+    "overhead_percentage": 15,
+    "overhead_cost": <subtotal × 0.15>,
+    "profit_margin_percentage": 20,
+    "profit_margin": <(subtotal + overhead) × 0.20>,
+    "total_per_piece": <subtotal + overhead + profit>,
+    "confidence": "high" | "medium" | "low",
+    "reasoning": "<brief 1-2 line explanation>"
+}}
+
+RULES:
+- Use EXACT rates from admin config above — do not invent rates
+- Estimate machining time realistically based on part complexity and dimensions
+- Include raw material wastage (typically 15-30% more than finished weight)
+- For heat treatment: include only if material/process suggests it (e.g., hardened steel, case hardening mentioned)
+- Keep overhead at 15% and profit margin at 20% (typical job shop rates in India)
+- All costs in INR (Indian Rupees)"""
+
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+        
+        if image_b64:
+            user_msg = UserMessage(
+                text=cost_prompt,
+                file_contents=[ImageContent(image_base64=image_b64)]
+            )
+        else:
+            user_msg = UserMessage(text=cost_prompt)
+        
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"cost_estimate_{rfq_id}",
+            system_message="You are a manufacturing cost estimation expert. Return ONLY valid JSON."
+        )
+        
+        response = await chat.send_message(user_msg)
+        response_text = response.strip() if isinstance(response, str) else str(response)
+        
+        # Parse JSON
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].split("```")[0].strip()
+        
+        cost_data = json.loads(response_text)
+        
+        # Calculate quantity-based pricing
+        base_total = cost_data.get("total_per_piece", 0)
+        setup_total = cost_data.get("setup_cost", {}).get("total", 0)
+        tooling_fixed = cost_data.get("tooling_cost", {}).get("total", 0)
+        
+        quantity_pricing = []
+        for qty in quantity_options:
+            # Setup cost amortized over quantity
+            setup_per_piece = setup_total / qty if qty > 0 else setup_total
+            # Tooling amortized
+            tooling_per_piece = tooling_fixed / qty if qty > 0 else tooling_fixed
+            # Variable cost (material + machining + finishing + heat treatment)
+            variable_cost = base_total - setup_total - tooling_fixed
+            # Price per piece at this quantity
+            price_per_piece = variable_cost + setup_per_piece + tooling_per_piece
+            # Volume discount for larger quantities
+            if qty >= 100:
+                price_per_piece *= 0.85  # 15% volume discount
+            elif qty >= 50:
+                price_per_piece *= 0.90  # 10% volume discount
+            elif qty >= 10:
+                price_per_piece *= 0.95  # 5% volume discount
+            
+            quantity_pricing.append({
+                "quantity": qty,
+                "price_per_piece": round(price_per_piece, 2),
+                "total_cost": round(price_per_piece * qty, 2),
+                "setup_per_piece": round(setup_per_piece, 2),
+                "discount_pct": 15 if qty >= 100 else 10 if qty >= 50 else 5 if qty >= 10 else 0
+            })
+        
+        return {
+            "rfq_id": rfq_id,
+            "cost_breakdown": cost_data,
+            "quantity_pricing": quantity_pricing,
+            "currency": "INR",
+            "method": "ai_estimation",
+            "disclaimer": "This is an indicative estimate. Actual vendor quotes may differ based on their specific capabilities, capacity, and overhead."
+        }
+        
+    except Exception as e:
+        logger.error(f"Cost estimation failed: {e}")
+        return {
+            "rfq_id": rfq_id,
+            "error": str(e),
+            "method": "failed",
+            "disclaimer": "Cost estimation could not be completed. Please request vendor quotes directly."
+        }
+
+
+
 # ============== HELPER: Send RFQ Drawings to Vendor ==============
 
 async def send_rfq_drawings_to_vendor(phone: str, rfq_id: str, drawing_ids: list, rfq_title: str):

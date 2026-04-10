@@ -8,6 +8,7 @@ import QuotationComparison from "../components/QuotationComparison";
 import InspectionsTab from "../components/admin/InspectionsTab";
 import NDATemplatesTab from "../components/admin/NDATemplatesTab";
 import ChatAnalyticsTab from "../components/admin/ChatAnalyticsTab";
+import CostConfigTab from "../components/admin/CostConfigTab";
 import VendorPortfolio from "../components/VendorPortfolio";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -39,6 +40,7 @@ const TAB_CONFIG = {
   drawings: { label: "Drawings", icon: FileCheck, permissions: ['admin.all'] },
   nda_templates: { label: "NDA Templates", icon: Shield, permissions: ['admin.all'] },
   chat_analytics: { label: "Chat Analytics", icon: MessageSquare, permissions: ['admin.all'] },
+  cost_config: { label: "Cost Config", icon: DollarSign, permissions: ['admin.all'] },
   demo: { label: "Demo Panel", icon: Monitor, permissions: [], isExternal: true, href: "https://oemlinker.com/demo" },
 };
 
@@ -4687,6 +4689,14 @@ const AdminDashboard = () => {
                 label="Chat Analytics"
               />
             )}
+            {permittedTabs.includes('cost_config') && (
+              <TabButton 
+                active={activeTab === "cost_config"} 
+                onClick={() => handleTabChange("cost_config")} 
+                icon={DollarSign} 
+                label="Cost Config"
+              />
+            )}
             {permittedTabs.includes('demo') && (
               <a
                 href="https://oemlinker.com/demo"
@@ -4810,6 +4820,9 @@ const AdminDashboard = () => {
         )}
         {activeTab === "chat_analytics" && permittedTabs.includes('chat_analytics') && (
           <ChatAnalyticsTab />
+        )}
+        {activeTab === "cost_config" && permittedTabs.includes('cost_config') && (
+          <CostConfigTab />
         )}
       </div>
     </DashboardLayout>

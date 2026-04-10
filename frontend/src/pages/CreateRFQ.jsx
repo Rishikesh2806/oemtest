@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { 
   Upload, FileText, ArrowRight, ArrowLeft, 
   CheckCircle2, Loader2, X, Cpu, Target, Package,
-  AlertTriangle, Ruler, Scale, MapPin, Truck, Globe, Building2, Clock, Zap, Shield, Camera, Search
+  AlertTriangle, Ruler, Scale, MapPin, Truck, Globe, Building2, Clock, Zap, Shield, Camera, Search, DollarSign
 } from "lucide-react";
 import { Switch } from "../components/ui/switch";
 import { ExcludedVendorsSection } from "../components/ExcludedVendorsSection";
@@ -71,6 +71,10 @@ const CreateRFQ = () => {
   const [estimatedDimensions, setEstimatedDimensions] = useState(null);
   const [estimating, setEstimating] = useState(false);
   const [dimConfirmed, setDimConfirmed] = useState(false);
+
+  // Cost estimation
+  const [costEstimate, setCostEstimate] = useState(null);
+  const [estimatingCost, setEstimatingCost] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -390,6 +394,26 @@ const CreateRFQ = () => {
       toast.success("Dimensions confirmed — ready to match vendors");
     } catch (err) {
       toast.error("Failed to save dimensions");
+    }
+  };
+
+  const estimateCost = async () => {
+    setEstimatingCost(true);
+    setCostEstimate(null);
+    try {
+      const res = await api.post(`/rfqs/${rfqId}/estimate-cost`, {
+        quantities: [1, 10, 50, 100]
+      });
+      if (res.data.error && res.data.method === "failed") {
+        toast.error("Cost estimation failed — try again later");
+      } else {
+        setCostEstimate(res.data);
+        toast.success("Cost estimate ready");
+      }
+    } catch (err) {
+      toast.error("Cost estimation failed");
+    } finally {
+      setEstimatingCost(false);
     }
   };
 
@@ -1251,6 +1275,191 @@ const CreateRFQ = () => {
                   >
                     Edit
                   </button>
+                </div>
+              )}
+
+              {/* Cost Estimation Section */}
+              {analysisResult && (
+                <div className="p-4 rounded-lg border border-amber-200 bg-amber-50/50" data-testid="cost-estimate-section">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-5 h-5 text-amber-600" />
+                      <h3 className="font-semibold text-slate-900">Cost Estimate</h3>
+                      <span className="text-[10px] text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full font-medium">INDICATIVE</span>
+                    </div>
+                    {!costEstimate && (
+                      <Button
+                        size="sm"
+                        onClick={estimateCost}
+                        disabled={estimatingCost}
+                        className="bg-amber-600 hover:bg-amber-700 text-white"
+                        data-testid="get-cost-estimate-btn"
+                      >
+                        {estimatingCost ? (
+                          <><Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> Estimating...</>
+                        ) : (
+                          <><DollarSign className="w-3.5 h-3.5 mr-1.5" /> Get Cost Estimate</>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+
+                  {estimatingCost && (
+                    <div className="text-center py-6">
+                      <Loader2 className="w-8 h-8 animate-spin text-amber-600 mx-auto mb-2" />
+                      <p className="text-sm text-slate-600">Analyzing part complexity and calculating costs...</p>
+                    </div>
+                  )}
+
+                  {costEstimate && costEstimate.cost_breakdown && (
+                    <div className="space-y-4">
+                      {/* Total per piece highlight */}
+                      <div className="flex items-center justify-between p-3 bg-white rounded-lg border border-amber-200">
+                        <div>
+                          <p className="text-xs text-slate-500 font-medium">Estimated Cost Per Piece</p>
+                          <p className="text-2xl font-bold text-slate-900">
+                            ₹{Math.round(costEstimate.cost_breakdown.total_per_piece || 0).toLocaleString('en-IN')}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <span className={`text-xs font-medium px-2 py-1 rounded-full ${
+                            costEstimate.cost_breakdown.confidence === 'high' ? 'bg-green-100 text-green-700' :
+                            costEstimate.cost_breakdown.confidence === 'medium' ? 'bg-amber-100 text-amber-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {costEstimate.cost_breakdown.confidence} confidence
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Cost Breakdown */}
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                        {costEstimate.cost_breakdown.material_cost && (
+                          <div className="p-2 bg-white rounded border">
+                            <p className="text-[10px] text-slate-400 uppercase font-medium">Material</p>
+                            <p className="text-sm font-semibold text-slate-800">
+                              ₹{Math.round(costEstimate.cost_breakdown.material_cost.total || 0).toLocaleString('en-IN')}
+                            </p>
+                            <p className="text-[10px] text-slate-400">
+                              {costEstimate.cost_breakdown.material_cost.estimated_weight_kg}kg @ ₹{costEstimate.cost_breakdown.material_cost.rate_per_kg}/kg
+                            </p>
+                          </div>
+                        )}
+                        {costEstimate.cost_breakdown.operations?.length > 0 && (
+                          <div className="p-2 bg-white rounded border">
+                            <p className="text-[10px] text-slate-400 uppercase font-medium">Machining</p>
+                            <p className="text-sm font-semibold text-slate-800">
+                              ₹{Math.round(costEstimate.cost_breakdown.operations.reduce((s, o) => s + (o.cost || 0), 0)).toLocaleString('en-IN')}
+                            </p>
+                            <p className="text-[10px] text-slate-400">
+                              {costEstimate.cost_breakdown.operations.length} operation{costEstimate.cost_breakdown.operations.length > 1 ? 's' : ''}
+                            </p>
+                          </div>
+                        )}
+                        {costEstimate.cost_breakdown.setup_cost?.total > 0 && (
+                          <div className="p-2 bg-white rounded border">
+                            <p className="text-[10px] text-slate-400 uppercase font-medium">Setup</p>
+                            <p className="text-sm font-semibold text-slate-800">
+                              ₹{Math.round(costEstimate.cost_breakdown.setup_cost.total).toLocaleString('en-IN')}
+                            </p>
+                          </div>
+                        )}
+                        {costEstimate.cost_breakdown.finishing_cost?.total > 0 && (
+                          <div className="p-2 bg-white rounded border">
+                            <p className="text-[10px] text-slate-400 uppercase font-medium">Finishing</p>
+                            <p className="text-sm font-semibold text-slate-800">
+                              ₹{Math.round(costEstimate.cost_breakdown.finishing_cost.total).toLocaleString('en-IN')}
+                            </p>
+                            <p className="text-[10px] text-slate-400">{costEstimate.cost_breakdown.finishing_cost.finish_type}</p>
+                          </div>
+                        )}
+                        {costEstimate.cost_breakdown.heat_treatment_cost?.total > 0 && (
+                          <div className="p-2 bg-white rounded border">
+                            <p className="text-[10px] text-slate-400 uppercase font-medium">Heat Treatment</p>
+                            <p className="text-sm font-semibold text-slate-800">
+                              ₹{Math.round(costEstimate.cost_breakdown.heat_treatment_cost.total).toLocaleString('en-IN')}
+                            </p>
+                            <p className="text-[10px] text-slate-400">{costEstimate.cost_breakdown.heat_treatment_cost.treatment_type}</p>
+                          </div>
+                        )}
+                        {costEstimate.cost_breakdown.tooling_cost?.total > 0 && (
+                          <div className="p-2 bg-white rounded border">
+                            <p className="text-[10px] text-slate-400 uppercase font-medium">Tooling</p>
+                            <p className="text-sm font-semibold text-slate-800">
+                              ₹{Math.round(costEstimate.cost_breakdown.tooling_cost.total).toLocaleString('en-IN')}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Per-Operation Details */}
+                      {costEstimate.cost_breakdown.operations?.length > 0 && (
+                        <div className="bg-white rounded border p-3">
+                          <p className="text-xs font-medium text-slate-700 mb-2">Operation-wise Breakdown</p>
+                          <div className="space-y-1.5">
+                            {costEstimate.cost_breakdown.operations.map((op, i) => (
+                              <div key={i} className="flex items-center justify-between text-xs">
+                                <span className="text-slate-600">{op.process}</span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-slate-400">{op.estimated_time_minutes} min @ ₹{op.rate_per_hour}/hr</span>
+                                  <span className="font-medium text-slate-800">₹{Math.round(op.cost || 0).toLocaleString('en-IN')}</span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Quantity Comparison Table */}
+                      {costEstimate.quantity_pricing?.length > 0 && (
+                        <div className="bg-white rounded border p-3">
+                          <p className="text-xs font-medium text-slate-700 mb-2">Quantity-based Pricing</p>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs" data-testid="quantity-pricing-table">
+                              <thead>
+                                <tr className="border-b">
+                                  <th className="text-left py-1.5 text-slate-500 font-medium">Qty</th>
+                                  <th className="text-right py-1.5 text-slate-500 font-medium">Per Piece</th>
+                                  <th className="text-right py-1.5 text-slate-500 font-medium">Total</th>
+                                  <th className="text-right py-1.5 text-slate-500 font-medium">Discount</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {costEstimate.quantity_pricing.map((qp, i) => (
+                                  <tr key={i} className="border-b border-slate-50">
+                                    <td className="py-1.5 font-medium text-slate-800">{qp.quantity} pc{qp.quantity > 1 ? 's' : ''}</td>
+                                    <td className="py-1.5 text-right font-mono text-slate-700">₹{Math.round(qp.price_per_piece).toLocaleString('en-IN')}</td>
+                                    <td className="py-1.5 text-right font-mono font-medium text-slate-900">₹{Math.round(qp.total_cost).toLocaleString('en-IN')}</td>
+                                    <td className="py-1.5 text-right">
+                                      {qp.discount_pct > 0 ? (
+                                        <span className="text-green-600 font-medium">-{qp.discount_pct}%</span>
+                                      ) : (
+                                        <span className="text-slate-300">—</span>
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Disclaimer */}
+                      <p className="text-[10px] text-slate-400 italic">
+                        {costEstimate.disclaimer}
+                      </p>
+
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setCostEstimate(null)}
+                        className="text-xs text-slate-500"
+                      >
+                        Dismiss estimate
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
 
