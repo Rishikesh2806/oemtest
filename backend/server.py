@@ -6754,12 +6754,16 @@ async def estimate_dimensions(rfq_id: str, request: Request, user: dict = Depend
     "reasoning": "<brief explanation>"
 }""",
         "boring": """{
-    "part_geometry": "cylindrical",
-    "outer_diameter": <OD in mm>,
-    "inner_diameter": <bore ID in mm>,
-    "length": <overall length in mm>,
-    "wall_thickness": <wall thickness in mm>,
-    "flange_diameter": <flange OD in mm or null>,
+    "part_geometry": "circular_flat",
+    "outer_diameter": <flange OD in mm>,
+    "inner_diameter": <bore/center hole ID in mm>,
+    "thickness": <flange thickness in mm>,
+    "bolt_circle_diameter": <PCD / bolt circle diameter in mm>,
+    "bolt_hole_diameter": <individual bolt hole diameter in mm>,
+    "number_of_holes": <integer count of bolt holes>,
+    "hub_diameter": <raised hub/boss OD in mm or null>,
+    "hub_length": <hub projection in mm or null>,
+    "chamfer": <chamfer size in mm or null>,
     "weight_kg": <estimated weight>,
     "confidence": "high" | "medium" | "low",
     "reasoning": "<brief explanation>"
