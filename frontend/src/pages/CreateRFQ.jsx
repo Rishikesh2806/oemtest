@@ -295,8 +295,8 @@ const CreateRFQ = () => {
       { key: "length", label: "Length (mm)", required: true },
     ],
     circular_flat: [
-      { key: "diameter", label: "Diameter (mm)", required: true },
-      { key: "thickness", label: "Thickness (mm)", required: false },
+      { key: "diameter", label: "Outer Diameter (mm)", required: true },
+      { key: "thickness", label: "Thickness / Face Width (mm)", required: true },
     ],
     tube_pipe: [
       { key: "outer_diameter", label: "Outer Diameter (mm)", required: true },
@@ -320,7 +320,45 @@ const CreateRFQ = () => {
     ],
   };
 
-  const getDimFields = () => GEOMETRY_DIM_FIELDS[partGeometry] || GEOMETRY_DIM_FIELDS.rectangular;
+  // Process-aware overrides: detect from AI analysis which dimensions are relevant
+  const PROCESS_DIM_OVERRIDES = {
+    gear_cutting: [
+      { key: "diameter", label: "Gear Outer Diameter (mm)", required: true },
+      { key: "thickness", label: "Face Width / Thickness (mm)", required: true },
+    ],
+    boring: [
+      { key: "outer_diameter", label: "Outer Diameter (mm)", required: true },
+      { key: "inner_diameter", label: "Bore Diameter (mm)", required: true },
+      { key: "length", label: "Length (mm)", required: false },
+    ],
+    turning: [
+      { key: "diameter", label: "Diameter (mm)", required: true },
+      { key: "length", label: "Length (mm)", required: true },
+    ],
+    threading_external: [
+      { key: "diameter", label: "Diameter (mm)", required: true },
+      { key: "length", label: "Length (mm)", required: true },
+    ],
+  };
+
+  const getDimFields = () => {
+    // Check if AI analysis has recommended_processes that suggest specific dimensions
+    const aiProcs = analysisResult?.recommended_processes || [];
+    const procs = aiProcs.map(p => p.toLowerCase());
+    
+    // Priority: gear > boring > turning > geometry-based
+    if (procs.some(p => p.includes("gear") || p.includes("hobbing") || p.includes("spline"))) {
+      return PROCESS_DIM_OVERRIDES.gear_cutting;
+    }
+    if (procs.some(p => p.includes("boring") || p.includes("bore"))) {
+      return PROCESS_DIM_OVERRIDES.boring;
+    }
+    if (procs.some(p => p.includes("turn") || p.includes("lathe")) && !["rectangular", "sheet_metal", "fabrication"].includes(partGeometry)) {
+      return PROCESS_DIM_OVERRIDES.turning;
+    }
+    
+    return GEOMETRY_DIM_FIELDS[partGeometry] || GEOMETRY_DIM_FIELDS.rectangular;
+  };
 
   const estimateDimensions = async () => {
     const fields = getDimFields();
