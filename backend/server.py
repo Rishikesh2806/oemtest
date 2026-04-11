@@ -7282,8 +7282,9 @@ async def public_drawing_thumbnail(drawing_id: str):
     if not raw_data:
         raise HTTPException(status_code=404, detail="Drawing data not available")
     
-    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageFile
     import io
+    ImageFile.LOAD_TRUNCATED_IMAGES = True
     
     img = None
     
@@ -7291,6 +7292,7 @@ async def public_drawing_thumbnail(drawing_id: str):
     if "image" in file_type.lower() or file_type.lower() in ("png", "jpeg", "jpg", "image/png", "image/jpeg"):
         try:
             img = Image.open(io.BytesIO(raw_data))
+            img.load()
         except Exception:
             return Response(content=raw_data, media_type=file_type or "image/jpeg")
     
@@ -7343,7 +7345,15 @@ async def public_drawing_thumbnail(drawing_id: str):
         img = img.convert("RGB")
     
     buf = io.BytesIO()
-    img.save(buf, format="JPEG", quality=75)
+    try:
+        img.save(buf, format="JPEG", quality=75)
+    except OSError:
+        # Fallback: convert to RGB first for problematic images
+        try:
+            img = img.convert("RGB")
+            img.save(buf, format="JPEG", quality=75)
+        except Exception:
+            raise HTTPException(status_code=404, detail="Cannot generate thumbnail")
     return Response(
         content=buf.getvalue(),
         media_type="image/jpeg",

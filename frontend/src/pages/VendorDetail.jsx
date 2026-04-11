@@ -9,6 +9,7 @@ import {
   Target, Lock, ArrowRight, X, Loader2
 } from "lucide-react";
 
+
 const API_URL = window.location.origin;
 
 const AuthGateModal = ({ isOpen, onClose }) => {
@@ -101,32 +102,41 @@ const VendorDetail = () => {
       <AuthGateModal isOpen={showAuthGate} onClose={() => setShowAuthGate(false)} />
 
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="/vendors" className="flex items-center gap-2 text-sm text-slate-500 hover:text-orange-600">
-              <ArrowLeft className="w-4 h-4" /> Back to Directory
-            </Link>
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-b border-slate-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2">
+            <img src="/logo.png" alt="OEMLinker" style={{ width: '240px', height: '74px' }} className="object-contain" />
+          </Link>
+          <div className="hidden md:flex items-center gap-8 text-sm">
+            <Link to="/#how-it-works" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Process</Link>
+            <Link to="/#features" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Features</Link>
+            <Link to="/machines" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Machines</Link>
+            <Link to="/rfqs" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">RFQs</Link>
+            <Link to="/#contact" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Contact</Link>
           </div>
           <div className="flex items-center gap-3">
             {user ? (
-              <Button size="sm" onClick={() => navigate("/dashboard")} className="bg-orange-600 hover:bg-orange-700 text-white">
-                Dashboard
-              </Button>
+              <Link to="/dashboard">
+                <Button className="bg-orange-600 hover:bg-orange-700 text-white font-semibold h-9 px-5">
+                  Dashboard <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </Link>
             ) : (
               <>
-                <Button variant="ghost" size="sm" onClick={() => navigate("/login")}>Sign In</Button>
-                <Button size="sm" onClick={() => navigate("/register")} className="bg-orange-600 hover:bg-orange-700 text-white">
-                  Get Started Free
-                </Button>
+                <Link to="/login">
+                  <Button variant="ghost" className="text-slate-600 hover:text-orange-600 hover:bg-orange-50 h-9 font-medium">Sign In</Button>
+                </Link>
+                <Link to="/register">
+                  <Button className="bg-orange-600 hover:bg-orange-700 text-white font-semibold h-9 px-5">Get Started</Button>
+                </Link>
               </>
             )}
           </div>
         </div>
-      </header>
+      </nav>
 
       {/* Vendor Hero */}
-      <div className="bg-gradient-to-b from-slate-900 to-slate-800 text-white py-10">
+      <div className="bg-gradient-to-b from-slate-900 to-slate-800 text-white pt-28 pb-10">
         <div className="max-w-5xl mx-auto px-4 sm:px-6">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-start gap-5">
             <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center flex-shrink-0">

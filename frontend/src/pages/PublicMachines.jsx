@@ -11,6 +11,7 @@ import {
   ChevronRight, Loader2
 } from "lucide-react";
 
+
 const API_URL = window.location.origin;
 const fadeUp = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
 
@@ -151,34 +152,41 @@ const PublicMachines = () => {
     <div className="min-h-screen bg-slate-50" data-testid="public-machines-page">
       <AuthGateModal isOpen={showAuthGate} onClose={() => setShowAuthGate(false)} />
 
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link to="/" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-amber-600 flex items-center justify-center">
-                <Factory className="w-4 h-4 text-white" />
-              </div>
-              <span className="font-bold text-slate-900 text-lg">OEMLinker</span>
-            </Link>
-            <span className="text-slate-300">|</span>
-            <span className="text-sm text-slate-500 font-medium">Machine Directory</span>
+      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-b border-slate-200 shadow-sm">
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2">
+            <img src="/logo.png" alt="OEMLinker" style={{ width: '240px', height: '74px' }} className="object-contain" />
+          </Link>
+          <div className="hidden md:flex items-center gap-8 text-sm">
+            <Link to="/#how-it-works" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Process</Link>
+            <Link to="/#features" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Features</Link>
+            <Link to="/machines" className="text-orange-600 font-semibold" data-testid="nav-machines-link">Machines</Link>
+            <Link to="/rfqs" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium" data-testid="nav-rfqs-link">RFQs</Link>
+            <Link to="/#contact" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Contact</Link>
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/rfqs" className="text-sm text-slate-500 hover:text-orange-600 font-medium hidden sm:block">RFQs</Link>
             {user ? (
-              <Button size="sm" onClick={() => navigate("/dashboard")} className="bg-orange-600 hover:bg-orange-700 text-white">Dashboard</Button>
+              <Link to="/dashboard">
+                <Button className="bg-orange-600 hover:bg-orange-700 text-white font-semibold h-9 px-5" data-testid="dashboard-btn">
+                  Dashboard <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </Link>
             ) : (
               <>
-                <Button variant="ghost" size="sm" onClick={() => navigate("/login")}>Sign In</Button>
-                <Button size="sm" onClick={() => navigate("/register")} className="bg-orange-600 hover:bg-orange-700 text-white">Get Started Free</Button>
+                <Link to="/login">
+                  <Button variant="ghost" className="text-slate-600 hover:text-orange-600 hover:bg-orange-50 h-9 font-medium" data-testid="login-btn">Sign In</Button>
+                </Link>
+                <Link to="/register">
+                  <Button className="bg-orange-600 hover:bg-orange-700 text-white font-semibold h-9 px-5" data-testid="get-started-btn">Get Started</Button>
+                </Link>
               </>
             )}
           </div>
         </div>
-      </header>
+      </nav>
 
       {/* Hero */}
-      <div className="bg-gradient-to-b from-slate-900 to-slate-800 text-white py-12 sm:py-16">
+      <div className="bg-gradient-to-b from-slate-900 to-slate-800 text-white pt-32 sm:pt-36 pb-12 sm:pb-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-4">
             Explore <span className="text-orange-400">Machine Capabilities</span>
@@ -255,9 +263,11 @@ const PublicMachines = () => {
         <div className="max-w-7xl mx-auto px-4 text-center text-xs text-slate-400">
           <Link to="/" className="hover:text-orange-600">Home</Link>
           <span className="mx-2">·</span>
+          <Link to="/rfqs" className="hover:text-orange-600">RFQs</Link>
+          <span className="mx-2">·</span>
           <Link to="/machines" className="hover:text-orange-600">Machines</Link>
           <span className="mx-2">·</span>
-          <Link to="/rfqs" className="hover:text-orange-600">RFQs</Link>
+          <Link to="/#contact" className="hover:text-orange-600">Contact</Link>
           <p className="mt-2">OEMLinker — AI-Powered Manufacturing Marketplace</p>
         </div>
       </footer>
