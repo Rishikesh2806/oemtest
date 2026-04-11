@@ -326,7 +326,6 @@ const AppRouter = () => {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/auth/google/callback" element={<GoogleCallback />} />
-      <Route path="/vendors" element={<VendorDirectory />} />
       <Route path="/vendors/:vendorId" element={<VendorDetailPublic />} />
       <Route path="/rfqs" element={<PublicRFQs />} />
       <Route path="/machines" element={<PublicMachines />} />

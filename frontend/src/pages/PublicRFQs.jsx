@@ -278,7 +278,6 @@ const PublicRFQs = () => {
             <span className="text-sm text-slate-500 font-medium">RFQ Marketplace</span>
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/vendors" className="text-sm text-slate-500 hover:text-orange-600 font-medium hidden sm:block">Vendors</Link>
             <Link to="/machines" className="text-sm text-slate-500 hover:text-orange-600 font-medium hidden sm:block">Machines</Link>
             {user ? (
               <Button size="sm" onClick={() => navigate("/dashboard")} className="bg-orange-600 hover:bg-orange-700 text-white">Dashboard</Button>
@@ -410,8 +409,6 @@ const PublicRFQs = () => {
       <footer className="bg-white border-t border-slate-200 py-6">
         <div className="max-w-7xl mx-auto px-4 text-center text-xs text-slate-400">
           <Link to="/" className="hover:text-orange-600">Home</Link>
-          <span className="mx-2">·</span>
-          <Link to="/vendors" className="hover:text-orange-600">Vendors</Link>
           <span className="mx-2">·</span>
           <Link to="/machines" className="hover:text-orange-600">Machines</Link>
           <span className="mx-2">·</span>

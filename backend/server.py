@@ -7352,6 +7352,9 @@ async def public_drawing_thumbnail(drawing_id: str):
             "X-NDA-Protected": "true" if is_nda_protected else "false",
         }
     )
+
+
+@api_router.get("/public/machines")
 async def public_list_machines(
     machine_type: str = None,
     material: str = None,
