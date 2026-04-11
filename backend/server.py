@@ -7404,6 +7404,7 @@ async def public_list_machines(
         "materials_supported": 1,
         "materials": 1,
         "vendor_id": 1,
+        "availability_status": 1,
     }
     
     machines = await db.machines.find(query, projection).sort("machine_type", 1).skip(skip).limit(limit).to_list(length=limit)
@@ -7434,6 +7435,7 @@ async def public_list_machines(
             "materials": mats[:8],
             "vendor_id": vid,
             "vendor_name": vendor_cache[vid],
+            "availability_status": m.get("availability_status", "available"),
         })
     
     # Get filter options

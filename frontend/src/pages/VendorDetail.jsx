@@ -110,7 +110,7 @@ const VendorDetail = () => {
           <div className="hidden md:flex items-center gap-8 text-sm">
             <Link to="/#how-it-works" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Process</Link>
             <Link to="/#features" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Features</Link>
-            <Link to="/machines" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Machines</Link>
+            <Link to="/machines" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Capabilities</Link>
             <Link to="/rfqs" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">RFQs</Link>
             <Link to="/#contact" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Contact</Link>
           </div>

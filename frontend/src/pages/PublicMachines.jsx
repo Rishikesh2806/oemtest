@@ -39,19 +39,42 @@ const AuthGateModal = ({ isOpen, onClose }) => {
   );
 };
 
-const MachineCard = ({ machine, onSubmitRFQ }) => (
+const AVAILABILITY_COLORS = {
+  available: "bg-emerald-100 text-emerald-700",
+  engaged: "bg-amber-100 text-amber-700",
+  maintenance: "bg-red-100 text-red-700",
+  offline: "bg-slate-100 text-slate-500",
+};
+
+const AVAILABILITY_LABELS = {
+  available: "Available for Job",
+  engaged: "Currently Engaged",
+  maintenance: "Under Maintenance",
+  offline: "Offline",
+};
+
+const MachineCard = ({ machine, onSubmitRFQ }) => {
+  const isAvailable = machine.availability_status === "available" || !machine.availability_status;
+  return (
   <motion.div variants={fadeUp}>
-    <Card className="border border-slate-200 hover:border-orange-300 hover:shadow-lg transition-all duration-300 h-full">
+    <Card className={`border hover:shadow-lg transition-all duration-300 h-full ${
+      isAvailable ? "border-emerald-200 hover:border-emerald-400" : "border-slate-200 hover:border-slate-300"
+    }`}>
       <CardContent className="p-5">
         <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0">
             <h3 className="font-bold text-slate-900 text-sm" data-testid={`machine-name-${machine.machine_id}`}>
-              {machine.brand} {machine.model}
+              {machine.machine_type}{machine.axis_config ? ` · ${machine.axis_config}` : ""}
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">{machine.machine_type}{machine.axis_config ? ` · ${machine.axis_config}` : ""}</p>
+            <p className="text-xs text-slate-500 mt-0.5">{machine.brand} {machine.model}</p>
           </div>
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center flex-shrink-0">
-            <Cpu className="w-5 h-5 text-blue-600" />
+          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center">
+              <Cpu className="w-5 h-5 text-blue-600" />
+            </div>
+            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${AVAILABILITY_COLORS[machine.availability_status] || AVAILABILITY_COLORS.available}`}>
+              {AVAILABILITY_LABELS[machine.availability_status] || "Available for Job"}
+            </span>
           </div>
         </div>
 
@@ -101,7 +124,8 @@ const MachineCard = ({ machine, onSubmitRFQ }) => (
       </CardContent>
     </Card>
   </motion.div>
-);
+  );
+};
 
 const PublicMachines = () => {
   const { user } = useAuth();
@@ -148,6 +172,16 @@ const PublicMachines = () => {
       )
     : machines;
 
+  // Sort: available machines first, then engaged, then rest
+  const sortedMachines = [...filteredMachines].sort((a, b) => {
+    const order = { available: 0, engaged: 1, maintenance: 2, offline: 3 };
+    const aOrder = order[a.availability_status] ?? 0;
+    const bOrder = order[b.availability_status] ?? 0;
+    return aOrder - bOrder;
+  });
+
+  const availableCount = sortedMachines.filter(m => !m.availability_status || m.availability_status === "available").length;
+
   return (
     <div className="min-h-screen bg-slate-50" data-testid="public-machines-page">
       <AuthGateModal isOpen={showAuthGate} onClose={() => setShowAuthGate(false)} />
@@ -160,7 +194,7 @@ const PublicMachines = () => {
           <div className="hidden md:flex items-center gap-8 text-sm">
             <Link to="/#how-it-works" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Process</Link>
             <Link to="/#features" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Features</Link>
-            <Link to="/machines" className="text-orange-600 font-semibold" data-testid="nav-machines-link">Machines</Link>
+            <Link to="/machines" className="text-orange-600 font-semibold" data-testid="nav-machines-link">Capabilities</Link>
             <Link to="/rfqs" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium" data-testid="nav-rfqs-link">RFQs</Link>
             <Link to="/#contact" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Contact</Link>
           </div>
@@ -217,8 +251,16 @@ const PublicMachines = () => {
             </div>
           </motion.div>
 
-          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="text-sm text-slate-400 mt-6">
-            <span className="text-2xl font-bold text-orange-400">{total}</span> machines across {filterOptions.machine_types.length} categories
+          <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.5 }} className="flex items-center justify-center gap-6 mt-6 text-sm">
+            <span>
+              <span className="text-2xl font-bold text-orange-400">{total}</span>
+              <span className="text-slate-400 ml-1">Total</span>
+            </span>
+            <span className="w-px h-8 bg-slate-700" />
+            <span>
+              <span className="text-2xl font-bold text-emerald-400">{availableCount}</span>
+              <span className="text-slate-400 ml-1">Available for Job</span>
+            </span>
           </motion.p>
         </div>
       </div>
@@ -226,7 +268,7 @@ const PublicMachines = () => {
       {/* Machine Grid */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-6">
-          <p className="text-sm text-slate-500">{loading ? "Loading..." : `${filteredMachines.length} machine${filteredMachines.length !== 1 ? "s" : ""}`}</p>
+          <p className="text-sm text-slate-500">{loading ? "Loading..." : `${sortedMachines.length} capabilit${sortedMachines.length !== 1 ? "ies" : "y"}`}</p>
           {!user && (
             <p className="text-xs text-slate-400"><Lock className="w-3 h-3 inline mr-1" />Register to submit RFQs</p>
           )}
@@ -234,7 +276,7 @@ const PublicMachines = () => {
 
         {loading ? (
           <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-orange-600" /></div>
-        ) : filteredMachines.length === 0 ? (
+        ) : sortedMachines.length === 0 ? (
           <div className="text-center py-16">
             <Wrench className="w-12 h-12 text-slate-300 mx-auto mb-3" />
             <p className="text-slate-500 font-medium">No machines found</p>
@@ -242,7 +284,7 @@ const PublicMachines = () => {
         ) : (
           <motion.div initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: 0.03 } } }}
             className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" data-testid="machine-grid">
-            {filteredMachines.map(m => <MachineCard key={m.machine_id} machine={m} onSubmitRFQ={handleSubmitRFQ} />)}
+            {sortedMachines.map(m => <MachineCard key={m.machine_id} machine={m} onSubmitRFQ={handleSubmitRFQ} />)}
           </motion.div>
         )}
       </div>
@@ -265,7 +307,7 @@ const PublicMachines = () => {
           <span className="mx-2">·</span>
           <Link to="/rfqs" className="hover:text-orange-600">RFQs</Link>
           <span className="mx-2">·</span>
-          <Link to="/machines" className="hover:text-orange-600">Machines</Link>
+          <Link to="/machines" className="hover:text-orange-600">Capabilities</Link>
           <span className="mx-2">·</span>
           <Link to="/#contact" className="hover:text-orange-600">Contact</Link>
           <p className="mt-2">OEMLinker — AI-Powered Manufacturing Marketplace</p>

@@ -223,7 +223,7 @@ const VendorDirectory = () => {
           <div className="hidden md:flex items-center gap-8 text-sm">
             <Link to="/#how-it-works" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Process</Link>
             <Link to="/#features" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Features</Link>
-            <Link to="/machines" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Machines</Link>
+            <Link to="/machines" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Capabilities</Link>
             <Link to="/rfqs" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">RFQs</Link>
             <Link to="/#contact" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Contact</Link>
           </div>
@@ -389,7 +389,7 @@ const VendorDirectory = () => {
           <span className="mx-2">·</span>
           <Link to="/vendors" className="hover:text-orange-600">Vendors</Link>
           <span className="mx-2">·</span>
-          <Link to="/machines" className="hover:text-orange-600">Machines</Link>
+          <Link to="/machines" className="hover:text-orange-600">Capabilities</Link>
           <span className="mx-2">·</span>
           <Link to="/rfqs" className="hover:text-orange-600">RFQs</Link>
           <span className="mx-2">·</span>

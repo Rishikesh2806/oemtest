@@ -273,7 +273,7 @@ const PublicRFQs = () => {
           <div className="hidden md:flex items-center gap-8 text-sm">
             <Link to="/#how-it-works" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Process</Link>
             <Link to="/#features" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Features</Link>
-            <Link to="/machines" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium" data-testid="nav-machines-link">Machines</Link>
+            <Link to="/machines" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium" data-testid="nav-machines-link">Capabilities</Link>
             <Link to="/rfqs" className="text-orange-600 font-semibold" data-testid="nav-rfqs-link">RFQs</Link>
             <Link to="/#contact" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Contact</Link>
           </div>
@@ -419,7 +419,7 @@ const PublicRFQs = () => {
           <span className="mx-2">·</span>
           <Link to="/rfqs" className="hover:text-orange-600">RFQs</Link>
           <span className="mx-2">·</span>
-          <Link to="/machines" className="hover:text-orange-600">Machines</Link>
+          <Link to="/machines" className="hover:text-orange-600">Capabilities</Link>
           <span className="mx-2">·</span>
           <Link to="/#contact" className="hover:text-orange-600">Contact</Link>
           <p className="mt-2">OEMLinker — AI-Powered Manufacturing Marketplace</p>
