@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 
 
+import PublicNav from "../components/PublicNav";
+
 const API_URL = window.location.origin;
 const fadeUp = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
 
@@ -186,38 +188,7 @@ const PublicMachines = () => {
     <div className="min-h-screen bg-slate-50" data-testid="public-machines-page">
       <AuthGateModal isOpen={showAuthGate} onClose={() => setShowAuthGate(false)} />
 
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-b border-slate-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="OEMLinker" style={{ width: '240px', height: '74px' }} className="object-contain" />
-          </Link>
-          <div className="hidden md:flex items-center gap-8 text-sm">
-            <Link to="/#how-it-works" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Process</Link>
-            <Link to="/#features" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Features</Link>
-            <Link to="/machines" className="text-orange-600 font-semibold" data-testid="nav-machines-link">Capabilities</Link>
-            <Link to="/rfqs" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium" data-testid="nav-rfqs-link">RFQs</Link>
-            <Link to="/#contact" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Contact</Link>
-          </div>
-          <div className="flex items-center gap-3">
-            {user ? (
-              <Link to="/dashboard">
-                <Button className="bg-orange-600 hover:bg-orange-700 text-white font-semibold h-9 px-5" data-testid="dashboard-btn">
-                  Dashboard <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
-              </Link>
-            ) : (
-              <>
-                <Link to="/login">
-                  <Button variant="ghost" className="text-slate-600 hover:text-orange-600 hover:bg-orange-50 h-9 font-medium" data-testid="login-btn">Sign In</Button>
-                </Link>
-                <Link to="/register">
-                  <Button className="bg-orange-600 hover:bg-orange-700 text-white font-semibold h-9 px-5" data-testid="get-started-btn">Get Started</Button>
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
+      <PublicNav activePage="/machines" />
 
       {/* Hero */}
       <div className="bg-gradient-to-b from-slate-900 to-slate-800 text-white pt-32 sm:pt-36 pb-12 sm:pb-16">

@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../App";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import PublicNav from "../components/PublicNav";
 import ChatbotWidget from "../components/ChatbotWidget";
 import { Textarea } from "../components/ui/textarea";
 import { Label } from "../components/ui/label";
@@ -116,38 +117,7 @@ const LandingPage = () => {
     <div className="min-h-screen bg-white text-slate-700 selection:bg-orange-100 selection:text-orange-900">
 
       {/* ─── NAV ─── */}
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-b border-slate-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <img src="/logo.png" alt="OEMLinker" style={{ width: '240px', height: '74px' }} className="object-contain" />
-          </Link>
-          <div className="hidden md:flex items-center gap-8 text-sm">
-            <a href="#how-it-works" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Process</a>
-            <a href="#features" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Features</a>
-            <Link to="/machines" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium" data-testid="nav-machines-link">Capabilities</Link>
-            <Link to="/rfqs" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium" data-testid="nav-rfqs-link">RFQs</Link>
-            <a href="#contact" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Contact</a>
-          </div>
-          <div className="flex items-center gap-3">
-            {user ? (
-              <Link to="/dashboard">
-                <Button data-testid="dashboard-btn" className="bg-orange-600 hover:bg-orange-700 text-white font-semibold h-9 px-5">
-                  Dashboard <ArrowRight className="w-4 h-4 ml-1" />
-                </Button>
-              </Link>
-            ) : (
-              <>
-                <Link to="/login">
-                  <Button data-testid="login-btn" variant="ghost" className="text-slate-600 hover:text-orange-600 hover:bg-orange-50 h-9 font-medium">Sign In</Button>
-                </Link>
-                <Link to="/register">
-                  <Button data-testid="get-started-btn" className="bg-orange-600 hover:bg-orange-700 text-white font-semibold h-9 px-5">Get Started</Button>
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
+      <PublicNav activePage="/" />
 
       {/* ─── HERO ─── */}
       <section className="relative pt-28 pb-20 md:pt-36 md:pb-28 overflow-hidden bg-gradient-to-b from-slate-50 to-white">
