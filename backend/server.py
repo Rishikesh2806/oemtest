@@ -7150,20 +7150,51 @@ async def public_list_rfqs(
         "supply_type": 1,
         "status": 1,
         "created_at": 1,
+        "drawing_ids": 1,
         "ai_analysis.part_geometry": 1,
         "ai_analysis.recommended_processes": 1,
         "ai_analysis.complexity_score": 1,
         "ai_analysis.overall_dimensions": 1,
     }
     
-    rfqs = await db.rfqs.find(query, projection).sort("created_at", -1).skip(skip).limit(limit).to_list(length=limit)
+    # Sort: unquoted (open/submitted/draft) first, then expired, then matching/quoted
+    STATUS_PRIORITY = {
+        "open": 0, "submitted": 0, "draft": 1,
+        "analyzing": 2, "matching": 3,
+        "quoted": 4, "awarded": 5,
+        "in_production": 6, "completed": 7,
+        "po_issued": 7, "expired": 8, "cancelled": 9,
+    }
+    
+    rfqs = await db.rfqs.find(query, projection).sort("created_at", -1).skip(0).limit(limit * 5).to_list(length=limit * 5)
     total = await db.rfqs.count_documents(query)
+    
+    # Sort by status priority then date (most recent first within each priority)
+    def sort_key(r):
+        priority = STATUS_PRIORITY.get(r.get("status", "draft"), 5)
+        created = r.get("created_at")
+        if isinstance(created, datetime):
+            ts = created.timestamp()
+        elif isinstance(created, str):
+            try:
+                ts = datetime.fromisoformat(created.replace("Z", "+00:00")).timestamp()
+            except Exception:
+                ts = 0
+        else:
+            ts = 0
+        return (priority, -ts)
+    
+    rfqs.sort(key=sort_key)
+    
+    # Paginate after sorting
+    rfqs = rfqs[skip:skip + limit]
     
     # Sanitize — remove buyer-identifying info
     public_rfqs = []
     for r in rfqs:
         ai = r.get("ai_analysis") or {}
         dims = ai.get("overall_dimensions") or {}
+        drawing_ids = r.get("drawing_ids") or []
         public_rfqs.append({
             "rfq_id": r.get("rfq_id"),
             "rfq_number": r.get("rfq_number"),
@@ -7178,6 +7209,8 @@ async def public_list_rfqs(
             "complexity": ai.get("complexity_score"),
             "dimensions_summary": f"{dims.get('length', '—')} × {dims.get('width', '—')} × {dims.get('height', '—')} mm" if dims else None,
             "created_at": r.get("created_at"),
+            "has_drawing": len(drawing_ids) > 0,
+            "drawing_id": drawing_ids[0] if drawing_ids else None,
         })
     
     # Get unique materials and processes for filters
@@ -7196,7 +7229,80 @@ async def public_list_rfqs(
     }
 
 
-@api_router.get("/public/machines")
+@api_router.get("/public/drawings/{drawing_id}/thumbnail")
+async def public_drawing_thumbnail(drawing_id: str):
+    """Return a thumbnail image for a drawing — no auth required."""
+    from fastapi.responses import Response
+    
+    drawing = await db.drawings.find_one(
+        {"drawing_id": drawing_id},
+        {"_id": 0, "file_data": 1, "file_type": 1, "s3_url": 1, "s3_path": 1}
+    )
+    
+    if not drawing:
+        raise HTTPException(status_code=404, detail="Drawing not found")
+    
+    raw_data = None
+    file_type = drawing.get("file_type", "")
+    
+    # Source 1: file_data stored in MongoDB
+    if drawing.get("file_data"):
+        raw_b64 = drawing["file_data"]
+        raw_data = base64.b64decode(raw_b64) if isinstance(raw_b64, str) else raw_b64
+    
+    # Source 2: S3 storage
+    if not raw_data and drawing.get("s3_path"):
+        try:
+            from app.services.s3_storage_service import download_file
+            raw_data, _ = download_file(drawing["s3_path"])
+        except Exception as e:
+            logger.warning(f"S3 download failed for thumbnail: {e}")
+    
+    # Source 3: S3 presigned URL (fallback — redirect)
+    if not raw_data and drawing.get("s3_url"):
+        try:
+            import httpx
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(drawing["s3_url"], timeout=10, follow_redirects=True)
+                if resp.status_code == 200:
+                    raw_data = resp.content
+        except Exception:
+            pass
+    
+    if not raw_data:
+        raise HTTPException(status_code=404, detail="Drawing data not available")
+    
+    # For images, resize to thumbnail
+    if "image" in file_type.lower() or file_type.lower() in ("png", "jpeg", "jpg", "image/png", "image/jpeg"):
+        try:
+            from PIL import Image
+            import io
+            img = Image.open(io.BytesIO(raw_data))
+            img.thumbnail((400, 400), Image.LANCZOS)
+            buf = io.BytesIO()
+            fmt = "PNG" if "png" in file_type.lower() else "JPEG"
+            img.save(buf, format=fmt, quality=75)
+            return Response(content=buf.getvalue(), media_type=f"image/{fmt.lower()}", headers={"Cache-Control": "public, max-age=3600"})
+        except Exception:
+            return Response(content=raw_data, media_type=file_type or "image/jpeg")
+    
+    # For PDFs, convert first page to thumbnail
+    if "pdf" in file_type.lower() or raw_data[:5] == b'%PDF-':
+        try:
+            from pdf2image import convert_from_bytes
+            from PIL import Image
+            import io
+            pages = convert_from_bytes(raw_data, first_page=1, last_page=1, dpi=120)
+            if pages:
+                img = pages[0]
+                img.thumbnail((400, 400), Image.LANCZOS)
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=70)
+                return Response(content=buf.getvalue(), media_type="image/jpeg", headers={"Cache-Control": "public, max-age=3600"})
+        except Exception as e:
+            logger.warning(f"PDF thumbnail failed: {e}")
+    
+    raise HTTPException(status_code=404, detail="Cannot generate thumbnail")
 async def public_list_machines(
     machine_type: str = None,
     material: str = None,

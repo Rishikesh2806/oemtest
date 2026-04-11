@@ -8,55 +8,51 @@ Build a full-stack web application for an AI-driven manufacturing marketplace th
 - **Backend**: FastAPI, Pydantic, ReportLab (PDF)
 - **Database**: MongoDB
 - **Integrations**: AWS S3, OpenAI GPT-5.2 Vision (Emergent LLM Key), Resend, Google OAuth, Razorpay, Gupshup WhatsApp
-- **Utilities**: pdf2image + poppler-utils (PDF→image for AI vision)
-
-## Key Credentials
-- Admin: admin@offoadex.com / admin123
-- Vendor: testvendor_nda@test.com / vendor123
+- **Utilities**: pdf2image + poppler-utils, Pillow (thumbnails)
 
 ## What's Been Implemented
 
+### Browse Before Registering (NEW - Apr 2026)
+- **Public Vendor Directory** (`/vendors`): Browse manufacturers with machines, capabilities, materials — no login
+- **Public Machine Directory** (`/machines`): Browse CNC machines, work envelopes, tolerances — no login
+- **Public RFQ Marketplace** (`/rfqs`): Browse RFQs with drawing previews, materials, processes — no login
+- **Drawing Thumbnails**: `GET /api/public/drawings/{id}/thumbnail` — serves resized images from S3 or MongoDB (supports PNG/JPEG/PDF)
+- **Vendor Detail** (`/vendors/:id`): Full machine fleet view — no login
+- **Status-sorted RFQs**: Open/unquoted RFQs on top, quoted/expired below
+- **Quote button**: On each open RFQ card → triggers vendor registration modal
+- **Auth Gate Modal**: Appears when trying to contact vendor, submit RFQ, or quote — with role-specific CTA
+- **Dual CTA**: "Register as Vendor" + "Submit Your RFQ" at page bottom
+- **Cross-navigation**: All public pages linked in headers/footers and landing page nav
+- **Platform Stats**: `GET /api/public/stats` for social proof
+
 ### AI Cost Estimation (Apr 2026)
-- **Admin Cost Config**: GET/PUT `/api/admin/cost-config` — admin-managed rates
-- **Default rates**: Carbon Steel ₹55/kg, Forged Steel ₹75/kg, SS304 ₹210/kg, CNC Turning ₹800/hr, etc.
-- **Cost Estimation Engine**: POST `/api/rfqs/{rfq_id}/estimate-cost`
-  - AI analyzes drawing image + admin rates → full cost breakdown
-  - PDF drawings auto-converted to JPEG for GPT Vision
-  - Reads weight from drawing title block when available
-  - Material, per-operation machining, setup, tooling, finishing, heat treatment
-  - Overhead (15%) + profit margin (20%)
-  - Quantity pricing (1, 10, 50, 100 pcs) with volume discounts
-- **Admin UI**: "Cost Config" tab in Admin Dashboard
-- **Buyer UI**: "Get Cost Estimate" button in CreateRFQ Step 4
+- Admin-managed rates (material/kg, machine/hr, finishing, tooling, heat treatment)
+- AI engine uses drawing image + admin rates for full breakdown
+- PDF drawings auto-converted to JPEG for GPT Vision
+- Quantity pricing (1, 10, 50, 100 pcs) with volume discounts
+- Buyer-material exclusion: material cost zeroed when buyer provides material
+- Beta disclaimer
 
 ### AI Dimension Estimation
 - Process-aware schema routing: gear, boring, sheet_metal, milling, turning, default
 - Bolt hole + slot support in schemas
-- User dimension preservation
 
 ### Machine Validation Engine v3.0
 - Physics-based hard gates, 5 vendor categories
-- Fabrication operations: welding, riveting, surface treatment, etc.
-
-### AI Drawing Analysis
-- GPT-5.2 Vision extracts dimensions, processes, tolerances from drawings
-- NOW extracts weight_kg from title block (rule 12 added)
+- Fabrication operations support
 
 ## Pending Issues (Priority Order)
-- P0: RFQ PDF single-page layout (recurring, untested for 2+ sessions)
+- P0: RFQ PDF single-page layout (recurring, untested)
 - P1: 2.5% commission UI in BuyerQuotes
-- P2: Few-shot prompt training for drawing analysis
-
-## In Progress
-- server.py refactoring Phase 2
 
 ## Upcoming Tasks
+- Few-shot prompt training for Drawing Analysis (P1)
 - WhatsApp & AI Call Machine Availability Check (P1)
 - Textile/Fabric Vertical Addition (P1)
 - ElevenLabs Voice Integration (P1)
 - Stripe Escrow Integration (P1)
+- server.py refactoring Phase 2
 
 ## Future/Backlog
 - Instant AI auto-quote for simple parts
 - API for ERP integration
-- WhatsApp image population fix
