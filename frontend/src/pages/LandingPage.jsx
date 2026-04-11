@@ -150,9 +150,9 @@ const LandingPage = () => {
                     Start Free <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform duration-200" />
                   </Button>
                 </Link>
-                <Link to="/vendors">
+                <Link to="/register">
                   <Button data-testid="hero-vendors-btn" size="lg" variant="outline" className="border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400 font-semibold h-14 px-10 text-base rounded-lg">
-                    Browse Vendors
+                    Join as Manufacturer
                   </Button>
                 </Link>
               </div>
