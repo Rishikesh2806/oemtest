@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import {
   FileText, Search, Filter, ArrowRight, Lock, X,
   Factory, Cpu, Layers, Target, Package, Clock,
-  ImageIcon, Loader2, Send
+  ImageIcon, Loader2, Send, ShieldAlert
 } from "lucide-react";
 
 const API_URL = window.location.origin;
@@ -123,6 +123,13 @@ const RFQCard = ({ rfq, onQuoteClick }) => {
             <div className="absolute top-2 right-2">
               <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-500 text-white animate-pulse">
                 Accepting Quotes
+              </span>
+            </div>
+          )}
+          {rfq.nda_required && (
+            <div className="absolute bottom-2 left-2">
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-red-600 text-white flex items-center gap-1 w-fit" data-testid={`nda-badge-${rfq.rfq_id}`}>
+                <ShieldAlert className="w-3 h-3" /> NDA Required
               </span>
             </div>
           )}

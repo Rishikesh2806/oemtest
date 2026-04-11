@@ -7155,6 +7155,7 @@ async def public_list_rfqs(
         "ai_analysis.recommended_processes": 1,
         "ai_analysis.complexity_score": 1,
         "ai_analysis.overall_dimensions": 1,
+        "require_nda": 1,
     }
     
     # Sort: unquoted (open/submitted/draft) first, then expired, then matching/quoted
@@ -7211,6 +7212,7 @@ async def public_list_rfqs(
             "created_at": r.get("created_at"),
             "has_drawing": len(drawing_ids) > 0,
             "drawing_id": drawing_ids[0] if drawing_ids else None,
+            "nda_required": bool(r.get("require_nda")),
         })
     
     # Get unique materials and processes for filters
@@ -7231,16 +7233,24 @@ async def public_list_rfqs(
 
 @api_router.get("/public/drawings/{drawing_id}/thumbnail")
 async def public_drawing_thumbnail(drawing_id: str):
-    """Return a thumbnail image for a drawing — no auth required."""
+    """Return a thumbnail image for a drawing — blurred if NDA-protected."""
     from fastapi.responses import Response
     
     drawing = await db.drawings.find_one(
         {"drawing_id": drawing_id},
-        {"_id": 0, "file_data": 1, "file_type": 1, "s3_url": 1, "s3_path": 1}
+        {"_id": 0, "file_data": 1, "file_type": 1, "s3_url": 1, "s3_path": 1, "rfq_id": 1}
     )
     
     if not drawing:
         raise HTTPException(status_code=404, detail="Drawing not found")
+    
+    # Check if RFQ requires NDA
+    is_nda_protected = False
+    rfq_id = drawing.get("rfq_id")
+    if rfq_id:
+        rfq_doc = await db.rfqs.find_one({"rfq_id": rfq_id}, {"_id": 0, "require_nda": 1})
+        if rfq_doc and rfq_doc.get("require_nda"):
+            is_nda_protected = True
     
     raw_data = None
     file_type = drawing.get("file_type", "")
@@ -7258,7 +7268,7 @@ async def public_drawing_thumbnail(drawing_id: str):
         except Exception as e:
             logger.warning(f"S3 download failed for thumbnail: {e}")
     
-    # Source 3: S3 presigned URL (fallback — redirect)
+    # Source 3: S3 presigned URL (fallback)
     if not raw_data and drawing.get("s3_url"):
         try:
             import httpx
@@ -7272,37 +7282,76 @@ async def public_drawing_thumbnail(drawing_id: str):
     if not raw_data:
         raise HTTPException(status_code=404, detail="Drawing data not available")
     
-    # For images, resize to thumbnail
+    from PIL import Image, ImageDraw, ImageFont, ImageFilter
+    import io
+    
+    img = None
+    
+    # For images, open directly
     if "image" in file_type.lower() or file_type.lower() in ("png", "jpeg", "jpg", "image/png", "image/jpeg"):
         try:
-            from PIL import Image
-            import io
             img = Image.open(io.BytesIO(raw_data))
-            img.thumbnail((400, 400), Image.LANCZOS)
-            buf = io.BytesIO()
-            fmt = "PNG" if "png" in file_type.lower() else "JPEG"
-            img.save(buf, format=fmt, quality=75)
-            return Response(content=buf.getvalue(), media_type=f"image/{fmt.lower()}", headers={"Cache-Control": "public, max-age=3600"})
         except Exception:
             return Response(content=raw_data, media_type=file_type or "image/jpeg")
     
-    # For PDFs, convert first page to thumbnail
-    if "pdf" in file_type.lower() or raw_data[:5] == b'%PDF-':
+    # For PDFs, convert first page
+    if img is None and ("pdf" in file_type.lower() or raw_data[:5] == b'%PDF-'):
         try:
             from pdf2image import convert_from_bytes
-            from PIL import Image
-            import io
             pages = convert_from_bytes(raw_data, first_page=1, last_page=1, dpi=120)
             if pages:
                 img = pages[0]
-                img.thumbnail((400, 400), Image.LANCZOS)
-                buf = io.BytesIO()
-                img.save(buf, format="JPEG", quality=70)
-                return Response(content=buf.getvalue(), media_type="image/jpeg", headers={"Cache-Control": "public, max-age=3600"})
         except Exception as e:
             logger.warning(f"PDF thumbnail failed: {e}")
     
-    raise HTTPException(status_code=404, detail="Cannot generate thumbnail")
+    if img is None:
+        raise HTTPException(status_code=404, detail="Cannot generate thumbnail")
+    
+    img.thumbnail((400, 400), Image.LANCZOS)
+    
+    # If NDA-protected: heavy blur + watermark
+    if is_nda_protected:
+        img = img.filter(ImageFilter.GaussianBlur(radius=18))
+        # Overlay "NDA REQUIRED" text
+        draw = ImageDraw.Draw(img)
+        w, h = img.size
+        # Draw semi-transparent dark overlay
+        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 140))
+        img = img.convert("RGBA")
+        img = Image.alpha_composite(img, overlay)
+        draw = ImageDraw.Draw(img)
+        # Draw text
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", max(w // 10, 18))
+            font_sm = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", max(w // 18, 12))
+        except Exception:
+            font = ImageFont.load_default()
+            font_sm = font
+        
+        # Main label
+        text = "NDA REQUIRED"
+        bbox = draw.textbbox((0, 0), text, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        draw.text(((w - tw) / 2, (h - th) / 2 - 10), text, fill=(255, 165, 0, 255), font=font)
+        
+        # Sub label
+        sub = "Sign NDA to view drawing"
+        bbox2 = draw.textbbox((0, 0), sub, font=font_sm)
+        tw2 = bbox2[2] - bbox2[0]
+        draw.text(((w - tw2) / 2, (h + th) / 2 + 5), sub, fill=(200, 200, 200, 220), font=font_sm)
+        
+        img = img.convert("RGB")
+    
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=75)
+    return Response(
+        content=buf.getvalue(),
+        media_type="image/jpeg",
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "X-NDA-Protected": "true" if is_nda_protected else "false",
+        }
+    )
 async def public_list_machines(
     machine_type: str = None,
     material: str = None,
