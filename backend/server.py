@@ -6958,6 +6958,330 @@ RULES:
         }
 
 
+# ============== PUBLIC ENDPOINTS (No Auth Required) ==============
+
+@api_router.get("/public/vendors")
+async def public_list_vendors(
+    capability: str = None,
+    material: str = None,
+    page: int = 1,
+    limit: int = 20
+):
+    """List vendors publicly — no contact details, just capabilities."""
+    skip = (page - 1) * limit
+    
+    # Get all unique vendor_ids from machines
+    pipeline = [
+        {"$match": {"is_active": True}},
+        {"$group": {
+            "_id": "$vendor_id",
+            "machines": {"$push": {
+                "machine_type": "$machine_type",
+                "brand": "$brand",
+                "model": "$model",
+                "materials_supported": "$materials_supported",
+                "materials": "$materials",
+                "max_x": "$max_x",
+                "max_y": "$max_y",
+                "max_z": "$max_z",
+                "tolerance_capability": "$tolerance_capability",
+                "axis_config": "$axis_config",
+            }},
+            "machine_count": {"$sum": 1},
+        }},
+        {"$sort": {"machine_count": -1}},
+        {"$skip": skip},
+        {"$limit": limit},
+    ]
+    
+    vendor_groups = await db.machines.aggregate(pipeline).to_list(length=limit)
+    
+    vendors = []
+    for vg in vendor_groups:
+        vendor_id = vg["_id"]
+        
+        # Get vendor user info (limited - no email, phone, etc.)
+        user = await db.users.find_one(
+            {"user_id": vendor_id},
+            {"_id": 0, "company_name": 1, "name": 1, "created_at": 1}
+        )
+        
+        # Collect unique capabilities
+        all_types = set()
+        all_materials = set()
+        best_tolerance = 999
+        for m in vg["machines"]:
+            if m.get("machine_type"):
+                all_types.add(m["machine_type"])
+            for mat in (m.get("materials_supported") or m.get("materials") or []):
+                all_materials.add(mat)
+            tol = m.get("tolerance_capability")
+            if tol and tol < best_tolerance:
+                best_tolerance = tol
+        
+        # Apply filters
+        if capability and not any(capability.lower() in t.lower() for t in all_types):
+            continue
+        if material and not any(material.lower() in mat.lower() for mat in all_materials):
+            continue
+        
+        vendors.append({
+            "vendor_id": vendor_id,
+            "company_name": (user or {}).get("company_name") or f"Manufacturer #{vendor_id[-4:]}",
+            "machine_count": vg["machine_count"],
+            "capabilities": sorted(list(all_types)),
+            "materials": sorted(list(all_materials))[:8],
+            "best_tolerance_mm": best_tolerance if best_tolerance < 999 else None,
+            "machines_preview": [
+                {"type": m.get("machine_type"), "brand": m.get("brand"), "model": m.get("model")}
+                for m in vg["machines"][:3]
+            ],
+        })
+    
+    total = len(await db.machines.distinct("vendor_id", {"is_active": True}))
+    
+    return {
+        "vendors": vendors,
+        "total": total,
+        "page": page,
+        "limit": limit,
+    }
+
+
+@api_router.get("/public/vendors/{vendor_id}")
+async def public_vendor_detail(vendor_id: str):
+    """Public vendor detail — machines and capabilities, no contact info."""
+    machines = await db.machines.find(
+        {"vendor_id": vendor_id, "is_active": True},
+        {"_id": 0, "vendor_id": 0}
+    ).to_list(length=50)
+    
+    if not machines:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    user = await db.users.find_one(
+        {"user_id": vendor_id},
+        {"_id": 0, "company_name": 1, "name": 1, "created_at": 1}
+    )
+    
+    # Aggregate stats
+    all_types = set()
+    all_materials = set()
+    best_tol = 999
+    for m in machines:
+        if m.get("machine_type"):
+            all_types.add(m["machine_type"])
+        for mat in (m.get("materials_supported") or m.get("materials") or []):
+            all_materials.add(mat)
+        tol = m.get("tolerance_capability")
+        if tol and tol < best_tol:
+            best_tol = tol
+    
+    return {
+        "vendor_id": vendor_id,
+        "company_name": (user or {}).get("company_name") or f"Manufacturer #{vendor_id[-4:]}",
+        "capabilities": sorted(list(all_types)),
+        "materials": sorted(list(all_materials)),
+        "best_tolerance_mm": best_tol if best_tol < 999 else None,
+        "machine_count": len(machines),
+        "machines": [
+            {
+                "machine_id": m.get("machine_id"),
+                "machine_type": m.get("machine_type"),
+                "brand": m.get("brand"),
+                "model": m.get("model"),
+                "axis_config": m.get("axis_config"),
+                "max_x": m.get("max_x"),
+                "max_y": m.get("max_y"),
+                "max_z": m.get("max_z"),
+                "tolerance_capability": m.get("tolerance_capability"),
+                "materials": m.get("materials_supported") or m.get("materials") or [],
+            }
+            for m in machines
+        ],
+    }
+
+
+@api_router.get("/public/stats")
+async def public_platform_stats():
+    """Public platform stats for social proof."""
+    vendor_count = len(await db.machines.distinct("vendor_id", {"is_active": True}))
+    machine_count = await db.machines.count_documents({"is_active": True})
+    rfq_count = await db.rfqs.count_documents({})
+    
+    # Unique capabilities
+    capabilities = await db.machines.distinct("machine_type")
+    
+    return {
+        "vendors": vendor_count,
+        "machines": machine_count,
+        "rfqs_processed": rfq_count,
+        "capabilities": [c for c in capabilities if c],
+    }
+
+
+@api_router.get("/public/rfqs")
+async def public_list_rfqs(
+    material: str = None,
+    process: str = None,
+    status: str = None,
+    page: int = 1,
+    limit: int = 20
+):
+    """List RFQs publicly — no buyer info, just part details for browsing."""
+    skip = (page - 1) * limit
+    
+    query = {}
+    if material:
+        query["material_type"] = {"$regex": material, "$options": "i"}
+    if process:
+        query["ai_analysis.recommended_processes"] = {"$regex": process, "$options": "i"}
+    if status:
+        query["status"] = status
+    
+    projection = {
+        "_id": 0,
+        "rfq_id": 1,
+        "rfq_number": 1,
+        "title": 1,
+        "material_type": 1,
+        "quantity": 1,
+        "surface_finish": 1,
+        "supply_type": 1,
+        "status": 1,
+        "created_at": 1,
+        "ai_analysis.part_geometry": 1,
+        "ai_analysis.recommended_processes": 1,
+        "ai_analysis.complexity_score": 1,
+        "ai_analysis.overall_dimensions": 1,
+    }
+    
+    rfqs = await db.rfqs.find(query, projection).sort("created_at", -1).skip(skip).limit(limit).to_list(length=limit)
+    total = await db.rfqs.count_documents(query)
+    
+    # Sanitize — remove buyer-identifying info
+    public_rfqs = []
+    for r in rfqs:
+        ai = r.get("ai_analysis") or {}
+        dims = ai.get("overall_dimensions") or {}
+        public_rfqs.append({
+            "rfq_id": r.get("rfq_id"),
+            "rfq_number": r.get("rfq_number"),
+            "title": r.get("title", "Untitled Part"),
+            "material": r.get("material_type", "Not specified"),
+            "quantity": r.get("quantity", 1),
+            "surface_finish": r.get("surface_finish"),
+            "supply_type": r.get("supply_type"),
+            "status": r.get("status", "draft"),
+            "geometry": ai.get("part_geometry"),
+            "processes": ai.get("recommended_processes", [])[:6],
+            "complexity": ai.get("complexity_score"),
+            "dimensions_summary": f"{dims.get('length', '—')} × {dims.get('width', '—')} × {dims.get('height', '—')} mm" if dims else None,
+            "created_at": r.get("created_at"),
+        })
+    
+    # Get unique materials and processes for filters
+    all_materials = await db.rfqs.distinct("material_type")
+    all_statuses = await db.rfqs.distinct("status")
+    
+    return {
+        "rfqs": public_rfqs,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "filters": {
+            "materials": [m for m in all_materials if m],
+            "statuses": [s for s in all_statuses if s],
+        }
+    }
+
+
+@api_router.get("/public/machines")
+async def public_list_machines(
+    machine_type: str = None,
+    material: str = None,
+    min_envelope: float = None,
+    page: int = 1,
+    limit: int = 30
+):
+    """List all machines publicly for browsing."""
+    skip = (page - 1) * limit
+    
+    query = {"is_active": True}
+    if machine_type:
+        query["machine_type"] = {"$regex": machine_type, "$options": "i"}
+    if material:
+        query["$or"] = [
+            {"materials_supported": {"$regex": material, "$options": "i"}},
+            {"materials": {"$regex": material, "$options": "i"}},
+        ]
+    if min_envelope:
+        query["$or"] = query.get("$or", []) + [
+            {"max_x": {"$gte": min_envelope}},
+            {"max_y": {"$gte": min_envelope}},
+            {"max_z": {"$gte": min_envelope}},
+        ]
+    
+    projection = {
+        "_id": 0,
+        "machine_id": 1,
+        "machine_type": 1,
+        "brand": 1,
+        "model": 1,
+        "axis_config": 1,
+        "max_x": 1,
+        "max_y": 1,
+        "max_z": 1,
+        "tolerance_capability": 1,
+        "materials_supported": 1,
+        "materials": 1,
+        "vendor_id": 1,
+    }
+    
+    machines = await db.machines.find(query, projection).sort("machine_type", 1).skip(skip).limit(limit).to_list(length=limit)
+    total = await db.machines.count_documents(query)
+    
+    # Enrich with vendor name
+    vendor_cache = {}
+    public_machines = []
+    for m in machines:
+        vid = m.get("vendor_id", "")
+        if vid not in vendor_cache:
+            user = await db.users.find_one({"user_id": vid}, {"_id": 0, "company_name": 1})
+            vendor_cache[vid] = (user or {}).get("company_name") or f"Manufacturer #{vid[-4:]}"
+        
+        mats = m.get("materials_supported") or m.get("materials") or []
+        public_machines.append({
+            "machine_id": m.get("machine_id"),
+            "machine_type": m.get("machine_type"),
+            "brand": m.get("brand"),
+            "model": m.get("model"),
+            "axis_config": m.get("axis_config"),
+            "envelope": {
+                "x": m.get("max_x"),
+                "y": m.get("max_y"),
+                "z": m.get("max_z"),
+            },
+            "tolerance_mm": m.get("tolerance_capability"),
+            "materials": mats[:8],
+            "vendor_id": vid,
+            "vendor_name": vendor_cache[vid],
+        })
+    
+    # Get filter options
+    all_types = await db.machines.distinct("machine_type", {"is_active": True})
+    
+    return {
+        "machines": public_machines,
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "filters": {
+            "machine_types": sorted([t for t in all_types if t]),
+        }
+    }
+
+
 # ============== COST CONFIG MANAGEMENT (Admin) ==============
 
 DEFAULT_COST_CONFIG = {

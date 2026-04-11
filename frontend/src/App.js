@@ -48,6 +48,10 @@ import InspectorDashboard from "./pages/InspectorDashboard";
 import GoogleCallback from "./pages/GoogleCallback";
 import SelectRolePage from "./pages/SelectRolePage";
 import QuoteRedirect from "./pages/QuoteRedirect";
+import VendorDirectory from "./pages/VendorDirectory";
+import VendorDetailPublic from "./pages/VendorDetail";
+import PublicRFQs from "./pages/PublicRFQs";
+import PublicMachines from "./pages/PublicMachines";
 
 // Use window.location.origin for API calls - this ensures requests go to the same domain
 // This fixes issues where REACT_APP_BACKEND_URL might point to a different host
@@ -322,6 +326,10 @@ const AppRouter = () => {
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/auth/google/callback" element={<GoogleCallback />} />
+      <Route path="/vendors" element={<VendorDirectory />} />
+      <Route path="/vendors/:vendorId" element={<VendorDetailPublic />} />
+      <Route path="/rfqs" element={<PublicRFQs />} />
+      <Route path="/machines" element={<PublicMachines />} />
       <Route path="/select-role" element={
         <ProtectedRoute>
           <SelectRolePage />

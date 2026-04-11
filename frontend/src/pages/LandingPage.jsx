@@ -124,6 +124,9 @@ const LandingPage = () => {
           <div className="hidden md:flex items-center gap-8 text-sm">
             <a href="#how-it-works" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Process</a>
             <a href="#features" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Features</a>
+            <Link to="/vendors" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium" data-testid="nav-vendors-link">Vendors</Link>
+            <Link to="/machines" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium" data-testid="nav-machines-link">Machines</Link>
+            <Link to="/rfqs" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium" data-testid="nav-rfqs-link">RFQs</Link>
             <a href="#contact" className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium">Contact</a>
           </div>
           <div className="flex items-center gap-3">
@@ -178,9 +181,9 @@ const LandingPage = () => {
                     Start Free <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform duration-200" />
                   </Button>
                 </Link>
-                <Link to="/register?role=vendor">
-                  <Button data-testid="vendor-cta-btn" size="lg" variant="outline" className="border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400 font-semibold h-14 px-10 text-base rounded-lg">
-                    Join as Vendor
+                <Link to="/vendors">
+                  <Button data-testid="hero-vendors-btn" size="lg" variant="outline" className="border-slate-300 text-slate-600 hover:bg-slate-50 hover:border-slate-400 font-semibold h-14 px-10 text-base rounded-lg">
+                    Browse Vendors
                   </Button>
                 </Link>
               </div>
