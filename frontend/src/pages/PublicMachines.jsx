@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import {
   Wrench, Search, Filter, ArrowRight, Lock, X,
   Factory, Cpu, Layers, Target, Box,
-  ChevronRight, Loader2
+  ChevronRight, Loader2, MapPin
 } from "lucide-react";
 
 
@@ -134,22 +134,29 @@ const MachineCard = ({ machine, onSubmitRFQ }) => {
           <div className="mb-3">
             <p className="text-[10px] text-slate-400 uppercase font-medium mb-1.5">Materials</p>
             <div className="flex flex-wrap gap-1">
-              {machine.materials.slice(0, 5).map((mat, i) => (
-                <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">{mat}</span>
+              {machine.materials.slice(0, 5).map((mat) => (
+                <span key={`mat-${mat}`} className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">{mat}</span>
               ))}
               {machine.materials.length > 5 && <span className="text-[10px] text-slate-400">+{machine.materials.length - 5}</span>}
             </div>
           </div>
         )}
 
-        {/* Vendor */}
-        <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-          <Link to={`/vendors/${machine.vendor_id}`} className="text-xs text-slate-500 hover:text-orange-600 flex items-center gap-1">
-            <Factory className="w-3 h-3" /> {machine.vendor_name}
-          </Link>
-          <Button size="sm" variant="ghost" className="text-xs text-orange-600 hover:bg-orange-50 h-7 px-2" onClick={onSubmitRFQ}>
-            Submit RFQ <ChevronRight className="w-3 h-3 ml-0.5" />
-          </Button>
+        {/* Manufacturer */}
+        <div className="pt-3 border-t border-slate-100">
+          <div className="flex items-center justify-between">
+            <Link to={`/vendors/${machine.vendor_id}`} className="text-xs text-slate-700 hover:text-orange-600 font-medium flex items-center gap-1 truncate max-w-[60%]" data-testid={`machine-vendor-${machine.machine_id}`}>
+              <Factory className="w-3 h-3 flex-shrink-0" /> {machine.vendor_name}
+            </Link>
+            <Button size="sm" variant="ghost" className="text-xs text-orange-600 hover:bg-orange-50 h-7 px-2" onClick={onSubmitRFQ}>
+              Submit RFQ <ChevronRight className="w-3 h-3 ml-0.5" />
+            </Button>
+          </div>
+          {machine.vendor_city && (
+            <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1 ml-0.5">
+              <MapPin className="w-2.5 h-2.5" /> {machine.vendor_city}
+            </p>
+          )}
         </div>
       </CardContent>
     </Card>

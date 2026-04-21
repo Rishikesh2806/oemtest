@@ -7418,8 +7418,14 @@ async def public_list_machines(
     for m in machines:
         vid = m.get("vendor_id", "")
         if vid not in vendor_cache:
-            user = await db.users.find_one({"user_id": vid}, {"_id": 0, "company_name": 1})
-            vendor_cache[vid] = (user or {}).get("company_name") or f"Manufacturer #{vid[-4:]}"
+            vendor_doc = await db.vendors.find_one({"vendor_id": vid}, {"_id": 0, "company_name": 1, "city": 1})
+            if not vendor_doc:
+                user = await db.users.find_one({"user_id": vid}, {"_id": 0, "company_name": 1})
+                vendor_doc = {"company_name": (user or {}).get("company_name"), "city": None}
+            vendor_cache[vid] = {
+                "name": vendor_doc.get("company_name") or f"Manufacturer #{vid[-4:]}",
+                "city": vendor_doc.get("city") or "",
+            }
         
         mats = m.get("materials_supported") or m.get("materials") or []
         
@@ -7450,7 +7456,8 @@ async def public_list_machines(
             "tolerance_mm": m.get("tolerance_capability"),
             "materials": mats[:8],
             "vendor_id": vid,
-            "vendor_name": vendor_cache[vid],
+            "vendor_name": vendor_cache[vid]["name"],
+            "vendor_city": vendor_cache[vid]["city"],
             "availability_status": m.get("availability_status", "available"),
             "images": fresh_images,
         })
