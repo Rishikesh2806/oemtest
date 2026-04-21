@@ -23,7 +23,7 @@ const VendorDashboard = () => {
 
   useEffect(() => {
     fetchDashboard();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchDashboard = async () => {
     try {

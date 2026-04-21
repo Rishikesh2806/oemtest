@@ -53,7 +53,6 @@ async def list_buyer_orders(user: dict = Depends(get_current_user)):
 @router.get("/vendor/orders")
 async def list_vendor_orders(user: dict = Depends(get_current_user)):
     """List all orders for the authenticated vendor"""
-    user_role = user.get("role", "")
     
     # Check if user is a vendor (by role or has vendor profile)
     vendor = await db.vendors.find_one({"user_id": user["user_id"]}, {"_id": 0})

@@ -110,6 +110,7 @@ const VendorProfileView = () => {
     fetchVendor();
     fetchRatings();
     fetchPortfolio();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vendorId]);
   
   // Image gallery handlers

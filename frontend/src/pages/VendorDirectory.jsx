@@ -93,7 +93,7 @@ const VendorCard = ({ vendor, onContactClick }) => {
             <p className="text-[10px] text-slate-400 uppercase font-medium mb-1.5">Capabilities</p>
             <div className="flex flex-wrap gap-1">
               {vendor.capabilities.slice(0, 4).map((cap, i) => (
-                <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
+                <span key={`cert-${cert}`} className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-medium">
                   {cap}
                 </span>
               ))}
@@ -110,7 +110,7 @@ const VendorCard = ({ vendor, onContactClick }) => {
             <p className="text-[10px] text-slate-400 uppercase font-medium mb-1.5">Materials</p>
             <div className="flex flex-wrap gap-1">
               {vendor.materials.slice(0, 5).map((mat, i) => (
-                <span key={i} className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">
+                <span key={`mat-${mat}`} className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-600 font-medium">
                   {mat}
                 </span>
               ))}
@@ -167,7 +167,7 @@ const VendorDirectory = () => {
   useEffect(() => {
     fetchVendors();
     fetchStats();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchVendors = async (capability, material) => {
     setLoading(true);

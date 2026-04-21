@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/demo", tags=["Demo"])
 
-JWT_SECRET = os.environ.get("JWT_SECRET_KEY", "offloadex_secret_key")
+JWT_SECRET = os.environ.get("JWT_SECRET_KEY")
 JWT_ALGORITHM = "HS256"
 
 DEMO_PASSWORD = "demo123"
@@ -379,7 +379,7 @@ async def seed_demo_data():
     # ── Demo Quotes ──
     quotes = [
         {
-            "quote_id": f"quote_demo_001",
+            "quote_id": "quote_demo_001",
             "rfq_id": "rfq_demo_001",
             "vendor_id": vendor_id,
             "vendor_name": "Patel Precision Engineering",
@@ -405,7 +405,7 @@ async def seed_demo_data():
             "updated_at": yesterday
         },
         {
-            "quote_id": f"quote_demo_002",
+            "quote_id": "quote_demo_002",
             "rfq_id": "rfq_demo_001",
             "vendor_id": vendor2_id,
             "vendor_name": "Sharma Machine Works",

@@ -839,7 +839,7 @@ async def forgot_password(reset_request: PasswordResetRequestLocal, request: Req
     return {"message": "If an account exists with that email, you will receive a password reset link shortly.", "method": "email"}
 
 
-class OTPVerifyRequest(BaseModel):
+class OTPVerifyRequestReset(BaseModel):
     phone: str
     otp: str
     new_password: str
@@ -854,7 +854,7 @@ class OTPVerifyRequest(BaseModel):
 
 
 @router.post("/verify-reset-otp")
-async def verify_reset_otp(data: OTPVerifyRequest, request: Request):
+async def verify_reset_otp(data: OTPVerifyRequestReset, request: Request):
     """Verify WhatsApp OTP and reset password in one step"""
     from app.utils.phone_utils import normalize_phone
     from app.config import locked_accounts

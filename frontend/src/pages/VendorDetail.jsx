@@ -124,7 +124,7 @@ const VendorDetail = () => {
               </div>
               <div className="flex flex-wrap gap-2 mt-4">
                 {vendor.capabilities.map((cap, i) => (
-                  <span key={i} className="text-xs px-3 py-1 rounded-full bg-white/10 text-white/80 font-medium">{cap}</span>
+                  <span key={`cap-${cap}`} className="text-xs px-3 py-1 rounded-full bg-white/10 text-white/80 font-medium">{cap}</span>
                 ))}
               </div>
             </div>
@@ -148,7 +148,7 @@ const VendorDetail = () => {
             </h2>
             <div className="flex flex-wrap gap-2">
               {vendor.materials.map((mat, i) => (
-                <span key={i} className="text-xs px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 font-medium border border-blue-100">
+                <span key={`mat-${mat}`} className="text-xs px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 font-medium border border-blue-100">
                   {mat}
                 </span>
               ))}
@@ -162,8 +162,8 @@ const VendorDetail = () => {
             <Wrench className="w-4 h-4 text-orange-600" /> Machine Fleet ({vendor.machines.length})
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3" data-testid="vendor-machines-grid">
-            {vendor.machines.map((m, i) => (
-              <Card key={i} className="border border-slate-200">
+            {vendor.machines.map((m) => (
+              <Card key={m.machine_id || m.name} className="border border-slate-200">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div>

@@ -290,7 +290,7 @@ const UsersTab = ({ users, loading, onRefresh, onUpdateUser, onDeleteUser, onCre
       }
     };
     fetchRoles();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   
   const filteredUsers = users.filter(u => {
     const matchesSearch = u.name?.toLowerCase().includes(search.toLowerCase()) || 
@@ -2409,7 +2409,7 @@ const VendorsTab = ({ vendors, loading, onRefresh, onApprove, onReject, onUpdate
       }
     };
     loadCategories();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   
   // Search vendors by machine capabilities
   const searchVendorsByMachines = async () => {
@@ -3659,7 +3659,7 @@ const MachinesTab = ({ machines, loading, onRefresh, vendors, canCreate = true, 
       }
     };
     loadCategories();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   
   // Get unique categories from machines
   const uniqueCategories = [...new Set(machines.map(m => m.machine_category || 'Uncategorized').filter(Boolean))];
@@ -4267,7 +4267,7 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     fetchInitialData();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchInitialData = async () => {
     try {

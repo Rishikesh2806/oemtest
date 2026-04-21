@@ -91,6 +91,7 @@ const VendorProfile = () => {
   useEffect(() => {
     fetchProfile();
     fetchExperiences();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchProfile = async () => {

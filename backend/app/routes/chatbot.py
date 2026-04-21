@@ -137,7 +137,7 @@ async def chat_with_bot(chat_message: ChatMessage, user: Optional[dict] = None):
         # Create enhanced system message with context
         enhanced_system = SYSTEM_PROMPT + user_context
         if context_messages:
-            enhanced_system += f"\n\nRecent conversation:\n" + "\n".join(context_messages[-6:])
+            enhanced_system += "\n\nRecent conversation:\n" + "\n".join(context_messages[-6:])
         
         # Initialize chat with Gemini 3 Flash
         chat = LlmChat(

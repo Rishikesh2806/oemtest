@@ -190,7 +190,7 @@ const PublicMachines = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchMachines(); }, []);
+  useEffect(() => { fetchMachines(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFilter = () => fetchMachines(typeFilter, materialFilter);
 

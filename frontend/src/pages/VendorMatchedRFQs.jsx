@@ -40,7 +40,7 @@ const VendorMatchedRFQs = () => {
 
   useEffect(() => {
     fetchMatchedRFQs();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchMatchedRFQs = async () => {
     try {

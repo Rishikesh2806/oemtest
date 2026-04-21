@@ -215,7 +215,7 @@ export default function WhatsAppLogs() {
     fetchStats();
     fetchLogs(true);
     fetchErrors();
-  }, []);
+  }, [fetchStats, fetchLogs, fetchErrors]);
   
   // Refresh on filter change
   useEffect(() => {
@@ -223,7 +223,7 @@ export default function WhatsAppLogs() {
       fetchLogs(true);
     }, 300);
     return () => clearTimeout(timer);
-  }, [filters]);
+  }, [filters, fetchLogs]);
   
   // Handle filter changes
   const handleFilterChange = (key, value) => {

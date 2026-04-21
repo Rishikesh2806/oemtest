@@ -228,7 +228,7 @@ const PublicRFQs = () => {
     setLoading(false);
   };
 
-  useEffect(() => { fetchRfqs(); }, []);
+  useEffect(() => { fetchRfqs(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleFilter = () => fetchRfqs(materialFilter, processFilter);
 

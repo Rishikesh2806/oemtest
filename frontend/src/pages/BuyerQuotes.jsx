@@ -40,7 +40,7 @@ const BuyerQuotes = () => {
 
   useEffect(() => {
     fetchQuotes();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchQuotes = async () => {
     setLoading(true);

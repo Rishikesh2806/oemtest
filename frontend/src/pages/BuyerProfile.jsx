@@ -55,7 +55,7 @@ const BuyerProfile = () => {
   useEffect(() => {
     fetchProfile();
     fetch2FAStatus();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchProfile = async () => {
     try {

@@ -28,7 +28,7 @@ const ChatPage = () => {
 
   useEffect(() => {
     fetchConversations();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (conversationId) {

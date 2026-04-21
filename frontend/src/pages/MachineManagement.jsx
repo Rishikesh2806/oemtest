@@ -82,7 +82,7 @@ const MachineManagement = () => {
   useEffect(() => {
     fetchMachines();
     fetchCategories();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchMachines = async () => {
     try {

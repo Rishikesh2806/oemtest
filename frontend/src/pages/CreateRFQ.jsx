@@ -146,7 +146,7 @@ const CreateRFQ = () => {
     };
 
     fetchCities();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));

@@ -29,7 +29,7 @@ export default function FileManager() {
   useEffect(() => {
     fetchFiles();
     fetchStats();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchFiles = async (prefix = searchPrefix) => {
     setLoading(true);

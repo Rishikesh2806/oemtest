@@ -235,7 +235,7 @@ const AdminAnalytics = () => {
     // Auto refresh every 5 minutes
     const interval = setInterval(fetchAnalytics, 300000);
     return () => clearInterval(interval);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleExport = async () => {
     try {

@@ -80,6 +80,7 @@ export default function StaffDashboard() {
     };
     
     fetchDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   
   const RoleIcon = roleInfo.icon;

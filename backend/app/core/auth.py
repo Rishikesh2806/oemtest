@@ -3,12 +3,13 @@ Authentication utilities - JWT, password hashing, user verification
 """
 import bcrypt
 import jwt
+import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import HTTPException, Request
 
 # JWT Configuration
-JWT_SECRET = "offloadex_secret_key"  # Override from env
+JWT_SECRET = os.environ.get("JWT_SECRET_KEY")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRATION_HOURS = 168  # 7 days
 

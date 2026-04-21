@@ -6,7 +6,7 @@ import { ArrowLeft, Shield, FileText, Scale, AlertTriangle, CreditCard, Truck, M
 const TermsOfService = () => {
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lastUpdated = "March 6, 2026";
 

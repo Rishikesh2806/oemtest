@@ -20,7 +20,7 @@ const BuyerRFQList = () => {
 
   useEffect(() => {
     fetchRFQs();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchRFQs = async () => {
     try {

@@ -480,7 +480,6 @@ def _check_dimension_gate(machine: dict, job: dict, operation: str) -> dict:
 
         # Get machine spec value (try multiple fields)
         machine_val = 0
-        spec_field_used = None
         for mf in rule["machine_fields"]:
             v = machine.get(mf, 0) or 0
             try:
