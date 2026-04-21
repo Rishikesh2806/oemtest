@@ -1,21 +1,37 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useCallback } from "react";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../App";
 import { Button } from "./ui/button";
 import { Menu, X, ArrowRight } from "lucide-react";
 
 const NAV_LINKS = [
-  { to: "/#how-it-works", label: "Process" },
-  { to: "/#features", label: "Features" },
+  { to: "/#how-it-works", label: "Process", isHash: true },
+  { to: "/#features", label: "Features", isHash: true },
   { to: "/machines", label: "Capabilities" },
   { to: "/rfqs", label: "RFQs" },
-  { to: "/#contact", label: "Contact" },
+  { to: "/#contact", label: "Contact", isHash: true },
 ];
 
 const PublicNav = ({ activePage }) => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const handleHashClick = useCallback((e, link) => {
+    e.preventDefault();
+    const hash = link.to.replace("/", "");
+    if (location.pathname === "/") {
+      const el = document.querySelector(hash);
+      if (el) el.scrollIntoView({ behavior: "smooth" });
+    } else {
+      navigate("/");
+      setTimeout(() => {
+        const el = document.querySelector(hash);
+        if (el) el.scrollIntoView({ behavior: "smooth" });
+      }, 400);
+    }
+  }, [location.pathname, navigate]);
 
   return (
     <nav className="fixed top-0 left-0 right-0 z-50 bg-white/95 backdrop-blur-xl border-b border-slate-200 shadow-sm" data-testid="public-nav">
@@ -26,18 +42,30 @@ const PublicNav = ({ activePage }) => {
 
         {/* Desktop nav */}
         <div className="hidden md:flex items-center gap-8 text-sm">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.to}
-              to={link.to}
-              className={activePage === link.to
-                ? "text-orange-600 font-semibold"
-                : "text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium"}
-              data-testid={`nav-${link.label.toLowerCase()}-link`}
-            >
-              {link.label}
-            </Link>
-          ))}
+          {NAV_LINKS.map((link) =>
+            link.isHash ? (
+              <a
+                key={link.to}
+                href={link.to}
+                onClick={(e) => handleHashClick(e, link)}
+                className="text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium cursor-pointer"
+                data-testid={`nav-${link.label.toLowerCase()}-link`}
+              >
+                {link.label}
+              </a>
+            ) : (
+              <Link
+                key={link.to}
+                to={link.to}
+                className={activePage === link.to
+                  ? "text-orange-600 font-semibold"
+                  : "text-slate-500 hover:text-orange-600 transition-colors duration-200 font-medium"}
+                data-testid={`nav-${link.label.toLowerCase()}-link`}
+              >
+                {link.label}
+              </Link>
+            )
+          )}
         </div>
 
         {/* Desktop auth buttons */}
@@ -86,21 +114,33 @@ const PublicNav = ({ activePage }) => {
       {mobileOpen && (
         <div className="md:hidden border-t border-slate-100 bg-white shadow-lg animate-in slide-in-from-top-2 duration-200" data-testid="mobile-menu">
           <div className="px-4 py-3 space-y-1">
-            {NAV_LINKS.map((link) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                onClick={() => setMobileOpen(false)}
-                className={`block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  activePage === link.to
-                    ? "bg-orange-50 text-orange-600"
-                    : "text-slate-600 hover:bg-slate-50 hover:text-orange-600"
-                }`}
-                data-testid={`mobile-nav-${link.label.toLowerCase()}-link`}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {NAV_LINKS.map((link) =>
+              link.isHash ? (
+                <a
+                  key={link.to}
+                  href={link.to}
+                  onClick={(e) => { setMobileOpen(false); handleHashClick(e, link); }}
+                  className="block px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-orange-600 transition-colors cursor-pointer"
+                  data-testid={`mobile-nav-${link.label.toLowerCase()}-link`}
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <Link
+                  key={link.to}
+                  to={link.to}
+                  onClick={() => setMobileOpen(false)}
+                  className={`block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    activePage === link.to
+                      ? "bg-orange-50 text-orange-600"
+                      : "text-slate-600 hover:bg-slate-50 hover:text-orange-600"
+                  }`}
+                  data-testid={`mobile-nav-${link.label.toLowerCase()}-link`}
+                >
+                  {link.label}
+                </Link>
+              )
+            )}
           </div>
           {!user && (
             <div className="px-4 pb-4 pt-2 border-t border-slate-100 flex gap-2">
