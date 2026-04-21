@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../App";
 import { Button } from "../components/ui/button";
@@ -55,64 +55,58 @@ const AVAILABILITY_LABELS = {
   offline: "Offline",
 };
 
-const MACHINE_IMAGES = {
-  "5-axis cnc": "https://images.unsplash.com/photo-1666618090858-fbcee636bd3e?w=400&h=250&fit=crop&q=75",
-  "cnc milling": "https://images.unsplash.com/photo-1666618090858-fbcee636bd3e?w=400&h=250&fit=crop&q=75",
-  "cnc lathe": "https://images.unsplash.com/photo-1662927168793-6423bf4b56d4?w=400&h=250&fit=crop&q=75",
-  "cnc turning": "https://images.unsplash.com/photo-1576142392214-a1794ffa0385?w=400&h=250&fit=crop&q=75",
-  "cnc vmc": "https://images.unsplash.com/photo-1625465104346-1ec72f86a54b?w=400&h=250&fit=crop&q=75",
-  "vmc": "https://images.unsplash.com/photo-1625465104346-1ec72f86a54b?w=400&h=250&fit=crop&q=75",
-  "hmc": "https://images.unsplash.com/photo-1625465104346-1ec72f86a54b?w=400&h=250&fit=crop&q=75",
-  "gantry milling": "https://images.unsplash.com/photo-1666618090858-fbcee636bd3e?w=400&h=250&fit=crop&q=75",
-  "horizontal boring": "https://images.unsplash.com/photo-1662927168793-6423bf4b56d4?w=400&h=250&fit=crop&q=75",
-  "horizontal boring mill": "https://images.unsplash.com/photo-1662927168793-6423bf4b56d4?w=400&h=250&fit=crop&q=75",
-  "heavy duty lathe": "https://images.unsplash.com/photo-1576142392214-a1794ffa0385?w=400&h=250&fit=crop&q=75",
-  "heavy duty engine lathe": "https://images.unsplash.com/photo-1576142392214-a1794ffa0385?w=400&h=250&fit=crop&q=75",
-  "turret lathe": "https://images.unsplash.com/photo-1576142392214-a1794ffa0385?w=400&h=250&fit=crop&q=75",
-  "vtl": "https://images.unsplash.com/photo-1576142392214-a1794ffa0385?w=400&h=250&fit=crop&q=75",
-  "vertical turret lathe": "https://images.unsplash.com/photo-1576142392214-a1794ffa0385?w=400&h=250&fit=crop&q=75",
-  "surface grinder": "https://images.unsplash.com/photo-1738162837672-de9d735a9b90?w=400&h=250&fit=crop&q=75",
-  "mig welding": "https://images.unsplash.com/photo-1731397980221-b834f47bb694?w=400&h=250&fit=crop&q=75",
-  "sla": "https://images.unsplash.com/photo-1639616938330-d77579c1bef9?w=400&h=250&fit=crop&q=75",
-  "_default": "https://images.unsplash.com/photo-1625465104346-1ec72f86a54b?w=400&h=250&fit=crop&q=75",
-};
-
-const getMachineImage = (type) => {
-  if (!type) return MACHINE_IMAGES._default;
-  const key = type.toLowerCase();
-  return MACHINE_IMAGES[key] || Object.entries(MACHINE_IMAGES).find(([k]) => key.includes(k) || k.includes(key))?.[1] || MACHINE_IMAGES._default;
-};
-
 const MachineCard = ({ machine, onSubmitRFQ }) => {
   const isAvailable = machine.availability_status === "available" || !machine.availability_status;
+  const hasImage = machine.images && machine.images.length > 0;
+  const [imgError, setImgError] = React.useState(false);
+  const showImage = hasImage && !imgError;
   return (
   <motion.div variants={fadeUp}>
     <Card className={`border hover:shadow-lg transition-all duration-300 h-full overflow-hidden ${
       isAvailable ? "border-emerald-200 hover:border-emerald-400" : "border-slate-200 hover:border-slate-300"
     }`}>
       {/* Machine Image */}
-      <div className="h-36 relative overflow-hidden bg-slate-100">
-        <img
-          src={getMachineImage(machine.machine_type)}
-          alt={machine.machine_type}
-          className="w-full h-full object-cover"
-          loading="lazy"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+      <div className="h-40 relative overflow-hidden bg-slate-50">
+        {showImage ? (
+          <>
+            <img
+              src={machine.images[0]}
+              alt={`${machine.brand} ${machine.model}`}
+              className="w-full h-full object-cover"
+              loading="lazy"
+              onError={() => setImgError(true)}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+            <div className="absolute bottom-2 left-3">
+              <h3 className="font-bold text-white text-sm drop-shadow-md" data-testid={`machine-name-${machine.machine_id}`}>
+                {machine.machine_type}{machine.axis_config ? ` · ${machine.axis_config}` : ""}
+              </h3>
+              <p className="text-[11px] text-white/80 drop-shadow-sm">{machine.brand} {machine.model}</p>
+            </div>
+          </>
+        ) : (
+          <div className="w-full h-full flex flex-col items-center justify-center">
+            <Cpu className="w-10 h-10 text-slate-300 mb-2" />
+            <span className="text-xs text-slate-400 font-medium">{machine.machine_type}</span>
+            <span className="text-[10px] text-slate-300">{machine.brand} {machine.model}</span>
+          </div>
+        )}
         <div className="absolute top-2 right-2">
           <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${AVAILABILITY_COLORS[machine.availability_status] || AVAILABILITY_COLORS.available}`}>
             {AVAILABILITY_LABELS[machine.availability_status] || "Available for Job"}
           </span>
         </div>
-        <div className="absolute bottom-2 left-3">
-          <h3 className="font-bold text-white text-sm drop-shadow-md" data-testid={`machine-name-${machine.machine_id}`}>
-            {machine.machine_type}{machine.axis_config ? ` · ${machine.axis_config}` : ""}
-          </h3>
-          <p className="text-[11px] text-white/80 drop-shadow-sm">{machine.brand} {machine.model}</p>
-        </div>
       </div>
 
       <CardContent className="p-4">
+        {!showImage && (
+          <div className="mb-2">
+            <h3 className="font-bold text-slate-900 text-sm" data-testid={`machine-name-${machine.machine_id}`}>
+              {machine.machine_type}{machine.axis_config ? ` · ${machine.axis_config}` : ""}
+            </h3>
+            <p className="text-xs text-slate-500">{machine.brand} {machine.model}</p>
+          </div>
+        )}
 
         {/* Envelope */}
         {(machine.envelope?.x || machine.envelope?.y || machine.envelope?.z) && (

@@ -7405,12 +7405,14 @@ async def public_list_machines(
         "materials": 1,
         "vendor_id": 1,
         "availability_status": 1,
+        "images": 1,
     }
     
     machines = await db.machines.find(query, projection).sort("machine_type", 1).skip(skip).limit(limit).to_list(length=limit)
     total = await db.machines.count_documents(query)
     
-    # Enrich with vendor name
+    # Enrich with vendor name and refresh image URLs
+    from app.services.s3_storage_service import get_presigned_url
     vendor_cache = {}
     public_machines = []
     for m in machines:
@@ -7420,6 +7422,20 @@ async def public_list_machines(
             vendor_cache[vid] = (user or {}).get("company_name") or f"Manufacturer #{vid[-4:]}"
         
         mats = m.get("materials_supported") or m.get("materials") or []
+        
+        # Generate fresh presigned URLs for images
+        fresh_images = []
+        for img_url in (m.get("images") or []):
+            try:
+                # Extract S3 key from the stored URL
+                if "oemlinker-storage/" in img_url:
+                    s3_key = img_url.split("oemlinker-storage/")[1].split("?")[0]
+                    fresh_images.append(get_presigned_url(s3_key, expiration=3600))
+                else:
+                    fresh_images.append(img_url)
+            except Exception:
+                pass
+        
         public_machines.append({
             "machine_id": m.get("machine_id"),
             "machine_type": m.get("machine_type"),
@@ -7436,6 +7452,7 @@ async def public_list_machines(
             "vendor_id": vid,
             "vendor_name": vendor_cache[vid],
             "availability_status": m.get("availability_status", "available"),
+            "images": fresh_images,
         })
     
     # Get filter options
