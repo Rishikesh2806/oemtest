@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import {
   Wrench, Search, Filter, ArrowRight, Lock, X,
   Factory, Cpu, Layers, Target, Box,
-  ChevronRight, Loader2, MapPin
+  ChevronRight, Loader2, MapPin, Ruler
 } from "lucide-react";
 
 
@@ -108,15 +108,51 @@ const MachineCard = ({ machine, onSubmitRFQ }) => {
           </div>
         )}
 
-        {/* Envelope */}
-        {(machine.envelope?.x || machine.envelope?.y || machine.envelope?.z) && (
+        {/* Dimensions */}
+        {(Object.keys(machine.dimensions || {}).length > 0 || machine.envelope?.x || machine.envelope?.y || machine.envelope?.z) && (
           <div className="bg-slate-50 rounded-lg p-2.5 mb-3">
-            <p className="text-[10px] text-slate-400 uppercase font-medium mb-1">Work Envelope</p>
-            <div className="flex items-center gap-2">
-              <Box className="w-3.5 h-3.5 text-slate-400" />
-              <p className="text-xs font-mono text-slate-700">
-                {machine.envelope.x || "—"} × {machine.envelope.y || "—"} × {machine.envelope.z || "—"} mm
-              </p>
+            <p className="text-[10px] text-slate-400 uppercase font-medium mb-1.5 flex items-center gap-1">
+              <Ruler className="w-3 h-3" /> Dimensions
+            </p>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+              {machine.dimensions?.max_diameter && (
+                <p className="text-[11px] text-slate-600">
+                  Max Dia: <span className="font-mono font-semibold text-slate-800">{machine.dimensions.max_diameter} mm</span>
+                </p>
+              )}
+              {machine.dimensions?.max_length && (
+                <p className="text-[11px] text-slate-600">
+                  Max Len: <span className="font-mono font-semibold text-slate-800">{machine.dimensions.max_length} mm</span>
+                </p>
+              )}
+              {machine.dimensions?.bore_diameter && (
+                <p className="text-[11px] text-slate-600">
+                  Bore Dia: <span className="font-mono font-semibold text-slate-800">{machine.dimensions.bore_diameter} mm</span>
+                </p>
+              )}
+              {machine.dimensions?.chuck_size && (
+                <p className="text-[11px] text-slate-600">
+                  Chuck: <span className="font-mono font-semibold text-slate-800">{machine.dimensions.chuck_size} mm</span>
+                </p>
+              )}
+              {machine.dimensions?.swing_over_bed && (
+                <p className="text-[11px] text-slate-600">
+                  Swing: <span className="font-mono font-semibold text-slate-800">{machine.dimensions.swing_over_bed} mm</span>
+                </p>
+              )}
+              {machine.dimensions?.table_size && (
+                <p className="text-[11px] text-slate-600">
+                  Table: <span className="font-mono font-semibold text-slate-800">{machine.dimensions.table_size} mm</span>
+                </p>
+              )}
+              {(machine.envelope?.x > 0 && machine.envelope?.y > 0) && (
+                <p className="text-[11px] text-slate-600 col-span-2 flex items-center gap-1 mt-0.5">
+                  <Box className="w-3 h-3 text-slate-400" />
+                  Envelope: <span className="font-mono font-semibold text-slate-800">
+                    {machine.envelope.x || "—"} × {machine.envelope.y || "—"} × {machine.envelope.z || "—"} mm
+                  </span>
+                </p>
+              )}
             </div>
           </div>
         )}

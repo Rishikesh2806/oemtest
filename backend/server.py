@@ -7404,6 +7404,14 @@ async def public_list_machines(
         "max_x": 1,
         "max_y": 1,
         "max_z": 1,
+        "max_diameter": 1,
+        "max_length": 1,
+        "bore_diameter": 1,
+        "chuck_size": 1,
+        "max_turning_diameter": 1,
+        "max_turning_length": 1,
+        "swing_over_bed": 1,
+        "table_size": 1,
         "tolerance_capability": 1,
         "materials_supported": 1,
         "materials": 1,
@@ -7446,6 +7454,25 @@ async def public_list_machines(
             except Exception:
                 pass
         
+        # Build dimensions object based on machine type
+        dimensions = {}
+        if m.get("max_diameter"):
+            dimensions["max_diameter"] = m["max_diameter"]
+        if m.get("max_length"):
+            dimensions["max_length"] = m["max_length"]
+        if m.get("bore_diameter"):
+            dimensions["bore_diameter"] = m["bore_diameter"]
+        if m.get("chuck_size"):
+            dimensions["chuck_size"] = m["chuck_size"]
+        if m.get("max_turning_diameter"):
+            dimensions["max_turning_diameter"] = m["max_turning_diameter"]
+        if m.get("max_turning_length"):
+            dimensions["max_turning_length"] = m["max_turning_length"]
+        if m.get("swing_over_bed"):
+            dimensions["swing_over_bed"] = m["swing_over_bed"]
+        if m.get("table_size"):
+            dimensions["table_size"] = m["table_size"]
+        
         public_machines.append({
             "machine_id": m.get("machine_id"),
             "machine_type": m.get("machine_type"),
@@ -7457,6 +7484,7 @@ async def public_list_machines(
                 "y": m.get("max_y"),
                 "z": m.get("max_z"),
             },
+            "dimensions": dimensions,
             "tolerance_mm": m.get("tolerance_capability"),
             "materials": mats[:8],
             "vendor_id": vid,
