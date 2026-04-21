@@ -959,6 +959,7 @@ class RFQ(BaseModel):
     surface_finish: Optional[str] = None
     supply_type: str = SupplyType.VENDOR_MATERIAL
     deadline: Optional[str] = None
+    rfq_expiry_date: Optional[str] = None
     urgency: str = "normal"  # urgent, high, normal, low
     status: str = RFQStatus.DRAFT
     drawing_ids: List[str] = []
@@ -1362,6 +1363,7 @@ class RFQCreate(BaseModel):
     surface_finish: Optional[str] = None
     supply_type: str = SupplyType.VENDOR_MATERIAL
     deadline: Optional[str] = None
+    rfq_expiry_date: Optional[str] = None
     urgency: str = "normal"  # urgent, high, normal, low
     preferred_payment_terms: Optional[str] = PaymentTerms.NET_30
     payment_terms_notes: Optional[str] = None
@@ -7156,6 +7158,7 @@ async def public_list_rfqs(
         "ai_analysis.complexity_score": 1,
         "ai_analysis.overall_dimensions": 1,
         "require_nda": 1,
+        "rfq_expiry_date": 1,
     }
     
     # Sort: unquoted (open/submitted/draft) first, then expired, then matching/quoted
@@ -7213,6 +7216,7 @@ async def public_list_rfqs(
             "has_drawing": len(drawing_ids) > 0,
             "drawing_id": drawing_ids[0] if drawing_ids else None,
             "nda_required": bool(r.get("require_nda")),
+            "rfq_expiry_date": r.get("rfq_expiry_date"),
         })
     
     # Get unique materials and processes for filters

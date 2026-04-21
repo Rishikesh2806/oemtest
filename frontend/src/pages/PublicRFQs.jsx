@@ -8,7 +8,7 @@ import { motion } from "framer-motion";
 import {
   FileText, Search, Filter, ArrowRight, Lock, X,
   Cpu, Layers, Target, Package, Clock,
-  ImageIcon, Loader2, Send, ShieldAlert
+  ImageIcon, Loader2, Send, ShieldAlert, CalendarDays
 } from "lucide-react";
 
 import PublicNav from "../components/PublicNav";
@@ -180,9 +180,19 @@ const RFQCard = ({ rfq, onQuoteClick }) => {
           )}
 
           <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-            <span className="text-[10px] text-slate-400 flex items-center gap-1">
-              <Clock className="w-3 h-3" /> {rfq.created_at ? new Date(rfq.created_at).toLocaleDateString() : "—"}
-            </span>
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                <Clock className="w-3 h-3" /> {rfq.created_at ? new Date(rfq.created_at).toLocaleDateString() : "—"}
+              </span>
+              {rfq.rfq_expiry_date && (
+                <span className={`text-[10px] flex items-center gap-1 font-medium ${
+                  new Date(rfq.rfq_expiry_date) < new Date() ? "text-red-500" : "text-orange-500"
+                }`}>
+                  <CalendarDays className="w-3 h-3" />
+                  {new Date(rfq.rfq_expiry_date) < new Date() ? "Expired" : "Valid till"}: {new Date(rfq.rfq_expiry_date).toLocaleDateString()}
+                </span>
+              )}
+            </div>
             {isQuotable && (
               <Button
                 size="sm"

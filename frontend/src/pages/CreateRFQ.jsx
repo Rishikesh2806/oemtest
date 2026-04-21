@@ -85,6 +85,7 @@ const CreateRFQ = () => {
     surface_finish: "",
     supply_type: "vendor_material",
     deadline: "",
+    rfq_expiry_date: "",
     urgency: "normal",
     preferred_payment_terms: "net_30",
     payment_terms_notes: "",
@@ -602,7 +603,7 @@ const CreateRFQ = () => {
 
                 <div>
                   <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                    <Clock className="w-3 h-3 inline mr-1" /> Deadline (Optional)
+                    <Clock className="w-3 h-3 inline mr-1" /> Delivery Deadline (Optional)
                   </Label>
                   <Input
                     type="date"
@@ -614,6 +615,23 @@ const CreateRFQ = () => {
                   />
                   <p className="text-xs text-slate-400 mt-1">
                     When do you need this delivered?
+                  </p>
+                </div>
+
+                <div>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                    <Clock className="w-3 h-3 inline mr-1" /> RFQ Valid Until
+                  </Label>
+                  <Input
+                    type="date"
+                    value={formData.rfq_expiry_date}
+                    onChange={(e) => handleInputChange("rfq_expiry_date", e.target.value)}
+                    className="mt-1"
+                    min={new Date().toISOString().split('T')[0]}
+                    data-testid="rfq-expiry-input"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    Last date vendors can submit quotes
                   </p>
                 </div>
               </div>
