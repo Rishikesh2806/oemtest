@@ -372,9 +372,11 @@ async def seed_demo_data():
     ]
 
     for rfq in rfqs:
-        existing_rfq = await db.rfqs.find_one({"rfq_id": rfq["rfq_id"]})
-        if not existing_rfq:
-            await db.rfqs.insert_one(rfq)
+        await db.rfqs.update_one(
+            {"rfq_id": rfq["rfq_id"]},
+            {"$set": rfq},
+            upsert=True
+        )
 
     # ── Demo Quotes ──
     quotes = [

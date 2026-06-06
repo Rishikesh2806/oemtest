@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   ShoppingCart, Factory, ArrowRight, Loader2,
   FileText, Search, BarChart3, Package, CheckCircle2,
-  Wrench, ClipboardList, DollarSign, Truck, Eye, Lock
+  Wrench, ClipboardList, DollarSign, Truck, Eye, Lock, Trash2
 } from "lucide-react";
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -63,6 +63,7 @@ export default function DemoPage() {
   const [loading, setLoading] = useState(null);
   const [seeding, setSeeding] = useState(false);
   const [seeded, setSeeded] = useState(false);
+  const [cleaning, setCleaning] = useState(false);
 
   // Auth gate — only admin or authorized users can access
   const isAuthorized = user && (user.role === "admin" || user.custom_role);
@@ -114,6 +115,25 @@ export default function DemoPage() {
       toast.error("Failed to seed demo data");
     } finally {
       setSeeding(false);
+    }
+  };
+
+  const cleanupDemoData = async () => {
+    setCleaning(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_URL}/api/demo/cleanup`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error("Cleanup failed");
+      const data = await res.json();
+      setSeeded(false);
+      toast.success(`Demo data cleaned up! ${data.details?.rfqs_deleted || 0} RFQs removed.`);
+    } catch (err) {
+      toast.error("Failed to clean up demo data");
+    } finally {
+      setCleaning(false);
     }
   };
 
@@ -260,17 +280,33 @@ export default function DemoPage() {
         </div>
 
         {/* Footer */}
-        <div className="text-center">
+        <div className="text-center space-y-3">
           <p className="text-slate-500 text-sm">
             Demo accounts use temporary data. All credentials: <code className="bg-slate-800 px-2 py-0.5 rounded text-orange-400 text-xs">demo123</code>
           </p>
-          <Button
-            variant="link"
-            className="text-slate-400 hover:text-white mt-1"
-            onClick={() => navigate("/")}
-          >
-            Back to OEMLinker Homepage
-          </Button>
+          <div className="flex items-center justify-center gap-3">
+            <Button
+              variant="link"
+              className="text-slate-400 hover:text-white"
+              onClick={() => navigate("/")}
+            >
+              Back to OEMLinker Homepage
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-red-800 text-red-400 hover:bg-red-900/30 hover:text-red-300 h-8 px-3 text-xs"
+              disabled={cleaning}
+              onClick={cleanupDemoData}
+              data-testid="demo-cleanup-btn"
+            >
+              {cleaning ? (
+                <><Loader2 className="w-3 h-3 animate-spin mr-1" /> Cleaning...</>
+              ) : (
+                <><Trash2 className="w-3 h-3 mr-1" /> Remove Demo Data</>
+              )}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
