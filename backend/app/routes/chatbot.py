@@ -16,7 +16,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+try:
+    from app.services.ai_client import LlmChat, UserMessage
+except ImportError:
+    LlmChat = UserMessage = None
 from app.database import db
 from app.routes.auth import get_current_user
 
