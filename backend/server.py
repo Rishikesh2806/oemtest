@@ -1214,7 +1214,7 @@ RULES:
 - Use 2-5 milestones
 - Each stage used only once"""
 
-        llm_key = os.environ.get("EMERGENT_LLM_KEY")
+        llm_key = os.environ.get("OPENAI_API_KEY")
         chat = LlmChat(
             api_key=llm_key,
             session_id=f"milestone_parse_{uuid.uuid4().hex[:8]}",
@@ -3476,7 +3476,7 @@ async def upload_portfolio_photo(
     # Analyze with AI vision
     ai_analysis = {}
     try:
-        api_key = os.environ.get("EMERGENT_LLM_KEY")
+        api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             raise Exception("AI service not configured")
         
@@ -3654,7 +3654,7 @@ async def visual_match_vendors(
     if len(content) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Image size must be less than 10MB")
     
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="AI service not configured")
     
@@ -3850,7 +3850,7 @@ async def portfolio_match_vendors(rfq_id: str, user: dict = Depends(get_current_
     profiles_list = list(vendor_profiles.values())
     
     # AI-powered portfolio matching
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         logger.warning("LLM key not set, falling back to standard match")
         return await match_vendors(rfq_id, user)
@@ -6117,7 +6117,7 @@ async def analyze_rfq_drawings(rfq_id: str, user: dict = Depends(get_current_use
         }
     
     try:
-        api_key = os.environ.get("EMERGENT_LLM_KEY")
+        api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             raise HTTPException(status_code=500, detail="AI service not configured")
         
@@ -6710,7 +6710,7 @@ async def estimate_dimensions(rfq_id: str, request: Request, user: dict = Depend
             image_url = drawing.get("preview_url") or drawing.get("file_url")
     
     # Build prompt for GPT to estimate remaining dimensions
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         # Fallback: just return user dimensions as-is
         return {
@@ -7759,7 +7759,7 @@ async def estimate_cost(rfq_id: str, request: Request, user: dict = Depends(get_
     
     extra_context = "\n".join(extra_context_parts) if extra_context_parts else ""
     
-    api_key = os.environ.get("EMERGENT_LLM_KEY")
+    api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
         return {"error": "AI estimation not available", "method": "unavailable"}
     
@@ -10952,7 +10952,7 @@ RULES:
 Return ONLY a JSON object with exactly these fields:
 {{"payment_terms": "<exact value from valid list>", "notes": "<brief summary of what was agreed>"}}"""
 
-        llm_key = os.environ.get("EMERGENT_LLM_KEY")
+        llm_key = os.environ.get("OPENAI_API_KEY")
         chat = LlmChat(
             api_key=llm_key,
             session_id=f"payment_resolve_{uuid.uuid4().hex[:8]}",
@@ -18184,12 +18184,12 @@ async def delete_notification(notification_id: str, user: dict = Depends(get_cur
 # ============== VOICE AGENT ENDPOINTS ==============
 
 # Initialize voice agent components
-EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY")
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 
 @api_router.post("/voice/transcribe")
 async def transcribe_audio(audio: UploadFile = File(...), user: dict = Depends(get_current_user)):
     """Transcribe audio to text using OpenAI Whisper - supports all Indian languages"""
-    if not EMERGENT_LLM_KEY:
+    if not OPENAI_API_KEY:
         raise HTTPException(status_code=500, detail="Voice agent not configured")
     
     try:
@@ -18199,7 +18199,7 @@ async def transcribe_audio(audio: UploadFile = File(...), user: dict = Depends(g
         audio_file.name = audio.filename or "audio.webm"
         
         # Initialize STT
-        stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
+        stt = OpenAISpeechToText(api_key=OPENAI_API_KEY)
         
         # Transcribe with auto language detection (supports Hindi, Tamil, Telugu, Bengali, etc.)
         response = await stt.transcribe(
@@ -18222,7 +18222,7 @@ async def transcribe_audio(audio: UploadFile = File(...), user: dict = Depends(g
 @api_router.post("/voice/query")
 async def voice_query(request: Request, user: dict = Depends(get_current_user)):
     """Process voice query and return matched RFQs with audio response - supports all Indian languages"""
-    if not EMERGENT_LLM_KEY:
+    if not OPENAI_API_KEY:
         raise HTTPException(status_code=500, detail="Voice agent not configured")
     
     if user["role"] != "vendor":
@@ -18353,7 +18353,7 @@ Keep responses friendly and under 50 words.{language_instruction}"""
         # Use AI to generate natural response
         session_id = f"voice_{user['user_id']}_{uuid.uuid4().hex[:8]}"
         chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
+            api_key=OPENAI_API_KEY,
             session_id=session_id,
             system_message=system_prompt
         ).with_model("openai", "gpt-4o-mini")
@@ -18361,7 +18361,7 @@ Keep responses friendly and under 50 words.{language_instruction}"""
         response_text = await chat.send_message(UserMessage(text=query_text))
         
         # Generate audio response
-        tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
+        tts = OpenAITextToSpeech(api_key=OPENAI_API_KEY)
         audio_base64 = await tts.generate_speech_base64(
             text=response_text,
             model="tts-1",
@@ -18383,7 +18383,7 @@ Keep responses friendly and under 50 words.{language_instruction}"""
 @api_router.post("/voice/speak")
 async def text_to_speech(request: Request, user: dict = Depends(get_current_user)):
     """Convert text to speech"""
-    if not EMERGENT_LLM_KEY:
+    if not OPENAI_API_KEY:
         raise HTTPException(status_code=500, detail="Voice agent not configured")
     
     body = await request.json()
@@ -18396,7 +18396,7 @@ async def text_to_speech(request: Request, user: dict = Depends(get_current_user
         raise HTTPException(status_code=400, detail="Text too long. Maximum 4096 characters.")
     
     try:
-        tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
+        tts = OpenAITextToSpeech(api_key=OPENAI_API_KEY)
         audio_base64 = await tts.generate_speech_base64(
             text=text,
             model="tts-1",
@@ -19592,12 +19592,12 @@ async def send_whatsapp_voice_message(
     if not whatsapp_service.is_configured():
         raise HTTPException(status_code=503, detail="WhatsApp service not configured")
     
-    if not EMERGENT_LLM_KEY:
+    if not OPENAI_API_KEY:
         raise HTTPException(status_code=503, detail="TTS service not configured")
     
     try:
         # Generate audio from text
-        tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
+        tts = OpenAITextToSpeech(api_key=OPENAI_API_KEY)
         audio_bytes = await tts.generate_speech(
             text=data.message,
             voice="nova"
@@ -20684,14 +20684,14 @@ Type *cancel* to abort"""
         logger.info(f"WhatsApp send result: {send_result}")
         
         # Also send voice response for voice queries
-        if msg_type == "audio" and EMERGENT_LLM_KEY:
+        if msg_type == "audio" and OPENAI_API_KEY:
             try:
                 # Generate audio response (shorter version for WhatsApp)
                 short_response = response_message[:500] if len(response_message) > 500 else response_message
                 # Remove markdown formatting for TTS
                 clean_response = short_response.replace("*", "").replace("_", "").replace("`", "")
                 
-                tts = OpenAITextToSpeech(api_key=EMERGENT_LLM_KEY)
+                tts = OpenAITextToSpeech(api_key=OPENAI_API_KEY)
                 audio_bytes = await tts.generate_speech(
                     text=clean_response,
                     voice="nova"
@@ -20743,7 +20743,7 @@ async def process_voice_message(audio_url: str, sender: str, vendor: Optional[di
     """
     Process voice message: download audio, convert to supported format, transcribe using Whisper, return text
     """
-    if not EMERGENT_LLM_KEY:
+    if not OPENAI_API_KEY:
         logger.warning("LLM key not configured for voice processing")
         return None
     
@@ -20795,7 +20795,7 @@ async def process_voice_message(audio_url: str, sender: str, vendor: Optional[di
         # Transcribe using Whisper
         logger.info(f"Transcribing voice message...")
         
-        stt = OpenAISpeechToText(api_key=EMERGENT_LLM_KEY)
+        stt = OpenAISpeechToText(api_key=OPENAI_API_KEY)
         audio_file = BytesIO(mp3_bytes)
         audio_file.name = "voice_message.mp3"
         
@@ -20859,7 +20859,7 @@ You can also register manually at https://oemlinker.com/register"""
         image_base64 = base64.b64encode(image_data).decode('utf-8')
         
         # Check if we have the API key
-        api_key = os.environ.get("EMERGENT_LLM_KEY")
+        api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             logger.error("LLM_KEY not configured for GST extraction")
             return """⚠️ *Service Unavailable*
@@ -21143,7 +21143,7 @@ Please try:
 • Register manually at https://oemlinker.com/register"""
         
         # Check if we have the API key
-        api_key = os.environ.get("EMERGENT_LLM_KEY")
+        api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             logger.error("LLM_KEY not configured for GST extraction")
             return """⚠️ *Service Unavailable*
@@ -21361,7 +21361,7 @@ You can also add machines manually at https://oemlinker.com/vendor/machines"""
         image_base64 = base64.b64encode(image_data).decode('utf-8')
         
         # Check if we have the API key
-        api_key = os.environ.get("EMERGENT_LLM_KEY")
+        api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             logger.error("LLM_KEY not configured for machine identification")
             return """⚠️ *Service Unavailable*
@@ -21836,7 +21836,7 @@ async def process_nameplate_image(image_url: str, sender: str, vendor: dict) -> 
         fields_to_extract = [f["key"] for f in fields_list]
         fields_labels = {f["key"]: f["label"] for f in fields_list}
         
-        api_key = os.environ.get("EMERGENT_LLM_KEY")
+        api_key = os.environ.get("OPENAI_API_KEY")
         if not api_key:
             return "⚠️ AI service not configured."
         
@@ -22965,10 +22965,10 @@ Reply: `1 busy` or `2 available` or `all free`
         return response
     
     # Natural language query using AI
-    if EMERGENT_LLM_KEY and len(text_normalized) > 5:
+    if OPENAI_API_KEY and len(text_normalized) > 5:
         try:
             # Use AI to understand and respond to the query
-            llm = LlmChat(api_key=EMERGENT_LLM_KEY, model="gpt-4o-mini")
+            llm = LlmChat(api_key=OPENAI_API_KEY, model="gpt-4o-mini")
             
             # Get vendor's matched RFQs for context
             rfqs = await db.rfqs.find(
