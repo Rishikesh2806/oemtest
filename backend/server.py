@@ -14175,11 +14175,23 @@ async def admin_list_vendors(user: dict = Depends(get_current_user), approved: O
     vendors = await db.vendors.find(query, {"_id": 0}).to_list(200)
     
     # Enrich with user info and machine count
+     vendor_user_ids = [v["user_id"] for v in vendors]
+    vendor_ids_list = [v["vendor_id"] for v in vendors]
+    
+    users_batch = await db.users.find(
+        {"user_id": {"$in": vendor_user_ids}}, {"_id": 0, "user_id": 1, "email": 1, "name": 1}
+    ).to_list(len(vendor_user_ids))
+    users_batch_map = {u["user_id"]: u for u in users_batch}
+    
+    machine_counts_batch = await db.machines.aggregate([
+        {"$match": {"vendor_id": {"$in": vendor_ids_list}}},
+        {"$group": {"_id": "$vendor_id", "count": {"$sum": 1}}}
+    ]).to_list(len(vendor_ids_list))
+    machine_counts_batch_map = {m["_id"]: m["count"] for m in machine_counts_batch}
+    
     for vendor in vendors:
-        vendor_user = await db.users.find_one({"user_id": vendor["user_id"]}, {"_id": 0, "email": 1, "name": 1})
-        machine_count = await db.machines.count_documents({"vendor_id": vendor["vendor_id"]})
-        vendor["user_info"] = vendor_user
-        vendor["machine_count"] = machine_count
+        vendor["user_info"] = users_batch_map.get(vendor["user_id"])
+        vendor["machine_count"] = machine_counts_batch_map.get(vendor["vendor_id"], 0)
     
     return vendors
 
@@ -15097,9 +15109,16 @@ async def get_buyer_quotes(user: dict = Depends(get_current_user)):
             quote["vendor_user_id"] = vendor.get("user_id")
             
             # Calculate acceptance rate
-            total_quotes = await db.quotes.count_documents({"vendor_id": vendor["vendor_id"]})
-            accepted_quotes = await db.quotes.count_documents({"vendor_id": vendor["vendor_id"], "status": "accepted"})
-            quote["vendor_acceptance_rate"] = round((accepted_quotes / total_quotes * 100) if total_quotes > 0 else 0, 1)
+            acceptance_agg = await db.quotes.aggregate([
+    {"$match": {"vendor_id": vendor["vendor_id"]}},
+    {"$group": {
+        "_id": None,
+        "total": {"$sum": 1},
+        "accepted": {"$sum": {"$cond": [{"$eq": ["$status", "accepted"]}, 1, 0]}}
+    }}
+]).to_list(1)
+acceptance = acceptance_agg[0] if acceptance_agg else {"total": 0, "accepted": 0}
+quote["vendor_acceptance_rate"] = round((acceptance["accepted"] / acceptance["total"] * 100) if acceptance["total"] > 0 else 0, 1)
         
         # Add RFQ info
         rfq = rfq_map.get(quote["rfq_id"], {})
