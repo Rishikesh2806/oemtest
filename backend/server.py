@@ -14266,21 +14266,28 @@ async def search_vendors_by_machines(
     vendors = await db.vendors.find(vendor_query, {"_id": 0}).to_list(200)
     
     # Enrich vendors with machine details and user info
+    user_ids = [v["user_id"] for v in vendors]
+    users_list = await db.users.find(
+        {"user_id": {"$in": user_ids}}, {"_id": 0, "user_id": 1, "email": 1, "name": 1}
+    ).to_list(len(user_ids))
+    users_map = {u["user_id"]: u for u in users_list}
+
+    machine_counts_agg = await db.machines.aggregate([
+        {"$match": {"vendor_id": {"$in": vendor_ids}}},
+        {"$group": {"_id": "$vendor_id", "count": {"$sum": 1}}}
+    ]).to_list(len(vendor_ids))
+    machine_counts_map = {m["_id"]: m["count"] for m in machine_counts_agg}
+
+    matching_machines_map = {}
+    for m in matching_machines:
+        matching_machines_map.setdefault(m["vendor_id"], []).append(m)
+
     result_vendors = []
     for vendor in vendors:
-        # Get user info
-        vendor_user = await db.users.find_one({"user_id": vendor["user_id"]}, {"_id": 0, "email": 1, "name": 1})
-        vendor["user_info"] = vendor_user
-        
-        # Get matching machines for this vendor
-        vendor_machines = [m for m in matching_machines if m["vendor_id"] == vendor["vendor_id"]]
-        vendor["matching_machines"] = vendor_machines
-        vendor["matching_machine_count"] = len(vendor_machines)
-        
-        # Total machine count
-        total_machines = await db.machines.count_documents({"vendor_id": vendor["vendor_id"]})
-        vendor["total_machine_count"] = total_machines
-        
+        vendor["user_info"] = users_map.get(vendor["user_id"])
+        vendor["matching_machines"] = matching_machines_map.get(vendor["vendor_id"], [])
+        vendor["matching_machine_count"] = len(vendor["matching_machines"])
+        vendor["total_machine_count"] = machine_counts_map.get(vendor["vendor_id"], 0)
         result_vendors.append(vendor)
     
     # Sort by matching machine count (most capable first)
