@@ -15354,7 +15354,6 @@ avg_quote_value = quote_value_agg[0]["avg"] if quote_value_agg else 0
         "pending": {"$sum": {"$cond": [{"$eq": ["$payment_status", "pending"]}, "$total_amount", 0]}}
     }}
 ]).to_list(1)
-all_orders = await db.orders.find({}, {"_id": 0, "total_amount": 1, "payment_status": 1, "status": 1, "created_at": 1}).to_list(10000)
 total_revenue = revenue_agg[0]["total"] if revenue_agg else 0
 paid_revenue = revenue_agg[0]["paid"] if revenue_agg else 0
 pending_revenue = revenue_agg[0]["pending"] if revenue_agg else 0
@@ -15365,19 +15364,25 @@ pending_revenue = revenue_agg[0]["pending"] if revenue_agg else 0
     })
     
     # Monthly revenue trend (last 6 months)
-    monthly_revenue = []
-    for i in range(6):
-        month_start = (now - timedelta(days=30 * i)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        month_end = (month_start + timedelta(days=32)).replace(day=1)
-        month_orders = [o for o in all_orders 
-                       if o.get("created_at") and month_start.isoformat() <= o["created_at"] < month_end.isoformat()]
-        month_total = sum(o.get("total_amount", 0) for o in month_orders)
-        monthly_revenue.append({
-            "month": month_start.strftime("%b %Y"),
-            "revenue": month_total,
-            "orders": len(month_orders)
-        })
-    monthly_revenue.reverse()
+    six_months_ago = (now - timedelta(days=180)).isoformat()
+    monthly_agg = await db.orders.aggregate([
+        {"$match": {"created_at": {"$gte": six_months_ago}}},
+        {"$group": {
+            "_id": {"$substr": ["$created_at", 0, 7]},  # "YYYY-MM"
+            "revenue": {"$sum": "$total_amount"},
+            "orders": {"$sum": 1}
+        }},
+        {"$sort": {"_id": 1}}
+    ]).to_list(6)
+    
+    monthly_revenue = [
+        {
+            "month": entry["_id"],  # "YYYY-MM" format
+            "revenue": entry["revenue"],
+            "orders": entry["orders"]
+        }
+        for entry in monthly_agg
+    ]
     
     # ============== RECENT ACTIVITY ==============
     recent_users = await db.users.find(
