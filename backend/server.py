@@ -15321,10 +15321,17 @@ async def get_platform_analytics(user: dict = Depends(get_current_user)):
     rejected_quotes = await db.quotes.count_documents({"status": "rejected"})
     
     # Quote values
-    all_quotes = await db.quotes.find({}, {"_id": 0, "price": 1, "status": 1}).to_list(10000)
-    total_quote_value = sum(q.get("price", 0) for q in all_quotes)
-    accepted_quote_value = sum(q.get("price", 0) for q in all_quotes if q.get("status") == "accepted")
-    avg_quote_value = total_quote_value / len(all_quotes) if all_quotes else 0
+    quote_value_agg = await db.quotes.aggregate([
+    {"$group": {
+        "_id": None,
+        "total": {"$sum": "$price"},
+        "avg": {"$avg": "$price"},
+        "accepted": {"$sum": {"$cond": [{"$eq": ["$status", "accepted"]}, "$price", 0]}}
+    }}
+]).to_list(1)
+total_quote_value = quote_value_agg[0]["total"] if quote_value_agg else 0
+accepted_quote_value = quote_value_agg[0]["accepted"] if quote_value_agg else 0
+avg_quote_value = quote_value_agg[0]["avg"] if quote_value_agg else 0
     
     # Quote conversion rate
     quote_conversion_rate = (accepted_quotes / total_quotes * 100) if total_quotes > 0 else 0
@@ -15339,10 +15346,18 @@ async def get_platform_analytics(user: dict = Depends(get_current_user)):
     orders_by_status = {s["_id"]: s["count"] for s in order_statuses}
     
     # Revenue metrics
-    all_orders = await db.orders.find({}, {"_id": 0, "total_amount": 1, "payment_status": 1, "status": 1, "created_at": 1}).to_list(10000)
-    total_revenue = sum(o.get("total_amount", 0) for o in all_orders)
-    paid_revenue = sum(o.get("total_amount", 0) for o in all_orders if o.get("payment_status") == "paid")
-    pending_revenue = sum(o.get("total_amount", 0) for o in all_orders if o.get("payment_status") == "pending")
+    revenue_agg = await db.orders.aggregate([
+    {"$group": {
+        "_id": None,
+        "total": {"$sum": "$total_amount"},
+        "paid": {"$sum": {"$cond": [{"$eq": ["$payment_status", "paid"]}, "$total_amount", 0]}},
+        "pending": {"$sum": {"$cond": [{"$eq": ["$payment_status", "pending"]}, "$total_amount", 0]}}
+    }}
+]).to_list(1)
+all_orders = await db.orders.find({}, {"_id": 0, "total_amount": 1, "payment_status": 1, "status": 1, "created_at": 1}).to_list(10000)
+total_revenue = revenue_agg[0]["total"] if revenue_agg else 0
+paid_revenue = revenue_agg[0]["paid"] if revenue_agg else 0
+pending_revenue = revenue_agg[0]["pending"] if revenue_agg else 0
     
     completed_orders = await db.orders.count_documents({"status": "completed"})
     active_orders = await db.orders.count_documents({
